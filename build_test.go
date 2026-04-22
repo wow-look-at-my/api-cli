@@ -3,13 +3,14 @@ package main
 import (
 	"encoding/json"
 	"testing"
+
 	"github.com/wow-look-at-my/testify/assert"
 	"github.com/wow-look-at-my/testify/require"
 )
 
 const miniConfig = `{
   "name": "t",
-  "defaults": {"base_url": "https://x.example"},
+  "command": "true",
   "commands": [
     {
       "name": "users",
@@ -18,7 +19,7 @@ const miniConfig = `{
         {
           "name": "get",
           "args": [{"name": "id", "type": "int", "required": true}],
-          "request": {"method": "GET", "path": "/users/{{.id}}"}
+          "entry": {"path": "/users/{{.arg.id}}"}
         },
         {
           "name": "list",
@@ -26,7 +27,7 @@ const miniConfig = `{
             {"name": "limit", "short": "l", "type": "int", "default": 10},
             {"name": "token", "type": "string", "required": true}
           ],
-          "request": {"method": "GET", "path": "/users"}
+          "entry": {"path": "/users"}
         }
       ]
     }
@@ -36,99 +37,156 @@ const miniConfig = `{
 func TestBuildTreeShape(t *testing.T) {
 	var cfg Config
 	require.NoError(t, json.Unmarshal([]byte(miniConfig), &cfg))
-
 	require.NoError(t, validate(&cfg))
 
 	root := newRoot(&cfg)
 
 	users, _, err := root.Find([]string{"users"})
-	require.False(t, err != nil || users == nil)
-
+	require.NoError(t, err)
+	require.NotNil(t, users)
 	assert.Equal(t, "u desc", users.Short)
 
 	get, _, err := root.Find([]string{"users", "get"})
-	require.Nil(t, err)
-
+	require.NoError(t, err)
 	assert.Equal(t, "get <id>", get.Use)
 
 	list, _, err := root.Find([]string{"users", "list"})
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	limit := list.Flags().Lookup("limit")
 	require.NotNil(t, limit)
-
 	assert.Equal(t, "l", limit.Shorthand)
-
 	assert.Equal(t, "10", limit.DefValue)
+	assert.NotNil(t, list.Flags().Lookup("token"))
+}
 
-	tok := list.Flags().Lookup("token")
-	assert.NotNil(t, tok)
+func TestCmd_UnmarshalBothForms(t *testing.T) {
+	// String form.
+	var c1 Cmd
+	require.NoError(t, json.Unmarshal([]byte(`"echo {{.x}}"`), &c1))
+	assert.True(t, c1.Shell)
+	assert.Equal(t, "echo {{.x}}", c1.Template)
 
+	// Array form.
+	var c2 Cmd
+	require.NoError(t, json.Unmarshal([]byte(`["echo","{{.x}}"]`), &c2))
+	assert.False(t, c2.Shell)
+	assert.Equal(t, []string{"echo", "{{.x}}"}, c2.Argv)
+
+	// Null → not defined.
+	var c3 Cmd
+	require.NoError(t, json.Unmarshal([]byte(`null`), &c3))
+	assert.False(t, c3.Defined())
+
+	// Bad type.
+	var c4 Cmd
+	err := json.Unmarshal([]byte(`42`), &c4)
+	assert.Error(t, err)
 }
 
 func TestValidate_RejectsReservedName(t *testing.T) {
 	cfg := &Config{
-		Name:		"t",
-		Defaults:	Defaults{BaseURL: "https://x.example"},
-		Commands:	[]Command{{Name: "help", Request: &Request{Method: "GET", Path: "/"}}},
+		Name:     "t",
+		Command:  &Cmd{Shell: true, Template: "true"},
+		Commands: []Command{{Name: "help"}},
 	}
 	err := validate(cfg)
-	require.NotNil(t, err)
-
+	assert.Error(t, err)
 }
 
-func TestValidate_RejectsArgFlagCollision(t *testing.T) {
+func TestValidate_RejectsEntryOnGroup(t *testing.T) {
 	cfg := &Config{
-		Name:		"t",
-		Defaults:	Defaults{BaseURL: "https://x.example"},
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name:		"x",
-			Args:		[]Arg{{Name: "id", Required: true}},
-			Flags:		[]Flag{{Name: "id"}},
-			Request:	&Request{Method: "GET", Path: "/"},
+			Name:     "x",
+			Entry:    json.RawMessage(`{"path": "/"}`),
+			Commands: []Command{{Name: "y"}},
 		}},
 	}
 	err := validate(cfg)
-	require.NotNil(t, err)
-
+	assert.Error(t, err)
 }
 
-func TestValidate_RejectsLeafWithoutMethod(t *testing.T) {
+func TestValidate_LeafWithoutCommandFailsWithoutAncestor(t *testing.T) {
+	// No root command, no leaf command → fail.
 	cfg := &Config{
-		Name:		"t",
-		Defaults:	Defaults{BaseURL: "https://x.example"},
-		Commands:	[]Command{{Name: "x", Request: &Request{Path: "/"}}},
+		Name:     "t",
+		Commands: []Command{{Name: "x"}},
 	}
 	err := validate(cfg)
-	require.NotNil(t, err)
-
+	assert.Error(t, err)
 }
 
-func TestValidate_RejectsGroupWithNoChildren(t *testing.T) {
+func TestValidate_LeafInheritsAncestorCommand(t *testing.T) {
+	// Root has command, leaf doesn't → passes.
 	cfg := &Config{
-		Name:		"t",
-		Defaults:	Defaults{BaseURL: "https://x.example"},
-		Commands:	[]Command{{Name: "x"}},
+		Name:     "t",
+		Command:  &Cmd{Shell: true, Template: "true"},
+		Commands: []Command{{Name: "x"}},
 	}
 	err := validate(cfg)
-	require.NotNil(t, err)
+	assert.NoError(t, err)
+}
 
+func TestValidate_DuplicateSiblingNames(t *testing.T) {
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
+		Commands: []Command{
+			{Name: "x"},
+			{Name: "x"},
+		},
+	}
+	err := validate(cfg)
+	assert.Error(t, err)
+}
+
+func TestValidate_DuplicateArgName(t *testing.T) {
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
+		Commands: []Command{{
+			Name: "x",
+			Args: []Arg{
+				{Name: "a", Required: true},
+				{Name: "a"},
+			},
+		}},
+	}
+	err := validate(cfg)
+	assert.Error(t, err)
+}
+
+func TestValidate_DuplicateFlagShort(t *testing.T) {
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
+		Commands: []Command{{
+			Name: "x",
+			Flags: []Flag{
+				{Name: "a", Short: "x"},
+				{Name: "b", Short: "x"},
+			},
+		}},
+	}
+	err := validate(cfg)
+	assert.Error(t, err)
 }
 
 func TestFindConfigFlag(t *testing.T) {
 	cases := []struct {
-		args	[]string
-		want	string
+		args []string
+		want string
 	}{
 		{[]string{"--config", "path.json", "foo"}, "path.json"},
 		{[]string{"--config=path.json", "foo"}, "path.json"},
 		{[]string{"foo", "--config", "path.json"}, "path.json"},
 		{[]string{"foo"}, ""},
-		{[]string{"--config"}, ""},	// dangling flag: no value
+		{[]string{"--config"}, ""}, // dangling flag: no value
 	}
 	for _, c := range cases {
 		got := findConfigFlag(c.args)
 		assert.Equal(t, c.want, got)
-
 	}
 }

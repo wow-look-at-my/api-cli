@@ -7,60 +7,119 @@ import (
 	"strings"
 )
 
-// Config is the top-level JSON schema: the CLI's name, help, defaults, and
-// command tree.
+// Config is the top-level JSON schema.
+//
+// The CLI is a declarative alias system: each leaf command renders a `command`
+// template (inherited from an ancestor or overridden locally) against a data
+// context composed of args, flags, environment, vars, and the leaf's entry
+// variables. The rendered command is then executed.
 type Config struct {
-	Name        string    `json:"name"`
-	Description string    `json:"description,omitempty"`
-	Defaults    Defaults  `json:"defaults"`
-	Commands    []Command `json:"commands,omitempty"`
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	Vars        map[string]any `json:"vars,omitempty"`
+	Command     *Cmd           `json:"command,omitempty"`
+	Commands    []Command      `json:"commands,omitempty"`
 }
 
-// Defaults is applied to every request — the base URL is prefixed onto each
-// leaf's path, and the headers merge with per-request headers (request wins
-// on collision).
-type Defaults struct {
-	BaseURL string            `json:"base_url"`
-	Headers map[string]string `json:"headers,omitempty"`
-}
-
-// Command is a node in the CLI tree. A node is a leaf (issues an HTTP call)
-// iff Request is non-nil; otherwise it's a group that prints help.
+// Command is a node in the CLI tree. A node is a leaf iff it has no
+// subcommands; leaves must have a command available (own or inherited). Group
+// nodes just print help.
+//
+// `entry` is arbitrary user-defined JSON — its string leaves are
+// template-rendered against {arg, flag, env, var} and the result is exposed
+// to the command template as `.entry`.
+//
+// `vars` merges into the ancestor chain, with the child winning on key
+// collision. `command`, if set, overrides the inherited command for this
+// subtree.
 type Command struct {
-	Name        string    `json:"name"`
-	Description string    `json:"description,omitempty"`
-	Args        []Arg     `json:"args,omitempty"`
-	Flags       []Flag    `json:"flags,omitempty"`
-	Request     *Request  `json:"request,omitempty"`
-	Commands    []Command `json:"commands,omitempty"`
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	Args        []Arg          `json:"args,omitempty"`
+	Flags       []Flag         `json:"flags,omitempty"`
+	Vars        map[string]any `json:"vars,omitempty"`
+	Command     *Cmd           `json:"command,omitempty"`
+	Entry       json.RawMessage `json:"entry,omitempty"`
+	Commands    []Command      `json:"commands,omitempty"`
 }
 
-// Arg is a positional argument.
+// Arg is a positional argument. Type is "string" or "int" (default string).
 type Arg struct {
 	Name        string `json:"name"`
-	Type        string `json:"type,omitempty"` // "string"|"int"; default "string"
+	Type        string `json:"type,omitempty"`
 	Required    bool   `json:"required,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
-// Flag is a named flag. Type is one of: "string", "bool", "int", "string-slice".
+// Flag is a named flag. Type is string|bool|int|string-slice (default string).
 type Flag struct {
 	Name        string `json:"name"`
 	Short       string `json:"short,omitempty"`
-	Type        string `json:"type,omitempty"` // default "string"
+	Type        string `json:"type,omitempty"`
 	Default     any    `json:"default,omitempty"`
 	Required    bool   `json:"required,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
-// Request describes the outbound HTTP call. All string fields support
-// text/template placeholders ({{.argName}}, {{.flagName}}, {{.env.VAR}}).
-type Request struct {
-	Method  string            `json:"method"`
-	Path    string            `json:"path"`
-	Query   map[string]string `json:"query,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Body    json.RawMessage   `json:"body,omitempty"`
+// Cmd is the executable form of a command. In JSON it may be either:
+//
+//   - A string: rendered as a template, then executed via "sh -c <rendered>".
+//     Best for pipelines and anything that benefits from shell features.
+//     The author is responsible for quoting interpolated values (use the
+//     `shellquote` helper).
+//
+//   - An array of strings: each element is rendered as a template, and the
+//     result is executed directly via exec (no shell). Safer — no quoting
+//     concerns — but no shell features.
+type Cmd struct {
+	Shell    bool     // true if the source was a scalar string
+	Template string   // source for the scalar (string) form
+	Argv     []string // source for the argv (array) form
+}
+
+// UnmarshalJSON accepts either a string or an array of strings.
+func (c *Cmd) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if len(trimmed) == 0 || trimmed == "null" {
+		return nil
+	}
+	if trimmed[0] == '"' {
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		c.Shell = true
+		c.Template = s
+		return nil
+	}
+	if trimmed[0] == '[' {
+		var a []string
+		if err := json.Unmarshal(data, &a); err != nil {
+			return err
+		}
+		c.Argv = a
+		return nil
+	}
+	return fmt.Errorf("command must be a string or array of strings; got %s", trimmed)
+}
+
+// MarshalJSON emits whichever form was loaded. Mostly for tests/debugging.
+func (c *Cmd) MarshalJSON() ([]byte, error) {
+	if c == nil {
+		return []byte("null"), nil
+	}
+	if c.Shell {
+		return json.Marshal(c.Template)
+	}
+	return json.Marshal(c.Argv)
+}
+
+// Defined reports whether the command has any template to execute.
+func (c *Cmd) Defined() bool {
+	if c == nil {
+		return false
+	}
+	return c.Shell || len(c.Argv) > 0
 }
 
 var reservedCommandNames = map[string]bool{
@@ -83,7 +142,8 @@ var validArgTypes = map[string]bool{
 	"int":    true,
 }
 
-// Load reads and parses a config file. Unknown keys are rejected.
+// Load reads and parses a config file. Unknown keys are rejected to catch
+// typos early.
 func Load(path string) (*Config, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -108,20 +168,21 @@ func validate(cfg *Config) error {
 	if strings.TrimSpace(cfg.Name) == "" {
 		return fmt.Errorf("top-level \"name\" is required")
 	}
-	if strings.TrimSpace(cfg.Defaults.BaseURL) == "" {
-		return fmt.Errorf("defaults.base_url is required")
-	}
 	seen := map[string]bool{}
+	hasRootCmd := cfg.Command.Defined()
 	for i, c := range cfg.Commands {
 		where := fmt.Sprintf("commands[%d]", i)
-		if err := validateCommand(&c, where, seen); err != nil {
+		if err := validateCommand(&c, where, seen, hasRootCmd); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateCommand(c *Command, where string, siblings map[string]bool) error {
+// validateCommand enforces schema invariants. inheritedCmd indicates whether
+// an ancestor has a command template available (we need at least one to reach
+// a leaf).
+func validateCommand(c *Command, where string, siblings map[string]bool, inheritedCmd bool) error {
 	if strings.TrimSpace(c.Name) == "" {
 		return fmt.Errorf("%s: \"name\" is required", where)
 	}
@@ -136,7 +197,6 @@ func validateCommand(c *Command, where string, siblings map[string]bool) error {
 	}
 	siblings[c.Name] = true
 
-	// Validate args.
 	argNames := map[string]bool{}
 	requiredAfterOptional := false
 	for i, a := range c.Args {
@@ -158,7 +218,6 @@ func validateCommand(c *Command, where string, siblings map[string]bool) error {
 		}
 	}
 
-	// Validate flags.
 	flagNames := map[string]bool{}
 	flagShorts := map[string]bool{}
 	for i, fl := range c.Flags {
@@ -182,30 +241,26 @@ func validateCommand(c *Command, where string, siblings map[string]bool) error {
 			}
 			flagShorts[fl.Short] = true
 		}
-		if argNames[fl.Name] {
-			return fmt.Errorf("%s: flag %q collides with an arg of the same name (they share the template namespace)", fw, fl.Name)
+	}
+
+	haveCmd := inheritedCmd || c.Command.Defined()
+
+	// Leaf: must have a command available.
+	if len(c.Commands) == 0 {
+		if !haveCmd {
+			return fmt.Errorf("%s: leaf has no command and no ancestor defines one", where)
 		}
 	}
 
-	// A node must be either a group (has subcommands, no request) or a leaf
-	// (has request). A leaf may still have subcommands, but it must have
-	// method+path.
-	if c.Request != nil {
-		if strings.TrimSpace(c.Request.Method) == "" {
-			return fmt.Errorf("%s.request.method is required", where)
-		}
-		if strings.TrimSpace(c.Request.Path) == "" {
-			return fmt.Errorf("%s.request.path is required", where)
-		}
-	} else if len(c.Commands) == 0 {
-		return fmt.Errorf("%s: a node with no subcommands must have a request", where)
+	// `entry` only makes sense on a leaf (it's the leaf's variable bag).
+	if len(c.Entry) > 0 && len(c.Commands) > 0 {
+		return fmt.Errorf("%s: `entry` is only allowed on leaves (nodes with no subcommands)", where)
 	}
 
-	// Recurse.
 	childSeen := map[string]bool{}
 	for i, child := range c.Commands {
 		cw := fmt.Sprintf("%s.commands[%d]", where, i)
-		if err := validateCommand(&child, cw, childSeen); err != nil {
+		if err := validateCommand(&child, cw, childSeen, haveCmd); err != nil {
 			return err
 		}
 	}

@@ -51,7 +51,7 @@ func newRoot(cfg *Config) *cobra.Command {
 	root.PersistentFlags().String("config", "", "Path to JSON config file (default: ./api.json).")
 
 	for _, c := range cfg.Commands {
-		root.AddCommand(buildCommand(c, cfg.Defaults))
+		root.AddCommand(buildCommand(c, cfg.Vars, cfg.Command))
 	}
 	return root
 }

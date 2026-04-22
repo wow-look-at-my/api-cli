@@ -1,19 +1,22 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
 	"github.com/spf13/cobra"
 )
 
-// exitCode is set by a leaf's RunE to reflect the HTTP response (0/4/5/1).
+// exitCode is set by a leaf's RunE to the exit status of the child process.
 // main reads it after rootCmd.Execute() returns.
 var exitCode int
 
-// buildCommand turns a single Command node into a cobra.Command, wiring up
-// args, flags, subcommands, and (for leaves) an HTTP-issuing RunE.
-func buildCommand(node Command, defaults Defaults) *cobra.Command {
+// buildCommand turns a Command node into a cobra.Command, wiring up args,
+// flags, and subcommands. inheritedVars flow down the tree (child overrides
+// parent on key collision). inheritedCmd is the closest-ancestor command
+// template; the node's own command, if set, overrides it for this subtree.
+func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd) *cobra.Command {
 	useStr := node.Name
 	requiredArgs := 0
 	for _, a := range node.Args {
@@ -43,21 +46,25 @@ func buildCommand(node Command, defaults Defaults) *cobra.Command {
 		registerFlag(cmd, f)
 	}
 
-	if node.Request != nil {
-		req := *node.Request
+	// Resolve effective vars and command for this subtree.
+	effectiveVars := mergeVars(inheritedVars, node.Vars)
+	effectiveCmd := inheritedCmd
+	if node.Command.Defined() {
+		effectiveCmd = node.Command
+	}
+
+	// Leaves (no subcommands) execute.
+	if len(node.Commands) == 0 {
 		nodeCopy := node
-		defs := defaults
+		leafVars := effectiveVars
+		leafCmd := effectiveCmd
 		cmd.RunE = func(c *cobra.Command, args []string) error {
-			data, err := gatherData(c, nodeCopy, args)
-			if err != nil {
-				return err
-			}
-			return runLeaf(req, defs, data)
+			return runLeaf(c, nodeCopy, args, leafVars, leafCmd)
 		}
 	}
 
 	for _, child := range node.Commands {
-		cmd.AddCommand(buildCommand(child, defaults))
+		cmd.AddCommand(buildCommand(child, effectiveVars, effectiveCmd))
 	}
 
 	return cmd
@@ -101,10 +108,10 @@ func registerFlag(cmd *cobra.Command, f Flag) {
 	}
 }
 
-// gatherData assembles the template context: positional args by name, flag
-// values by name, and the process environment under .env.
-func gatherData(cmd *cobra.Command, node Command, args []string) (map[string]any, error) {
-	data := map[string]any{"env": envMap()}
+// gatherArgs builds the .arg sub-map by converting positional args to their
+// declared types.
+func gatherArgs(node Command, args []string) (map[string]any, error) {
+	out := make(map[string]any, len(node.Args))
 	for i, a := range node.Args {
 		if i >= len(args) {
 			break
@@ -115,11 +122,17 @@ func gatherData(cmd *cobra.Command, node Command, args []string) (map[string]any
 			if err != nil {
 				return nil, fmt.Errorf("arg %q: %w", a.Name, err)
 			}
-			data[a.Name] = n
+			out[a.Name] = n
 			continue
 		}
-		data[a.Name] = v
+		out[a.Name] = v
 	}
+	return out, nil
+}
+
+// gatherFlags builds the .flag sub-map from the cobra-parsed flag set.
+func gatherFlags(cmd *cobra.Command, node Command) map[string]any {
+	out := make(map[string]any, len(node.Flags))
 	for _, f := range node.Flags {
 		typ := f.Type
 		if typ == "" {
@@ -128,56 +141,88 @@ func gatherData(cmd *cobra.Command, node Command, args []string) (map[string]any
 		switch typ {
 		case "string":
 			v, _ := cmd.Flags().GetString(f.Name)
-			data[f.Name] = v
+			out[f.Name] = v
 		case "bool":
 			v, _ := cmd.Flags().GetBool(f.Name)
-			data[f.Name] = v
+			out[f.Name] = v
 		case "int":
 			v, _ := cmd.Flags().GetInt(f.Name)
-			data[f.Name] = v
+			out[f.Name] = v
 		case "string-slice":
 			v, _ := cmd.Flags().GetStringArray(f.Name)
-			data[f.Name] = v
+			out[f.Name] = v
 		}
 	}
-	return data, nil
+	return out
 }
 
-// runLeaf renders the request templates and executes the HTTP call.
-func runLeaf(req Request, defs Defaults, data map[string]any) error {
-	path, err := renderString(req.Path, data)
+// runLeaf is the per-invocation body for every leaf.
+//
+// Stages:
+//  1. Assemble args, flags, env — the base template context.
+//  2. Render the merged vars against the base context to produce .var.
+//  3. Render the entry against the context (now including .var) to produce
+//     .entry.
+//  4. Render the effective command template against the full context and
+//     execute it.
+func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd) error {
+	argMap, err := gatherArgs(node, args)
 	if err != nil {
-		return fmt.Errorf("render path: %w", err)
+		return err
 	}
-	query, err := renderMap(req.Query, data)
-	if err != nil {
-		return fmt.Errorf("render query: %w", err)
-	}
-	headers := map[string]string{}
-	defHeaders, err := renderMap(defs.Headers, data)
-	if err != nil {
-		return fmt.Errorf("render default headers: %w", err)
-	}
-	for k, v := range defHeaders {
-		headers[k] = v
-	}
-	reqHeaders, err := renderMap(req.Headers, data)
-	if err != nil {
-		return fmt.Errorf("render request headers: %w", err)
-	}
-	for k, v := range reqHeaders {
-		headers[k] = v
-	}
-	body, err := renderBody(req.Body, data)
-	if err != nil {
-		return fmt.Errorf("render body: %w", err)
-	}
-	if len(body) > 0 {
-		if _, ok := headers["Content-Type"]; !ok {
-			headers["Content-Type"] = "application/json"
-		}
+	flagMap := gatherFlags(c, node)
+
+	data := map[string]any{
+		"arg":  argMap,
+		"flag": flagMap,
+		"env":  envMap(),
 	}
 
-	exitCode = doRequest(req.Method, defs.BaseURL, path, query, headers, body)
+	renderedVars, err := renderVars(vars, data)
+	if err != nil {
+		return fmt.Errorf("render vars: %w", err)
+	}
+	data["var"] = renderedVars
+
+	entry, err := renderEntry(node.Entry, data)
+	if err != nil {
+		return fmt.Errorf("render entry: %w", err)
+	}
+	if entry == nil {
+		entry = map[string]any{}
+	}
+	data["entry"] = entry
+
+	if !cmdTmpl.Defined() {
+		return fmt.Errorf("no command available to run")
+	}
+
+	exitCode = doExec(cmdTmpl, data)
 	return nil
+}
+
+// renderVars runs each string leaf of the merged vars map through the
+// template engine with the given context. Non-string values pass through.
+func renderVars(vars map[string]any, data any) (map[string]any, error) {
+	if len(vars) == 0 {
+		return map[string]any{}, nil
+	}
+	// Round-trip via JSON so we can reuse the entry walker. This preserves
+	// the structure exactly and handles nested maps/slices of strings.
+	raw, err := json.Marshal(vars)
+	if err != nil {
+		return nil, err
+	}
+	v, err := renderEntry(raw, data)
+	if err != nil {
+		return nil, err
+	}
+	if v == nil {
+		return map[string]any{}, nil
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("vars did not render to a map: got %T", v)
+	}
+	return m, nil
 }

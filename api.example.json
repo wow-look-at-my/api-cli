@@ -1,12 +1,13 @@
 {
   "name": "apicli",
-  "description": "JSON-driven CLI for https://jsonplaceholder.typicode.com — a public fake REST API. Replace base_url and paths to point at your own API.",
-  "defaults": {
-    "base_url": "https://jsonplaceholder.typicode.com",
-    "headers": {
-      "Accept": "application/json"
-    }
+  "description": "Declarative alias CLI for https://jsonplaceholder.typicode.com — a public fake REST API. Every leaf renders the root `command` template by default; override on a leaf for anything that doesn't fit the pattern (see `posts create`).",
+
+  "vars": {
+    "base_url": "https://jsonplaceholder.typicode.com"
   },
+
+  "command": "curl -fsSL -H 'Accept: application/json' {{.var.base_url}}{{.entry.path}}{{querystring .entry.query}}",
+
   "commands": [
     {
       "name": "users",
@@ -18,25 +19,24 @@
           "args": [
             { "name": "id", "type": "int", "required": true, "description": "Numeric user ID." }
           ],
-          "request": {
-            "method": "GET",
-            "path": "/users/{{.id}}"
+          "entry": {
+            "path": "/users/{{.arg.id}}"
           }
         },
         {
           "name": "list",
           "description": "List users.",
           "flags": [
-            { "name": "limit", "short": "l", "type": "int", "default": 10, "description": "Max results to return." }
+            { "name": "limit", "short": "l", "type": "int", "default": 10, "description": "Max results." }
           ],
-          "request": {
-            "method": "GET",
+          "entry": {
             "path": "/users",
-            "query": { "_limit": "{{.limit}}" }
+            "query": { "_limit": "{{.flag.limit}}" }
           }
         }
       ]
     },
+
     {
       "name": "posts",
       "description": "Work with posts.",
@@ -47,9 +47,8 @@
           "args": [
             { "name": "id", "type": "int", "required": true, "description": "Numeric post ID." }
           ],
-          "request": {
-            "method": "GET",
-            "path": "/posts/{{.id}}"
+          "entry": {
+            "path": "/posts/{{.arg.id}}"
           }
         },
         {
@@ -58,28 +57,26 @@
           "flags": [
             { "name": "user", "short": "u", "type": "int", "default": 0, "description": "Filter by user ID; 0 means all." }
           ],
-          "request": {
-            "method": "GET",
+          "entry": {
             "path": "/posts",
-            "query": { "userId": "{{if .user}}{{.user}}{{end}}" }
+            "query": { "userId": "{{if .flag.user}}{{.flag.user}}{{end}}" }
           }
         },
         {
           "name": "create",
-          "description": "Create a new post.",
+          "description": "Create a new post. Overrides the root curl template to send a JSON body — argv form sidesteps shell-quoting entirely.",
           "flags": [
             { "name": "title", "short": "t", "type": "string", "required": true, "description": "Post title." },
-            { "name": "body", "short": "b", "type": "string", "required": true, "description": "Post body text." }
+            { "name": "body", "short": "b", "type": "string", "required": true, "description": "Post body text." },
+            { "name": "user", "short": "u", "type": "int", "default": 1, "description": "Author user ID." }
           ],
-          "request": {
-            "method": "POST",
-            "path": "/posts",
-            "body": {
-              "title": "{{.title}}",
-              "body": "{{.body}}",
-              "userId": 1
-            }
-          }
+          "command": [
+            "curl", "-fsSL",
+            "-X", "POST",
+            "-H", "Content-Type: application/json",
+            "-d", "{\"title\":{{.flag.title | toJson}},\"body\":{{.flag.body | toJson}},\"userId\":{{.flag.user}}}",
+            "{{.var.base_url}}/posts"
+          ]
         }
       ]
     }

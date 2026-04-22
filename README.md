@@ -1,182 +1,231 @@
 # api-cli
 
-A single Go binary that turns a JSON file into a full command-line client for an HTTP API. Drop in a config, get a CLI with `--help` at every level and shell tab completion — no hand-written commands.
+A declarative command-line alias system. You write JSON describing a tree of
+commands (subcommands, args, flags, user-defined variables); the tool renders
+a Go `text/template` for each leaf and executes the result. Help at every
+level, shell tab completion, and strong templating come for free.
 
-## What it does
-
-Given a JSON file describing your API's commands, subcommands, arguments, and flags, `api-cli` builds a [cobra](https://github.com/spf13/cobra)-backed CLI at runtime. Each leaf command maps the invocation to an HTTP request (method, path, query, headers, body) against your API and streams the response to stdout.
-
-Help text and tab-completion scripts are generated automatically from the config — you describe the API once.
+It's not an HTTP client — it just runs shell or `argv` commands — but the
+canonical use case is wrapping a REST API with `curl`, which the shipped
+[`api.example.json`](./api.example.json) demonstrates.
 
 ## Install
 
 ```sh
-go-toolchain         # builds ./api-cli (and runs tests)
+go-toolchain     # runs tests + builds ./build/api-cli
 ```
 
-Or check out the binary into your `$PATH`.
+Drop the binary on your `$PATH`.
 
 ## Quickstart
 
-Drop a config file named `api.json` in the current directory (or pass `--config <path>`). A worked example lives at [`api.example.json`](./api.example.json) and targets the public `jsonplaceholder.typicode.com` fake REST API.
-
 ```sh
-cp api.example.json api.json
+cp api.example.json api.json       # or pass --config <path>
 ./api-cli --help
 ./api-cli users get 1
 ./api-cli users list --limit 3
-./api-cli posts list --user 1
 ./api-cli posts create --title "hi" --body "hello"
+```
+
+## How it works
+
+Each leaf command renders a `command` template against a data context:
+
+| Namespace | Source                                                          |
+|-----------|-----------------------------------------------------------------|
+| `.arg`    | Positional args by name, typed per the `args` entry.            |
+| `.flag`   | Named flags by name, typed per the `flags` entry.               |
+| `.env`    | Process environment (`{{.env.API_TOKEN}}`).                     |
+| `.var`    | Merged `vars` from the root down to this node.                  |
+| `.entry`  | The leaf's user-defined map — arbitrary JSON, string leaves templated first. |
+
+The closest `command` template up the ancestor chain is used. The rendered
+command is executed and its exit code propagates.
+
+### Command forms
+
+`command` may be either:
+
+1. **A string** — rendered as a template, executed via `/bin/sh -c <rendered>`.
+   Good for pipelines; interpolated values must be shell-quoted (use the
+   `shellquote` helper).
+2. **An array of strings** — each element is rendered and the result is exec'd
+   directly without a shell. Safe by default; no shell metacharacters are
+   interpreted.
+
+### Example: wrap a REST API
+
+```jsonc
+{
+  "name": "apicli",
+  "vars": { "base_url": "https://api.example.com/v1" },
+
+  // Runs for every leaf by default; override per-leaf when it doesn't fit.
+  "command": "curl -fsSL -H 'Authorization: Bearer {{.env.API_TOKEN}}' {{.var.base_url}}{{.entry.path}}{{querystring .entry.query}}",
+
+  "commands": [
+    {
+      "name": "users",
+      "commands": [
+        {
+          "name": "get",
+          "args": [{ "name": "id", "type": "int", "required": true }],
+          "entry": { "path": "/users/{{.arg.id}}" }
+        },
+        {
+          "name": "list",
+          "flags": [{ "name": "limit", "short": "l", "type": "int", "default": 10 }],
+          "entry": {
+            "path": "/users",
+            "query": { "_limit": "{{.flag.limit}}" }
+          }
+        },
+        {
+          "name": "create",
+          "flags": [
+            { "name": "name", "type": "string", "required": true },
+            { "name": "email", "type": "string", "required": true }
+          ],
+          // Override: argv form so the body doesn't need shell escaping.
+          "command": [
+            "curl", "-fsSL", "-X", "POST",
+            "-H", "Content-Type: application/json",
+            "-d", "{\"name\":{{.flag.name | toJson}},\"email\":{{.flag.email | toJson}}}",
+            "{{.var.base_url}}/users"
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Example: generic aliases
+
+The tool doesn't know or care that the command is HTTP. Here's a tiny git
+wrapper:
+
+```json
+{
+  "name": "gx",
+  "vars": { "prefix": "feature/" },
+  "command": ["git", "{{.entry.op}}", "{{.var.prefix}}{{.arg.name}}"],
+  "commands": [
+    { "name": "start", "args": [{"name":"name","required":true}], "entry": {"op": "checkout -b"} },
+    { "name": "push",  "args": [{"name":"name","required":true}], "entry": {"op": "push -u origin"} }
+  ]
+}
 ```
 
 ## Config schema
 
 ### Top level
 
-| Field         | Type              | Notes                                         |
-|---------------|-------------------|-----------------------------------------------|
-| `name`        | string (required) | Binary's display name in help.                |
-| `description` | string            | Shown as the CLI's header in `--help`.        |
-| `defaults`    | object (required) | See below.                                    |
-| `commands`    | array of Command  | Top-level subcommands.                        |
+| Field         | Type              | Notes                                                             |
+|---------------|-------------------|-------------------------------------------------------------------|
+| `name`        | string (required) | Binary's display name in help.                                    |
+| `description` | string            | Shown as the CLI's header in `--help`.                            |
+| `vars`        | `map<string,any>` | Shared variables inherited by all subcommands.                    |
+| `command`     | string or `[]string` | Default command template for the whole CLI.                   |
+| `commands`    | `[]Command`       | Top-level subcommands.                                            |
 
-### `defaults`
+### Command node
 
-| Field         | Type              | Notes                                                            |
-|---------------|-------------------|------------------------------------------------------------------|
-| `base_url`    | string (required) | Prefixed onto every leaf's `request.path`.                       |
-| `headers`     | map<string,string>| Sent on every request; per-request headers override on collision.|
+| Field         | Type              | Notes                                                             |
+|---------------|-------------------|-------------------------------------------------------------------|
+| `name`        | string (required) | Subcommand name. Cannot be `help`, `completion`, `__complete`.    |
+| `description` | string            | Shown in help.                                                    |
+| `args`        | `[]Arg`           | Positional args.                                                  |
+| `flags`       | `[]Flag`          | Named flags.                                                      |
+| `vars`        | `map<string,any>` | Merged with ancestor vars (this node wins on collision).          |
+| `command`     | string or `[]string` | Overrides inherited command for this subtree.                  |
+| `entry`       | any JSON object   | Leaf-only. Arbitrary user-defined data; string leaves templated.  |
+| `commands`    | `[]Command`       | Nested subcommands.                                               |
 
-### A Command node
-
-| Field         | Type              | Notes                                                           |
-|---------------|-------------------|-----------------------------------------------------------------|
-| `name`        | string (required) | Subcommand name. Cannot be `help`, `completion`, `__complete`.  |
-| `description` | string            | Shown in help at this command's level and in parent listings.   |
-| `args`        | array of Arg      | Positional args.                                                |
-| `flags`       | array of Flag     | Named flags.                                                    |
-| `request`     | object            | Present on leaves; describes the HTTP call.                     |
-| `commands`    | array of Command  | Nested subcommands.                                             |
-
-A node is a **leaf** (issues an HTTP call) if `request` is set. Otherwise it's a **group** that just prints help for its children.
+A node is a **leaf** if it has no `commands`; leaves execute. Groups just print
+help.
 
 ### `args`
 
-| Field         | Type              | Notes                                                           |
-|---------------|-------------------|-----------------------------------------------------------------|
-| `name`        | string (required) | Binding name. Must not collide with any flag in the same node.  |
-| `type`        | `"string"`\|`"int"`| Default `string`.                                              |
-| `required`    | bool              | Required args must precede optional ones.                       |
-| `description` | string            | Shown in help.                                                  |
+| Field         | Type               | Notes                                                            |
+|---------------|--------------------|------------------------------------------------------------------|
+| `name`        | string (required)  | Binding name; accessed as `{{.arg.name}}`.                       |
+| `type`        | `"string"`\|`"int"` | Default `string`.                                               |
+| `required`    | bool               | Required args must precede optional ones.                        |
+| `description` | string             | Shown in help.                                                   |
 
 ### `flags`
 
-| Field         | Type                                           | Notes                                                    |
-|---------------|------------------------------------------------|----------------------------------------------------------|
-| `name`        | string (required)                              | Long form, e.g. `--limit`.                               |
-| `short`       | single character                               | Optional short form, e.g. `-l`.                          |
-| `type`        | `"string"`\|`"bool"`\|`"int"`\|`"string-slice"`| Default `string`.                                       |
-| `default`     | any                                            | Used if the flag isn't set.                              |
-| `required`    | bool                                           | Enforced by cobra with a clear error.                    |
-| `description` | string                                         | Shown in help.                                           |
+| Field         | Type                                            | Notes                                                          |
+|---------------|-------------------------------------------------|----------------------------------------------------------------|
+| `name`        | string (required)                               | Long form (`--limit`); accessed as `{{.flag.limit}}`.          |
+| `short`       | single character                                | Optional short form (`-l`).                                    |
+| `type`        | `"string"`\|`"bool"`\|`"int"`\|`"string-slice"` | Default `string`.                                              |
+| `default`     | any                                             | Value when the flag isn't set.                                 |
+| `required`    | bool                                            | Enforced with a clear error.                                   |
+| `description` | string                                          | Shown in help.                                                 |
 
-### `request`
+## Template helpers
 
-| Field     | Type                   | Notes                                                              |
-|-----------|------------------------|--------------------------------------------------------------------|
-| `method`  | string (required)      | `GET`, `POST`, `DELETE`, ...                                       |
-| `path`    | string (required)      | Appended to `defaults.base_url`. Supports template placeholders.   |
-| `query`   | map<string,string>     | Each value is rendered. Empty renderings are dropped.              |
-| `headers` | map<string,string>     | Each value is rendered. `\r`/`\n` rejected to block injection.     |
-| `body`    | any JSON value         | String leaves are rendered; everything else passes through.        |
+Every [sprig v3](https://masterminds.github.io/sprig/) helper is available —
+that's where `toJson`, `upper`, `lower`, `trim`, `default`, `required`,
+`b64enc`, `regexReplaceAll`, `hasKey`, etc. come from. On top of sprig we add:
 
-## Templates
+| Helper        | Purpose                                                                                   |
+|---------------|-------------------------------------------------------------------------------------------|
+| `querystring` | Render a map as `?k=v&k=v` (URL-encoded). Empty values dropped. Empty map → empty string. |
+| `shellquote`  | POSIX single-quote a value for safe interpolation into the string form of `command`.      |
+| `urlpath`     | URL-escape a single path segment.                                                         |
 
-All string fields in `request.path`, `request.query` values, `request.headers` values, `defaults.headers` values, and string leaves of `request.body` are rendered with Go's [`text/template`](https://pkg.go.dev/text/template). The data shape is:
+Example:
 
-- `{{.argname}}` — positional args, typed according to the `args` entry.
-- `{{.flagname}}` — flag values, typed according to the `flags` entry.
-- `{{.env.VARNAME}}` — process environment.
-
-Args and flags share a single namespace; the config is rejected at load if they collide within a node.
-
-Templates use `missingkey=error`, so a typo like `{{.idd}}` fails loudly rather than rendering an empty string.
-
-### Auth example
-
-```json
-"defaults": {
-  "base_url": "https://api.example.com",
-  "headers": { "Authorization": "Bearer {{.env.API_TOKEN}}" }
-}
+```
+command: "curl {{.var.base_url}}/search?q={{urlpath .arg.q}}"
 ```
 
-Then run:
+## Template semantics
 
-```sh
-API_TOKEN=sk_live_... ./api-cli users list
-```
-
-### Body rendering
-
-`body` is parsed as JSON first; only string leaves are template-rendered. This means you can mix literal JSON numbers/booleans with templated strings without fighting JSON escaping:
-
-```json
-"body": {
-  "title": "{{.title}}",
-  "userId": 1,
-  "published": true
-}
-```
+- Parsed with `missingkey=zero` — missing map keys do not error; for
+  `map[string]interface{}` they render as `<no value>`. Use `{{default "" .x}}`
+  for an empty fallback, `{{if .x}}...{{end}}` for conditionals, and
+  `{{required "msg" .x}}` when you want the error.
+- `entry` is rendered first (without `.entry` in scope). Every string leaf of
+  the JSON is rendered independently; numbers/booleans/nulls pass through. The
+  result is exposed as `.entry` for the command template.
+- `vars` are rendered the same way as `entry`, with `{arg, flag, env}` in scope.
+- Template errors on either stage abort the run with a clear message.
 
 ## Config discovery
 
 First hit wins:
 
-1. `--config <path>` on the command line.
+1. `--config <path>` anywhere on the command line (`--config=x` or `--config x`).
 2. `./api.json` in the current working directory.
-
-Pass the flag anywhere; the parser accepts `--config=x` and `--config x`.
 
 ## Shell completion
 
 Cobra generates completion scripts automatically:
 
 ```sh
-./api-cli completion bash | sudo tee /etc/bash_completion.d/api-cli
-# or, for the current shell only:
 source <(./api-cli completion bash)
-# or, for zsh:
-./api-cli completion zsh > "${fpath[1]}/_api-cli"
-# or, for fish:
+./api-cli completion zsh  > "${fpath[1]}/_api-cli"
 ./api-cli completion fish > ~/.config/fish/completions/api-cli.fish
 ```
 
-Once installed, `api-cli <TAB>` completes subcommands and flags at every level.
-
 ## Exit codes
 
-| Code | Meaning                         |
-|------|---------------------------------|
-| 0    | HTTP 2xx                        |
-| 1    | Transport error, or CLI error   |
-| 2    | Config not found or invalid     |
-| 4    | HTTP 4xx                        |
-| 5    | HTTP 5xx                        |
+The CLI inherits the exit code of the executed child command. Additionally:
 
-## Current limitations (intentional for v1)
-
-- No `--data @file.json` or stdin body.
-- No `-i` / response-header printing.
-- No XDG config-directory lookup (just `--config` or `./api.json`).
-- No dynamic completion against the remote API.
-- Body templating substitutes string leaves only — numeric/boolean placeholders should be typed literally in the config.
-- No retries or timeouts (uses `http.DefaultClient`).
+| Code | Meaning                                    |
+|------|--------------------------------------------|
+| 0    | Child exited 0.                            |
+| 1    | Render error, cobra usage error, or empty command. |
+| 2    | Config not found or invalid.               |
+| 127  | Child binary not found or failed to start. |
+| N    | Any other value is the child's exit code.  |
 
 ## Development
 
 ```sh
 go-toolchain        # runs go mod tidy, tests, coverage, and build
 ```
-
-See [`CLAUDE.md`](./CLAUDE.md) for contributor guidance if present.
