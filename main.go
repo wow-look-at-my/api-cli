@@ -20,14 +20,24 @@ func run(argv []string, errOut io.Writer) int {
 	if cfgPath == "" {
 		if _, err := os.Stat("api.json"); err == nil {
 			cfgPath = "api.json"
-		} else {
-			fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.json in the current directory")
-			return 2
 		}
 	}
-	cfg, err := Load(cfgPath)
-	if err != nil {
-		fmt.Fprintln(errOut, "error:", err)
+
+	var cfg *Config
+	if cfgPath != "" {
+		loaded, err := Load(cfgPath)
+		if err != nil {
+			fmt.Fprintln(errOut, "error:", err)
+			return 2
+		}
+		cfg = loaded
+	}
+
+	// No config and user invoked a real subcommand — they need a config.
+	// Bare invocation (no args) and help flags fall through to cobra so the
+	// user sees --help output.
+	if cfg == nil && !isHelpInvocation(argv) {
+		fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.json in the current directory")
 		return 2
 	}
 
@@ -39,21 +49,57 @@ func run(argv []string, errOut io.Writer) int {
 	return exitCode
 }
 
-// newRoot builds the root cobra.Command from a loaded Config.
+// newRoot builds the root cobra.Command. When cfg is nil, the root has no
+// subcommands — it exists solely so `--help` and bare invocation can print
+// cobra's usage screen with the --config flag visible.
 func newRoot(cfg *Config) *cobra.Command {
+	name := "api-cli"
+	short := "Declarative CLI. Provide a config via --config <path> or ./api.json."
+	if cfg != nil {
+		name = cfg.Name
+		if cfg.Description != "" {
+			short = cfg.Description
+		}
+	}
+
 	root := &cobra.Command{
-		Use:          cfg.Name,
-		Short:        cfg.Description,
+		Use:          name,
+		Short:        short,
 		SilenceUsage: true,
 	}
 	// Declared so --help lists it. Actual parsing happens in findConfigFlag
 	// before the tree is built.
 	root.PersistentFlags().String("config", "", "Path to JSON config file (default: ./api.json).")
 
-	for _, c := range cfg.Commands {
-		root.AddCommand(buildCommand(c, cfg.Vars, cfg.Command))
+	if cfg != nil {
+		for _, c := range cfg.Commands {
+			root.AddCommand(buildCommand(c, cfg.Vars, cfg.Command))
+		}
+	} else {
+		// Cobra's default help template only renders the flags/usage block
+		// for Runnable commands (or commands with subcommands). Without a
+		// config we have neither, so give the root a RunE that prints help —
+		// otherwise bare invocation and `--help` would emit just the Short.
+		root.RunE = func(c *cobra.Command, args []string) error {
+			return c.Help()
+		}
 	}
 	return root
+}
+
+// isHelpInvocation reports whether argv is a plain help request: no args at
+// all, or any form of the help flag/subcommand. Used to decide whether a
+// missing config is fatal or should fall through to cobra's usage screen.
+func isHelpInvocation(argv []string) bool {
+	if len(argv) == 0 {
+		return true
+	}
+	for _, a := range argv {
+		if a == "--help" || a == "-h" || a == "help" {
+			return true
+		}
+	}
+	return false
 }
 
 // findConfigFlag walks the argv looking for --config=<value> or --config <value>.

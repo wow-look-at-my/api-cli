@@ -22,12 +22,52 @@ func chdir(t *testing.T, dir string) {
 	t.Cleanup(func() { _ = os.Chdir(prev) })
 }
 
-func TestRun_MissingConfigReturns2(t *testing.T) {
+func TestRun_MissingConfigWithSubcommandReturns2(t *testing.T) {
 	chdir(t, t.TempDir())
 	var errOut bytes.Buffer
 	code := run([]string{"whatever"}, &errOut)
 	assert.Equal(t, 2, code)
 	assert.Contains(t, errOut.String(), "no config found")
+}
+
+func TestRun_MissingConfigBareShowsHelp(t *testing.T) {
+	chdir(t, t.TempDir())
+	// Replay stdout so cobra's help goes somewhere we can inspect. cobra
+	// writes help to the command's OutOrStderr; without a config we get the
+	// default writer which is os.Stdout, so capture that.
+	prevStdout := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = prevStdout })
+
+	var errOut bytes.Buffer
+	code := run(nil, &errOut)
+
+	require.NoError(t, w.Close())
+	out, _ := io.ReadAll(r)
+
+	assert.Equal(t, 0, code)
+	assert.Contains(t, string(out), "--config")
+	assert.NotContains(t, errOut.String(), "no config found")
+}
+
+func TestRun_MissingConfigHelpFlagShowsHelp(t *testing.T) {
+	chdir(t, t.TempDir())
+	prevStdout := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = prevStdout })
+
+	var errOut bytes.Buffer
+	code := run([]string{"--help"}, &errOut)
+
+	require.NoError(t, w.Close())
+	out, _ := io.ReadAll(r)
+
+	assert.Equal(t, 0, code)
+	assert.Contains(t, string(out), "--config")
 }
 
 func TestRun_InvalidConfigReturns2(t *testing.T) {
