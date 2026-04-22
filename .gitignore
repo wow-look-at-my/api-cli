@@ -1,0 +1,9 @@
+# Compiled binary
+/api-cli
+
+# Runtime config (users may keep their api.json private)
+/api.json
+
+# Go build/cache artifacts
+/coverage.out
+/coverage.html
