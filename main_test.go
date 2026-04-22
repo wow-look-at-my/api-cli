@@ -94,18 +94,18 @@ func TestRun_PicksUpCwdAPIJson(t *testing.T) {
 
 func TestRegisterFlag_AllTypes(t *testing.T) {
 	cfg := &Config{
-		Name:     "t",
-		Defaults: Defaults{BaseURL: "https://x.example"},
+		Name:		"t",
+		Defaults:	Defaults{BaseURL: "https://x.example"},
 		Commands: []Command{{
-			Name: "x",
+			Name:	"x",
 			Flags: []Flag{
 				{Name: "s", Type: "string", Default: "hi"},
 				{Name: "b", Type: "bool", Default: true},
 				{Name: "n", Type: "int", Default: float64(7)},
 				{Name: "tags", Type: "string-slice", Default: []any{"a", "b"}},
-				{Name: "untyped"}, // default "string" fallback
+				{Name: "untyped"},	// default "string" fallback
 			},
-			Request: &Request{Method: "GET", Path: "/"},
+			Request:	&Request{Method: "GET", Path: "/"},
 		}},
 	}
 	require.NoError(t, validate(cfg))
@@ -130,14 +130,14 @@ func TestStringSlice_PreservesCommas(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	cfg := &Config{
-		Name:     "t",
-		Defaults: Defaults{BaseURL: srv.URL},
+		Name:		"t",
+		Defaults:	Defaults{BaseURL: srv.URL},
 		Commands: []Command{{
-			Name:  "x",
-			Flags: []Flag{{Name: "tag", Type: "string-slice"}},
+			Name:	"x",
+			Flags:	[]Flag{{Name: "tag", Type: "string-slice"}},
 			Request: &Request{
-				Method: "GET",
-				Path:   "/",
+				Method:	"GET",
+				Path:	"/",
 				// Slice interpolates via Go's template default of "[a b c]" —
 				// not useful for query; this test just verifies pflag-level
 				// comma preservation via GetStringArray upstream of rendering.
@@ -153,19 +153,18 @@ func TestStringSlice_PreservesCommas(t *testing.T) {
 	got, err := cmd.Flags().GetStringArray("tag")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a,b", "c"}, got)
-	_ = captured // unused — no HTTP call made in this test
+	_ = captured	// unused — no HTTP call made in this test
 }
 
 func TestJoinURL_Errors(t *testing.T) {
-	if _, err := joinURL("", "/x", nil); err == nil {
-		t.Error("expected error for empty base_url")
-	}
-	if _, err := joinURL("::bad::", "/x", nil); err == nil {
-		t.Error("expected error for unparseable base_url")
-	}
-	if _, err := joinURL("not-a-url", "/x", nil); err == nil {
-		t.Error("expected error for missing scheme/host")
-	}
+	_, err := joinURL("", "/x", nil)
+	assert.NotNil(t, err)
+
+	_, err = joinURL("::bad::", "/x", nil)
+	assert.NotNil(t, err)
+
+	_, err = joinURL("not-a-url", "/x", nil)
+	assert.NotNil(t, err)
 }
 
 func TestHeaderInjectionRejected(t *testing.T) {
