@@ -1,0 +1,175 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"strings"
+	"testing"
+
+	"github.com/wow-look-at-my/testify/assert"
+	"github.com/wow-look-at-my/testify/require"
+)
+
+// execCmd builds the root from cfg, sets argv, executes, and returns the
+// process exit code (as main would compute it), plus anything written to
+// the exec'd child's stdout.
+func execCmd(t *testing.T, cfg *Config, argv ...string) (int, string) {
+	t.Helper()
+	require.NoError(t, validate(cfg))
+
+	var out bytes.Buffer
+	prevOut, prevErr := execStdout, execStderr
+	execStdout = &out
+	execStderr = io.Discard
+	t.Cleanup(func() {
+		execStdout = prevOut
+		execStderr = prevErr
+	})
+	prevCode := exitCode
+	exitCode = 0
+	t.Cleanup(func() { exitCode = prevCode })
+
+	root := newRoot(cfg)
+	root.SetOut(io.Discard) // suppress cobra's own output in tests
+	root.SetErr(io.Discard)
+	root.SetArgs(argv)
+	if err := root.Execute(); err != nil {
+		return 1, out.String()
+	}
+	return exitCode, out.String()
+}
+
+func TestIntegration_ShellFormRendersEntry(t *testing.T) {
+	cfg := &Config{
+		Name:    "t",
+		Vars:    map[string]any{"greeting": "hello"},
+		Command: &Cmd{Shell: true, Template: `printf '%s %s %s' {{.var.greeting}} {{.entry.name}} {{.arg.id}}`},
+		Commands: []Command{{
+			Name: "greet",
+			Args: []Arg{{Name: "id", Type: "string", Required: true}},
+			Entry: json.RawMessage(`{"name":"ada"}`),
+		}},
+	}
+	code, out := execCmd(t, cfg, "greet", "42")
+	assert.Equal(t, 0, code)
+	assert.Equal(t, "hello ada 42", out)
+}
+
+func TestIntegration_ArgvFormEcho(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "say",
+			Flags: []Flag{
+				{Name: "msg", Short: "m", Type: "string", Required: true},
+			},
+			Command: &Cmd{Argv: []string{"echo", "{{.flag.msg}}"}},
+		}},
+	}
+	code, out := execCmd(t, cfg, "say", "-m", "hi there")
+	assert.Equal(t, 0, code)
+	assert.Equal(t, "hi there\n", out)
+}
+
+func TestIntegration_LeafOverridesRootCommand(t *testing.T) {
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: `echo root`},
+		Commands: []Command{
+			{Name: "a"},                                                                 // inherits root
+			{Name: "b", Command: &Cmd{Shell: true, Template: `echo leaf-override`}},     // overrides
+		},
+	}
+	code, out := execCmd(t, cfg, "a")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "root\n", out)
+
+	code, out = execCmd(t, cfg, "b")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "leaf-override\n", out)
+}
+
+func TestIntegration_VarsInheritanceAndOverride(t *testing.T) {
+	cfg := &Config{
+		Name:    "t",
+		Vars:    map[string]any{"who": "world", "mood": "happy"},
+		Command: &Cmd{Shell: true, Template: `printf '%s %s' {{.var.who}} {{.var.mood}}`},
+		Commands: []Command{{
+			Name: "sub",
+			Vars: map[string]any{"mood": "grumpy"},
+			Commands: []Command{
+				{Name: "greet"},
+			},
+		}},
+	}
+	code, out := execCmd(t, cfg, "sub", "greet")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "world grumpy", out)
+}
+
+func TestIntegration_VarsCanBeTemplated(t *testing.T) {
+	t.Setenv("API_CLI_TEST_HOST", "example.internal")
+	cfg := &Config{
+		Name:    "t",
+		Vars:    map[string]any{"host": `{{.env.API_CLI_TEST_HOST}}`},
+		Command: &Cmd{Shell: true, Template: `echo {{.var.host}}`},
+		Commands: []Command{{Name: "show"}},
+	}
+	code, out := execCmd(t, cfg, "show")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "example.internal\n", out)
+}
+
+func TestIntegration_CurlExampleViaQuerystring(t *testing.T) {
+	// Simulates the user's motivating example: render an HTTP-shaped entry
+	// and use querystring + shellquote to produce a safe shell command.
+	// We run `printf` instead of curl to keep the test hermetic.
+	cfg := &Config{
+		Name:    "t",
+		Vars:    map[string]any{"base_url": "https://api.example.com/v1"},
+		Command: &Cmd{Shell: true, Template: `printf '%s' {{shellquote (printf "%s%s%s" .var.base_url .entry.path (querystring .entry.query))}}`},
+		Commands: []Command{{
+			Name: "list",
+			Flags: []Flag{
+				{Name: "limit", Type: "int", Default: float64(10)},
+			},
+			Entry: json.RawMessage(`{"path":"/users","query":{"limit":"{{.flag.limit}}"}}`),
+		}},
+	}
+	code, out := execCmd(t, cfg, "list", "--limit", "3")
+	require.Equal(t, 0, code)
+	assert.Contains(t, out, "https://api.example.com/v1/users?limit=3")
+}
+
+func TestIntegration_ExitCodePropagated(t *testing.T) {
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: `exit 9`},
+		Commands: []Command{{Name: "fail"}},
+	}
+	code, _ := execCmd(t, cfg, "fail")
+	assert.Equal(t, 9, code)
+}
+
+func TestIntegration_StdinPassthrough(t *testing.T) {
+	prev := execStdin
+	execStdin = strings.NewReader("piped\n")
+	t.Cleanup(func() { execStdin = prev })
+
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: `cat`},
+		Commands: []Command{{Name: "echo"}},
+	}
+	code, out := execCmd(t, cfg, "echo")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "piped\n", out)
+}
+
+func TestIntegration_ExampleConfigLoads(t *testing.T) {
+	// Sanity check: the shipped example validates cleanly.
+	cfg, err := Load("api.example.json")
+	require.NoError(t, err)
+	assert.NotEmpty(t, cfg.Name)
+}
