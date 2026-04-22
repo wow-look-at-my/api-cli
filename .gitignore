@@ -7,3 +7,4 @@
 # Go build/cache artifacts
 /coverage.out
 /coverage.html
+/build/
