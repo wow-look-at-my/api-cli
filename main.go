@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -9,28 +10,30 @@ import (
 )
 
 func main() {
-	os.Exit(run())
+	os.Exit(run(os.Args[1:], os.Stderr))
 }
 
-func run() int {
-	cfgPath := findConfigFlag(os.Args[1:])
+// run is the process body, split out of main for testability. argv is the
+// slice of arguments (os.Args[1:] in production); errOut receives diagnostics.
+func run(argv []string, errOut io.Writer) int {
+	cfgPath := findConfigFlag(argv)
 	if cfgPath == "" {
 		if _, err := os.Stat("api.json"); err == nil {
 			cfgPath = "api.json"
 		} else {
-			fmt.Fprintln(os.Stderr, "error: no config found; pass --config <path> or place api.json in the current directory")
+			fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.json in the current directory")
 			return 2
 		}
 	}
 	cfg, err := Load(cfgPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		fmt.Fprintln(errOut, "error:", err)
 		return 2
 	}
 
 	root := newRoot(cfg)
+	root.SetArgs(argv)
 	if err := root.Execute(); err != nil {
-		// Cobra already printed the error message.
 		return 1
 	}
 	return exitCode

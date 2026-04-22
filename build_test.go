@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"testing"
+	"github.com/wow-look-at-my/testify/assert"
+	"github.com/wow-look-at-my/testify/require"
 )
 
 const miniConfig = `{
@@ -33,113 +35,100 @@ const miniConfig = `{
 
 func TestBuildTreeShape(t *testing.T) {
 	var cfg Config
-	if err := json.Unmarshal([]byte(miniConfig), &cfg); err != nil {
-		t.Fatal(err)
-	}
-	if err := validate(&cfg); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, json.Unmarshal([]byte(miniConfig), &cfg))
+
+	require.NoError(t, validate(&cfg))
+
 	root := newRoot(&cfg)
 
 	users, _, err := root.Find([]string{"users"})
-	if err != nil || users == nil {
-		t.Fatal("users subcommand missing:", err)
-	}
-	if users.Short != "u short" {
-		t.Errorf("users.Short = %q", users.Short)
-	}
+	require.False(t, err != nil || users == nil)
+
+	assert.Equal(t, "u short", users.Short)
 
 	get, _, err := root.Find([]string{"users", "get"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if get.Use != "get <id>" {
-		t.Errorf("get.Use = %q, want %q", get.Use, "get <id>")
-	}
+	require.Nil(t, err)
+
+	assert.Equal(t, "get <id>", get.Use)
 
 	list, _, err := root.Find([]string{"users", "list"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, err)
+
 	limit := list.Flags().Lookup("limit")
-	if limit == nil {
-		t.Fatal("--limit flag missing")
-	}
-	if limit.Shorthand != "l" {
-		t.Errorf("limit short = %q, want %q", limit.Shorthand, "l")
-	}
-	if limit.DefValue != "10" {
-		t.Errorf("limit default = %q, want %q", limit.DefValue, "10")
-	}
-	if tok := list.Flags().Lookup("token"); tok == nil {
-		t.Error("--token flag missing")
-	}
+	require.NotNil(t, limit)
+
+	assert.Equal(t, "l", limit.Shorthand)
+
+	assert.Equal(t, "10", limit.DefValue)
+
+	tok := list.Flags().Lookup("token")
+	assert.NotNil(t, tok)
+
 }
 
 func TestValidate_RejectsReservedName(t *testing.T) {
 	cfg := &Config{
-		Name:     "t",
-		Defaults: Defaults{BaseURL: "https://x.example"},
-		Commands: []Command{{Name: "help", Request: &Request{Method: "GET", Path: "/"}}},
+		Name:		"t",
+		Defaults:	Defaults{BaseURL: "https://x.example"},
+		Commands:	[]Command{{Name: "help", Request: &Request{Method: "GET", Path: "/"}}},
 	}
-	if err := validate(cfg); err == nil {
-		t.Fatal("expected error for reserved name")
-	}
+	err := validate(cfg)
+	require.NotNil(t, err)
+
 }
 
 func TestValidate_RejectsArgFlagCollision(t *testing.T) {
 	cfg := &Config{
-		Name:     "t",
-		Defaults: Defaults{BaseURL: "https://x.example"},
+		Name:		"t",
+		Defaults:	Defaults{BaseURL: "https://x.example"},
 		Commands: []Command{{
-			Name:    "x",
-			Args:    []Arg{{Name: "id", Required: true}},
-			Flags:   []Flag{{Name: "id"}},
-			Request: &Request{Method: "GET", Path: "/"},
+			Name:		"x",
+			Args:		[]Arg{{Name: "id", Required: true}},
+			Flags:		[]Flag{{Name: "id"}},
+			Request:	&Request{Method: "GET", Path: "/"},
 		}},
 	}
-	if err := validate(cfg); err == nil {
-		t.Fatal("expected error for arg/flag name collision")
-	}
+	err := validate(cfg)
+	require.NotNil(t, err)
+
 }
 
 func TestValidate_RejectsLeafWithoutMethod(t *testing.T) {
 	cfg := &Config{
-		Name:     "t",
-		Defaults: Defaults{BaseURL: "https://x.example"},
-		Commands: []Command{{Name: "x", Request: &Request{Path: "/"}}},
+		Name:		"t",
+		Defaults:	Defaults{BaseURL: "https://x.example"},
+		Commands:	[]Command{{Name: "x", Request: &Request{Path: "/"}}},
 	}
-	if err := validate(cfg); err == nil {
-		t.Fatal("expected error for request.method missing")
-	}
+	err := validate(cfg)
+	require.NotNil(t, err)
+
 }
 
 func TestValidate_RejectsGroupWithNoChildren(t *testing.T) {
 	cfg := &Config{
-		Name:     "t",
-		Defaults: Defaults{BaseURL: "https://x.example"},
-		Commands: []Command{{Name: "x"}},
+		Name:		"t",
+		Defaults:	Defaults{BaseURL: "https://x.example"},
+		Commands:	[]Command{{Name: "x"}},
 	}
-	if err := validate(cfg); err == nil {
-		t.Fatal("expected error for node with neither request nor subcommands")
-	}
+	err := validate(cfg)
+	require.NotNil(t, err)
+
 }
 
 func TestFindConfigFlag(t *testing.T) {
 	cases := []struct {
-		args []string
-		want string
+		args	[]string
+		want	string
 	}{
 		{[]string{"--config", "path.json", "foo"}, "path.json"},
 		{[]string{"--config=path.json", "foo"}, "path.json"},
 		{[]string{"foo", "--config", "path.json"}, "path.json"},
 		{[]string{"foo"}, ""},
-		{[]string{"--config"}, ""}, // dangling flag: no value
+		{[]string{"--config"}, ""},	// dangling flag: no value
 	}
 	for _, c := range cases {
 		got := findConfigFlag(c.args)
-		if got != c.want {
-			t.Errorf("findConfigFlag(%v) = %q, want %q", c.args, got, c.want)
-		}
+		assert.Equal(t, c.want, got)
+
 	}
 }

@@ -2,15 +2,17 @@ package main
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
+
+	"github.com/wow-look-at-my/testify/assert"
+	"github.com/wow-look-at-my/testify/require"
 )
 
 func TestRenderString(t *testing.T) {
 	data := map[string]any{
-		"id":   42,
-		"name": "ada",
-		"env":  map[string]string{"TOKEN": "abc"},
+		"id":	42,
+		"name":	"ada",
+		"env":	map[string]string{"TOKEN": "abc"},
 	}
 	cases := []struct {
 		in, want string
@@ -23,66 +25,53 @@ func TestRenderString(t *testing.T) {
 	}
 	for _, c := range cases {
 		got, err := renderString(c.in, data)
-		if err != nil {
-			t.Errorf("renderString(%q) error: %v", c.in, err)
-			continue
-		}
-		if got != c.want {
-			t.Errorf("renderString(%q) = %q, want %q", c.in, got, c.want)
-		}
+		assert.Nil(t, err)
+
+		assert.Equal(t, c.want, got)
+
 	}
 }
 
 func TestRenderString_MissingKeyErrors(t *testing.T) {
 	_, err := renderString("{{.typo}}", map[string]any{"id": 1})
-	if err == nil {
-		t.Fatal("expected error for missing key, got nil")
-	}
-	if !strings.Contains(err.Error(), "typo") {
-		t.Errorf("error should name the missing key, got: %v", err)
-	}
+	require.NotNil(t, err)
+
+	assert.Contains(t, err.Error(), "typo")
+
 }
 
 func TestRenderMap(t *testing.T) {
 	data := map[string]any{"a": "A", "b": "B"}
 	in := map[string]string{"x": "{{.a}}", "y": "{{.b}}!"}
 	got, err := renderMap(in, data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got["x"] != "A" || got["y"] != "B!" {
-		t.Errorf("got %v", got)
-	}
+	require.Nil(t, err)
+
+	assert.False(t, got["x"] != "A" || got["y"] != "B!")
+
 }
 
 func TestRenderMap_Nil(t *testing.T) {
 	got, err := renderMap(nil, map[string]any{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != nil {
-		t.Errorf("expected nil, got %v", got)
-	}
+	require.Nil(t, err)
+
+	assert.Nil(t, got)
+
 }
 
 func TestRenderBody_Null(t *testing.T) {
 	out, err := renderBody(json.RawMessage(`null`), map[string]any{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out != nil {
-		t.Errorf("expected nil bytes, got %q", out)
-	}
+	require.Nil(t, err)
+
+	assert.Nil(t, out)
+
 }
 
 func TestRenderBody_Empty(t *testing.T) {
 	out, err := renderBody(nil, map[string]any{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out != nil {
-		t.Errorf("expected nil bytes, got %q", out)
-	}
+	require.Nil(t, err)
+
+	assert.Nil(t, out)
+
 }
 
 func TestRenderBody_StringsAndLiterals(t *testing.T) {
@@ -91,46 +80,36 @@ func TestRenderBody_StringsAndLiterals(t *testing.T) {
 	raw := json.RawMessage(`{"title":"{{.title}}","userId":1,"active":true,"tags":null}`)
 	data := map[string]any{"title": "hi"}
 	out, err := renderBody(raw, data)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, err)
+
 	var got map[string]any
-	if err := json.Unmarshal(out, &got); err != nil {
-		t.Fatalf("output invalid JSON: %v (%s)", err, out)
-	}
-	if got["title"] != "hi" {
-		t.Errorf("title = %v", got["title"])
-	}
-	if got["userId"] != float64(1) {
-		t.Errorf("userId = %v (%T), want 1", got["userId"], got["userId"])
-	}
-	if got["active"] != true {
-		t.Errorf("active = %v", got["active"])
-	}
-	if got["tags"] != nil {
-		t.Errorf("tags = %v, want nil", got["tags"])
-	}
+	require.NoError(t, json.Unmarshal(out, &got))
+
+	assert.Equal(t, "hi", got["title"])
+
+	assert.Equal(t, float64(1), got["userId"])
+
+	assert.Equal(t, true, got["active"])
+
+	assert.Nil(t, got["tags"])
+
 }
 
 func TestRenderBody_NestedAndArrays(t *testing.T) {
 	raw := json.RawMessage(`{"user":{"name":"{{.n}}","tags":["a","{{.t}}"]}}`)
 	data := map[string]any{"n": "ada", "t": "admin"}
 	out, err := renderBody(raw, data)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, err)
+
 	var got map[string]any
-	if err := json.Unmarshal(out, &got); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, json.Unmarshal(out, &got))
+
 	u := got["user"].(map[string]any)
-	if u["name"] != "ada" {
-		t.Errorf("name = %v", u["name"])
-	}
+	assert.Equal(t, "ada", u["name"])
+
 	tags := u["tags"].([]any)
-	if tags[0] != "a" || tags[1] != "admin" {
-		t.Errorf("tags = %v", tags)
-	}
+	assert.False(t, tags[0] != "a" || tags[1] != "admin")
+
 }
 
 func TestRenderBody_QuoteEscaping(t *testing.T) {
@@ -139,14 +118,11 @@ func TestRenderBody_QuoteEscaping(t *testing.T) {
 	raw := json.RawMessage(`{"msg":"{{.m}}"}`)
 	data := map[string]any{"m": `hello "world"`}
 	out, err := renderBody(raw, data)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, err)
+
 	var got map[string]any
-	if err := json.Unmarshal(out, &got); err != nil {
-		t.Fatalf("output invalid JSON: %v (%s)", err, out)
-	}
-	if got["msg"] != `hello "world"` {
-		t.Errorf("msg = %v", got["msg"])
-	}
+	require.NoError(t, json.Unmarshal(out, &got))
+
+	assert.Equal(t, `hello "world"`, got["msg"])
+
 }
