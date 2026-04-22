@@ -27,8 +27,7 @@ func buildCommand(node Command, defaults Defaults) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:          useStr,
-		Short:        node.Short,
-		Long:         node.Long,
+		Short:        node.Description,
 		SilenceUsage: true,
 	}
 

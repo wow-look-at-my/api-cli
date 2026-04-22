@@ -43,8 +43,7 @@ func run(argv []string, errOut io.Writer) int {
 func newRoot(cfg *Config) *cobra.Command {
 	root := &cobra.Command{
 		Use:          cfg.Name,
-		Short:        cfg.Short,
-		Long:         cfg.Long,
+		Short:        cfg.Description,
 		SilenceUsage: true,
 	}
 	// Declared so --help lists it. Actual parsing happens in findConfigFlag

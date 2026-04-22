@@ -13,7 +13,7 @@ const miniConfig = `{
   "commands": [
     {
       "name": "users",
-      "short": "u short",
+      "description": "u desc",
       "commands": [
         {
           "name": "get",
@@ -44,7 +44,7 @@ func TestBuildTreeShape(t *testing.T) {
 	users, _, err := root.Find([]string{"users"})
 	require.False(t, err != nil || users == nil)
 
-	assert.Equal(t, "u short", users.Short)
+	assert.Equal(t, "u desc", users.Short)
 
 	get, _, err := root.Find([]string{"users", "get"})
 	require.Nil(t, err)

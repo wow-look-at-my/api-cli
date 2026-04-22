@@ -33,13 +33,12 @@ cp api.example.json api.json
 
 ### Top level
 
-| Field      | Type                         | Notes                                                              |
-|------------|------------------------------|--------------------------------------------------------------------|
-| `name`     | string (required)            | Binary's display name in help.                                     |
-| `short`    | string                       | One-line help summary.                                             |
-| `long`     | string                       | Longer description shown on `--help`.                              |
-| `defaults` | object (required)            | See below.                                                         |
-| `commands` | array of Command             | Top-level subcommands.                                             |
+| Field         | Type              | Notes                                         |
+|---------------|-------------------|-----------------------------------------------|
+| `name`        | string (required) | Binary's display name in help.                |
+| `description` | string            | Shown as the CLI's header in `--help`.        |
+| `defaults`    | object (required) | See below.                                    |
+| `commands`    | array of Command  | Top-level subcommands.                        |
 
 ### `defaults`
 
@@ -50,15 +49,14 @@ cp api.example.json api.json
 
 ### A Command node
 
-| Field        | Type                | Notes                                                          |
-|--------------|---------------------|----------------------------------------------------------------|
-| `name`       | string (required)   | Subcommand name. Cannot be `help`, `completion`, `__complete`.|
-| `short`      | string              | One-line help.                                                |
-| `long`       | string              | Longer help.                                                  |
-| `args`       | array of Arg        | Positional args.                                              |
-| `flags`      | array of Flag       | Named flags.                                                  |
-| `request`    | object              | Present on leaves; describes the HTTP call.                   |
-| `commands`   | array of Command    | Nested subcommands.                                           |
+| Field         | Type              | Notes                                                           |
+|---------------|-------------------|-----------------------------------------------------------------|
+| `name`        | string (required) | Subcommand name. Cannot be `help`, `completion`, `__complete`.  |
+| `description` | string            | Shown in help at this command's level and in parent listings.   |
+| `args`        | array of Arg      | Positional args.                                                |
+| `flags`       | array of Flag     | Named flags.                                                    |
+| `request`     | object            | Present on leaves; describes the HTTP call.                     |
+| `commands`    | array of Command  | Nested subcommands.                                             |
 
 A node is a **leaf** (issues an HTTP call) if `request` is set. Otherwise it's a **group** that just prints help for its children.
 

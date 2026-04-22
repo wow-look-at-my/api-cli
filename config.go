@@ -10,11 +10,10 @@ import (
 // Config is the top-level JSON schema: the CLI's name, help, defaults, and
 // command tree.
 type Config struct {
-	Name     string    `json:"name"`
-	Short    string    `json:"short,omitempty"`
-	Long     string    `json:"long,omitempty"`
-	Defaults Defaults  `json:"defaults"`
-	Commands []Command `json:"commands,omitempty"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	Defaults    Defaults  `json:"defaults"`
+	Commands    []Command `json:"commands,omitempty"`
 }
 
 // Defaults is applied to every request — the base URL is prefixed onto each
@@ -28,13 +27,12 @@ type Defaults struct {
 // Command is a node in the CLI tree. A node is a leaf (issues an HTTP call)
 // iff Request is non-nil; otherwise it's a group that prints help.
 type Command struct {
-	Name     string    `json:"name"`
-	Short    string    `json:"short,omitempty"`
-	Long     string    `json:"long,omitempty"`
-	Args     []Arg     `json:"args,omitempty"`
-	Flags    []Flag    `json:"flags,omitempty"`
-	Request  *Request  `json:"request,omitempty"`
-	Commands []Command `json:"commands,omitempty"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	Args        []Arg     `json:"args,omitempty"`
+	Flags       []Flag    `json:"flags,omitempty"`
+	Request     *Request  `json:"request,omitempty"`
+	Commands    []Command `json:"commands,omitempty"`
 }
 
 // Arg is a positional argument.
