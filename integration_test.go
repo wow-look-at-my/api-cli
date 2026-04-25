@@ -16,12 +16,19 @@ import (
 // the exec'd child's stdout.
 func execCmd(t *testing.T, cfg *Config, argv ...string) (int, string) {
 	t.Helper()
+	code, out, _ := execCmdFull(t, cfg, argv...)
+	return code, out
+}
+
+// execCmdFull is like execCmd but also returns what was written to stderr.
+func execCmdFull(t *testing.T, cfg *Config, argv ...string) (int, string, string) {
+	t.Helper()
 	require.NoError(t, validate(cfg))
 
-	var out bytes.Buffer
+	var out, errBuf bytes.Buffer
 	prevOut, prevErr := execStdout, execStderr
 	execStdout = &out
-	execStderr = io.Discard
+	execStderr = &errBuf
 	t.Cleanup(func() {
 		execStdout = prevOut
 		execStderr = prevErr
@@ -35,9 +42,9 @@ func execCmd(t *testing.T, cfg *Config, argv ...string) (int, string) {
 	root.SetErr(io.Discard)
 	root.SetArgs(argv)
 	if err := root.Execute(); err != nil {
-		return 1, out.String()
+		return 1, out.String(), errBuf.String()
 	}
-	return exitCode, out.String()
+	return exitCode, out.String(), errBuf.String()
 }
 
 func TestIntegration_ShellFormRendersEntry(t *testing.T) {
@@ -172,4 +179,195 @@ func TestIntegration_ExampleConfigLoads(t *testing.T) {
 	cfg, err := Load("api.example.json")
 	require.NoError(t, err)
 	assert.NotEmpty(t, cfg.Name)
+}
+
+// --- Steps / result-reuse tests ---
+
+func TestIntegration_StepResultAvailableInFinalEntry(t *testing.T) {
+	// Step echoes JSON; the final command uses .result.first.value.
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{{
+				Name:    "first",
+				Command: &Cmd{Shell: true, Template: `printf '{"value":"hello"}'`},
+			}},
+			Command: &Cmd{Shell: true, Template: `echo {{.result.first.value}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "run")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "hello\n", out)
+}
+
+func TestIntegration_StepResultChained(t *testing.T) {
+	// Two steps: the second step uses the first's result in its entry, and the
+	// final command uses both.
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{
+				{
+					Name:    "a",
+					Command: &Cmd{Shell: true, Template: `printf '{"n":3}'`},
+				},
+				{
+					Name:    "b",
+					Command: &Cmd{Shell: true, Template: `printf '{"doubled":{{mul (int .result.a.n) 2}}}'`},
+				},
+			},
+			Command: &Cmd{Shell: true, Template: `printf '%s-%s' {{.result.a.n}} {{.result.b.doubled}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "run")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "3-6", out)
+}
+
+func TestIntegration_StepEntryRenderedWithResult(t *testing.T) {
+	// A step's entry template can reference .result.* from prior steps.
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{
+				{
+					Name:    "lookup",
+					Command: &Cmd{Shell: true, Template: `printf '{"id":42}'`},
+				},
+				{
+					Name:    "detail",
+					Entry:   json.RawMessage(`{"id":"{{.result.lookup.id}}"}`),
+					Command: &Cmd{Shell: true, Template: `printf '{"found":{{.entry.id}}}'`},
+				},
+			},
+			Command: &Cmd{Shell: true, Template: `echo {{.result.detail.found}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "run")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "42\n", out)
+}
+
+func TestIntegration_StepInheritsAncestorCommand(t *testing.T) {
+	// A step without its own command uses the leaf's effective command (same
+	// inheritance rule as the leaf itself). Here neither the step nor the leaf
+	// overrides the command, so both run the root template.
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: `printf '{"k":"{{.entry.v}}"}'`},
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{{
+				Name:  "s",
+				Entry: json.RawMessage(`{"v":"hello"}`),
+				// No Command — uses root command.
+			}},
+			// No Command override — also uses root command.
+			Entry: json.RawMessage(`{"v":"{{.result.s.k}}"}`),
+		}},
+	}
+	code, out := execCmd(t, cfg, "run")
+	require.Equal(t, 0, code)
+	// Step: printf '{"k":"hello"}' → .result.s = {k: "hello"}
+	// Final: printf '{"k":"hello"}' (leaf entry resolves .result.s.k = "hello")
+	assert.Equal(t, `{"k":"hello"}`, out)
+}
+
+func TestIntegration_StepNonJSONResultIsString(t *testing.T) {
+	// When a step's output is not JSON it's stored as a plain string.
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{{
+				Name:    "raw",
+				Command: &Cmd{Shell: true, Template: `printf 'not-json'`},
+			}},
+			Command: &Cmd{Shell: true, Template: `echo {{.result.raw}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "run")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "not-json\n", out)
+}
+
+func TestIntegration_StepFailurePropagatesExitCode(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{{
+				Name:    "fail",
+				Command: &Cmd{Shell: true, Template: `exit 5`},
+			}},
+			Command: &Cmd{Shell: true, Template: `echo should-not-run`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "run")
+	assert.Equal(t, 5, code)
+	assert.Empty(t, out)
+}
+
+func TestIntegration_ExecutionCountReportedOnStderr(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{{
+				Name:    "s",
+				Command: &Cmd{Shell: true, Template: `printf '{}'`},
+			}},
+			Command: &Cmd{Shell: true, Template: `true`},
+		}},
+	}
+	_, _, errOut := execCmdFull(t, cfg, "run")
+	assert.Equal(t, "2 executions\n", errOut)
+}
+
+func TestIntegration_ExecutionCountSuppressedWithQuiet(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{{
+				Name:    "s",
+				Command: &Cmd{Shell: true, Template: `printf '{}'`},
+			}},
+			Command: &Cmd{Shell: true, Template: `true`},
+		}},
+	}
+	_, _, errOut := execCmdFull(t, cfg, "--quiet", "run")
+	assert.Empty(t, errOut)
+}
+
+func TestIntegration_NoCountWhenNoSteps(t *testing.T) {
+	// Single execution (no steps) → nothing printed to stderr.
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: `true`},
+		Commands: []Command{{Name: "run"}},
+	}
+	_, _, errOut := execCmdFull(t, cfg, "run")
+	assert.Empty(t, errOut)
+}
+
+func TestIntegration_ArrayResultIndexed(t *testing.T) {
+	// JSON array result: index into it in the final template.
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{{
+				Name:    "list",
+				Command: &Cmd{Shell: true, Template: `printf '[{"name":"alice"},{"name":"bob"}]'`},
+			}},
+			Command: &Cmd{Shell: true, Template: `echo {{(index .result.list 1).name}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "run")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "bob\n", out)
 }

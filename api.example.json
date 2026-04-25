@@ -79,6 +79,24 @@
           ]
         }
       ]
+    },
+
+    {
+      "name": "user-posts",
+      "description": "List posts for a user looked up by username (demonstrates steps / result reuse). Runs 2 API calls: first resolves the username to an ID, then fetches that user's posts.",
+      "args": [
+        { "name": "username", "type": "string", "required": true, "description": "Username to look up (e.g. Bret)." }
+      ],
+      "steps": [
+        {
+          "name": "user",
+          "entry": { "path": "/users", "query": { "username": "{{.arg.username}}" } }
+        }
+      ],
+      "entry": {
+        "path": "/posts",
+        "query": { "userId": "{{(index .result.user 0).id}}" }
+      }
     }
   ]
 }

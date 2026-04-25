@@ -31,13 +31,14 @@ cp api.example.json api.json       # or pass --config <path>
 
 Each leaf command renders a `command` template against a data context:
 
-| Namespace | Source                                                          |
-|-----------|-----------------------------------------------------------------|
-| `.arg`    | Positional args by name, typed per the `args` entry.            |
-| `.flag`   | Named flags by name, typed per the `flags` entry.               |
-| `.env`    | Process environment (`{{.env.API_TOKEN}}`).                     |
-| `.var`    | Merged `vars` from the root down to this node.                  |
-| `.entry`  | The leaf's user-defined map — arbitrary JSON, string leaves templated first. |
+| Namespace  | Source                                                                       |
+|------------|------------------------------------------------------------------------------|
+| `.arg`     | Positional args by name, typed per the `args` entry.                         |
+| `.flag`    | Named flags by name, typed per the `flags` entry.                            |
+| `.env`     | Process environment (`{{.env.API_TOKEN}}`).                                  |
+| `.var`     | Merged `vars` from the root down to this node.                               |
+| `.result`  | Captured outputs of `steps`, keyed by step name. JSON outputs are structured; non-JSON outputs are strings. |
+| `.entry`   | The leaf's user-defined map — arbitrary JSON, string leaves templated first. |
 
 The closest `command` template up the ancestor chain is used. The rendered
 command is executed and its exit code propagates.
@@ -117,6 +118,58 @@ wrapper:
 }
 ```
 
+## Result reuse across calls
+
+A leaf command can declare `steps` — pre-execution stages that run before the
+leaf's own command. Each step's stdout is captured and exposed under
+`.result.<name>` for subsequent steps and the leaf's own `entry`/`command`
+templates. This enables patterns like **indirection** (resolve a name to an ID,
+then use it), **joins** (fetch two resources and combine fields), and
+**fan-out/fan-in** pipelines.
+
+```jsonc
+{
+  "name": "user-posts",
+  "description": "List posts for a user looked up by username.",
+  "args": [{ "name": "username", "required": true }],
+  "steps": [
+    {
+      "name": "user",
+      // Inherits the root command. .result.user is set to the parsed JSON output.
+      "entry": { "path": "/users", "query": { "username": "{{.arg.username}}" } }
+    }
+  ],
+  // The leaf's own entry can now reference .result.user.
+  "entry": {
+    "path": "/posts",
+    "query": { "userId": "{{(index .result.user 0).id}}" }
+  }
+}
+```
+
+```sh
+./api-cli user-posts Bret          # 2 API calls; count printed to stderr
+./api-cli --quiet user-posts Bret  # same, but the count is suppressed
+```
+
+### Step semantics
+
+- Steps run in declaration order.
+- Each step's `entry` is rendered against the current context, **including
+  `.result.*` from steps that already ran**.
+- A step's stdout is parsed as JSON (with `UseNumber`, so large integers are
+  preserved). If stdout is not valid JSON, it is stored as a plain string.
+- If a step exits non-zero the run aborts immediately with that exit code; the
+  leaf's own command does **not** run.
+- A step can override `command` just like a leaf can. If it has no `command`,
+  the closest ancestor `command` template is used.
+- When more than one command ran (i.e., there is at least one step), the count
+  is printed to **stderr** after the run:
+  ```
+  2 executions
+  ```
+  Pass `--quiet` / `-q` anywhere on the command line to suppress this.
+
 ## Config schema
 
 ### Top level
@@ -139,11 +192,20 @@ wrapper:
 | `flags`       | `[]Flag`          | Named flags.                                                      |
 | `vars`        | `map<string,any>` | Merged with ancestor vars (this node wins on collision).          |
 | `command`     | string or `[]string` | Overrides inherited command for this subtree.                  |
+| `steps`       | `[]Step`          | Leaf-only. Pre-execution stages; results exposed as `.result.*`.  |
 | `entry`       | any JSON object   | Leaf-only. Arbitrary user-defined data; string leaves templated.  |
 | `commands`    | `[]Command`       | Nested subcommands.                                               |
 
 A node is a **leaf** if it has no `commands`; leaves execute. Groups just print
 help.
+
+### `steps`
+
+| Field     | Type              | Notes                                                              |
+|-----------|-------------------|--------------------------------------------------------------------|
+| `name`    | string (required) | Key under `.result`; accessed as `{{.result.name}}`.              |
+| `entry`   | any JSON object   | Rendered like a leaf `entry`; available as `.entry` when the step's command runs. |
+| `command` | string or `[]string` | Overrides the inherited command for this step only.             |
 
 ### `args`
 

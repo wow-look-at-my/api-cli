@@ -161,10 +161,15 @@ func gatherFlags(cmd *cobra.Command, node Command) map[string]any {
 // Stages:
 //  1. Assemble args, flags, env — the base template context.
 //  2. Render the merged vars against the base context to produce .var.
-//  3. Render the entry against the context (now including .var) to produce
-//     .entry.
-//  4. Render the effective command template against the full context and
-//     execute it.
+//  3. Execute each step in order, capturing its stdout into .result.<name>.
+//     Each step's entry template is rendered against the current context
+//     (including .result.* from prior steps) before the step runs.
+//  4. Render the leaf's own entry against the full context (including
+//     .result.*) to produce .entry.
+//  5. Render the effective command template against the full context and
+//     execute it, streaming output to the user.
+//  6. If more than one command was executed and --quiet is not set, print
+//     the execution count to stderr.
 func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd) error {
 	argMap, err := gatherArgs(node, args)
 	if err != nil {
@@ -184,6 +189,39 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 	}
 	data["var"] = renderedVars
 
+	resultMap := map[string]any{}
+	data["result"] = resultMap
+
+	executions := 0
+
+	for _, step := range node.Steps {
+		stepCmd := cmdTmpl
+		if step.Command.Defined() {
+			stepCmd = step.Command
+		}
+		if !stepCmd.Defined() {
+			return fmt.Errorf("step %q: no command available", step.Name)
+		}
+
+		stepEntry, err := renderEntry(step.Entry, data)
+		if err != nil {
+			return fmt.Errorf("step %q: render entry: %w", step.Name, err)
+		}
+		if stepEntry == nil {
+			stepEntry = map[string]any{}
+		}
+		data["entry"] = stepEntry
+
+		out, code := captureExec(stepCmd, data)
+		executions++
+		if code != 0 {
+			exitCode = code
+			reportExecutions(c, executions)
+			return nil
+		}
+		resultMap[step.Name] = parseResult(out)
+	}
+
 	entry, err := renderEntry(node.Entry, data)
 	if err != nil {
 		return fmt.Errorf("render entry: %w", err)
@@ -198,7 +236,21 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 	}
 
 	exitCode = doExec(cmdTmpl, data)
+	executions++
+	reportExecutions(c, executions)
 	return nil
+}
+
+// reportExecutions prints the number of commands run to stderr when n > 1
+// and --quiet is not set.
+func reportExecutions(c *cobra.Command, n int) {
+	if n <= 1 {
+		return
+	}
+	quiet, _ := c.Root().PersistentFlags().GetBool("quiet")
+	if !quiet {
+		fmt.Fprintf(execStderr, "%d executions\n", n)
+	}
 }
 
 // renderVars runs each string leaf of the merged vars map through the

@@ -26,21 +26,36 @@ type Config struct {
 // nodes just print help.
 //
 // `entry` is arbitrary user-defined JSON — its string leaves are
-// template-rendered against {arg, flag, env, var} and the result is exposed
-// to the command template as `.entry`.
+// template-rendered against {arg, flag, env, var, result} and the result is
+// exposed to the command template as `.entry`.
 //
 // `vars` merges into the ancestor chain, with the child winning on key
 // collision. `command`, if set, overrides the inherited command for this
 // subtree.
+//
+// `steps` run sequentially before the leaf's own command. Each step's stdout
+// is captured and parsed as JSON (or kept as a raw string if not valid JSON),
+// then stored in `.result.<name>` for use by subsequent steps and the final
+// command template.
 type Command struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	Args        []Arg          `json:"args,omitempty"`
-	Flags       []Flag         `json:"flags,omitempty"`
-	Vars        map[string]any `json:"vars,omitempty"`
-	Command     *Cmd           `json:"command,omitempty"`
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	Args        []Arg           `json:"args,omitempty"`
+	Flags       []Flag          `json:"flags,omitempty"`
+	Vars        map[string]any  `json:"vars,omitempty"`
+	Command     *Cmd            `json:"command,omitempty"`
+	Steps       []Step          `json:"steps,omitempty"`
 	Entry       json.RawMessage `json:"entry,omitempty"`
-	Commands    []Command      `json:"commands,omitempty"`
+	Commands    []Command       `json:"commands,omitempty"`
+}
+
+// Step is a pre-execution stage on a leaf command. Its output is captured,
+// parsed as JSON if valid, and stored under `.result.<name>` for use in
+// subsequent steps and the leaf's own entry/command templates.
+type Step struct {
+	Name    string          `json:"name"`
+	Entry   json.RawMessage `json:"entry,omitempty"`
+	Command *Cmd            `json:"command,omitempty"`
 }
 
 // Arg is a positional argument. Type is "string" or "int" (default string).
@@ -252,9 +267,23 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		}
 	}
 
-	// `entry` only makes sense on a leaf (it's the leaf's variable bag).
+	// `entry` and `steps` only make sense on leaves.
 	if len(c.Entry) > 0 && len(c.Commands) > 0 {
 		return fmt.Errorf("%s: `entry` is only allowed on leaves (nodes with no subcommands)", where)
+	}
+	if len(c.Steps) > 0 && len(c.Commands) > 0 {
+		return fmt.Errorf("%s: `steps` is only allowed on leaves (nodes with no subcommands)", where)
+	}
+	stepNames := map[string]bool{}
+	for i, s := range c.Steps {
+		sw := fmt.Sprintf("%s.steps[%d]", where, i)
+		if strings.TrimSpace(s.Name) == "" {
+			return fmt.Errorf("%s: name required", sw)
+		}
+		if stepNames[s.Name] {
+			return fmt.Errorf("%s: duplicate step name %q", sw, s.Name)
+		}
+		stepNames[s.Name] = true
 	}
 
 	childSeen := map[string]bool{}

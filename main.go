@@ -70,6 +70,7 @@ func newRoot(cfg *Config) *cobra.Command {
 	// Declared so --help lists it. Actual parsing happens in findConfigFlag
 	// before the tree is built.
 	root.PersistentFlags().String("config", "", "Path to JSON config file (default: ./api.json).")
+	root.PersistentFlags().BoolP("quiet", "q", false, "Suppress execution count on stderr.")
 
 	if cfg != nil {
 		for _, c := range cfg.Commands {
