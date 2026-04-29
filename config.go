@@ -14,6 +14,7 @@ import (
 // context composed of args, flags, environment, vars, and the leaf's entry
 // variables. The rendered command is then executed.
 type Config struct {
+	Schema      string         `json:"$schema,omitempty"`
 	Name        string         `json:"name"`
 	Description string         `json:"description,omitempty"`
 	Vars        map[string]any `json:"vars,omitempty"`

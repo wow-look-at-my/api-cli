@@ -1,4 +1,5 @@
 {
+  "$schema": "./api.schema.json",
   "name": "apicli",
   "description": "Declarative alias CLI for https://jsonplaceholder.typicode.com — a public fake REST API. Every leaf renders the root `command` template by default; override on a leaf for anything that doesn't fit the pattern (see `posts create`).",
 
