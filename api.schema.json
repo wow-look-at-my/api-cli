@@ -1,0 +1,206 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/wow-look-at-my/api-cli/master/api.schema.json",
+  "title": "api-cli config",
+  "description": "Declarative CLI alias config for api-cli. Each leaf command renders a `command` template against {arg, flag, env, var, result, entry} and executes the result.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema URL used by editors for completion and validation. Ignored at runtime."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Binary's display name in help output."
+    },
+    "description": {
+      "type": "string",
+      "description": "Shown as the CLI's header in --help."
+    },
+    "vars": {
+      "$ref": "#/definitions/vars"
+    },
+    "command": {
+      "$ref": "#/definitions/command"
+    },
+    "commands": {
+      "type": "array",
+      "description": "Top-level subcommands.",
+      "items": { "$ref": "#/definitions/commandNode" }
+    }
+  },
+  "definitions": {
+    "vars": {
+      "type": "object",
+      "description": "Shared variables inherited by all subcommands. String leaves are template-rendered against {arg, flag, env}; child nodes win on key collision.",
+      "additionalProperties": true
+    },
+    "command": {
+      "description": "Executable form. A string is rendered then run via `/bin/sh -c <rendered>`. An array of strings is exec'd directly with no shell — each element is rendered, and the `spread` helper may splat a slice into multiple argv slots.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "Shell form: rendered as a Go text/template, then executed via `/bin/sh -c`."
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "Argv form: each element rendered, then exec'd directly with no shell."
+        }
+      ]
+    },
+    "commandNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "description": "A node in the CLI tree. A node with no `commands` is a leaf; leaves execute. Group nodes just print help.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\s/]+$",
+          "not": { "enum": ["help", "completion", "__complete"] },
+          "description": "Subcommand name. Cannot contain whitespace or slashes, and cannot be `help`, `completion`, or `__complete` (reserved by cobra)."
+        },
+        "description": {
+          "type": "string",
+          "description": "Shown in help."
+        },
+        "args": {
+          "type": "array",
+          "description": "Positional args. Required args must precede optional ones; a variadic arg must be last.",
+          "items": { "$ref": "#/definitions/arg" }
+        },
+        "flags": {
+          "type": "array",
+          "description": "Named flags.",
+          "items": { "$ref": "#/definitions/flag" }
+        },
+        "vars": { "$ref": "#/definitions/vars" },
+        "command": { "$ref": "#/definitions/command" },
+        "steps": {
+          "type": "array",
+          "description": "Leaf-only. Pre-execution stages run sequentially; each step's stdout is captured, parsed as JSON if valid, and exposed under `.result.<name>`.",
+          "items": { "$ref": "#/definitions/step" }
+        },
+        "entry": {
+          "description": "Leaf-only. Arbitrary user-defined JSON. String leaves are template-rendered and the result is exposed to the command template as `.entry`."
+        },
+        "preconditions": {
+          "type": "array",
+          "description": "Leaf-only. Templates evaluated against {arg, flag, env, var} before any step or command runs. Any non-empty (post-trim) result is treated as a fatal error message; the leaf exits 1.",
+          "items": { "type": "string" }
+        },
+        "commands": {
+          "type": "array",
+          "description": "Nested subcommands. If present and non-empty, this node is a group and may not declare `entry`, `steps`, or `preconditions`.",
+          "items": { "$ref": "#/definitions/commandNode" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "commands": { "type": "array", "minItems": 1 } },
+            "required": ["commands"]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["entry"] },
+                { "required": ["steps"] },
+                { "required": ["preconditions"] }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Key under `.result`; accessed as `{{.result.name}}`."
+        },
+        "entry": {
+          "description": "Rendered like a leaf `entry`; available as `.entry` when this step's command runs."
+        },
+        "command": { "$ref": "#/definitions/command" }
+      }
+    },
+    "arg": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Binding name; accessed as `{{.arg.name}}`."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["string", "int"],
+          "description": "Default `string`."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Required args must precede optional ones."
+        },
+        "variadic": {
+          "type": "boolean",
+          "description": "Last-only. Collects all remaining positional values into a typed slice. Pair with the `spread` helper to splat into argv form."
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "flag": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "not": { "pattern": "^no-" },
+          "description": "Long form (--limit); accessed as `{{.flag.name}}`. Must not start with `no-` (reserved for bool negation)."
+        },
+        "short": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1,
+          "description": "Optional single-character short form (-l)."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["string", "bool", "int", "string-slice"],
+          "description": "Default `string`."
+        },
+        "default": {
+          "description": "Value when the flag isn't set. For string flags, this may itself be a Go template; it's rendered against {arg, env, var} only when the user did not pass the flag."
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "conflicts": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Sibling flag names that may not be set together."
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

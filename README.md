@@ -218,10 +218,26 @@ then use it), **joins** (fetch two resources and combine fields), and
 
 ## Config schema
 
+A complete JSON Schema (draft-07) lives at [`api.schema.json`](./api.schema.json).
+Reference it from your config for editor completion and validation:
+
+```json
+{
+  "$schema": "./api.schema.json",
+  "name": "apicli",
+  ...
+}
+```
+
+The runtime loader ignores the `$schema` field. Editors that understand JSON
+Schema (VS Code, JetBrains, Neovim with `coc-json`/`yamlls`, etc.) will pick it
+up automatically.
+
 ### Top level
 
 | Field         | Type              | Notes                                                             |
 |---------------|-------------------|-------------------------------------------------------------------|
+| `$schema`     | string            | Optional editor hint pointing at `api.schema.json`. Ignored at runtime. |
 | `name`        | string (required) | Binary's display name in help.                                    |
 | `description` | string            | Shown as the CLI's header in `--help`.                            |
 | `vars`        | `map<string,any>` | Shared variables inherited by all subcommands.                    |
