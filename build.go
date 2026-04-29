@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -19,12 +20,18 @@ var exitCode int
 func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd) *cobra.Command {
 	useStr := node.Name
 	requiredArgs := 0
+	hasVariadic := false
 	for _, a := range node.Args {
+		token := a.Name
+		if a.Variadic {
+			token += "..."
+			hasVariadic = true
+		}
 		if a.Required {
-			useStr += " <" + a.Name + ">"
+			useStr += " <" + token + ">"
 			requiredArgs++
 		} else {
-			useStr += " [" + a.Name + "]"
+			useStr += " [" + token + "]"
 		}
 	}
 
@@ -35,9 +42,12 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd)
 	}
 
 	if total := len(node.Args); total > 0 {
-		if requiredArgs == total {
+		switch {
+		case hasVariadic:
+			cmd.Args = cobra.MinimumNArgs(requiredArgs)
+		case requiredArgs == total:
 			cmd.Args = cobra.ExactArgs(total)
-		} else {
+		default:
 			cmd.Args = cobra.RangeArgs(requiredArgs, total)
 		}
 	}
@@ -45,6 +55,7 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd)
 	for _, f := range node.Flags {
 		registerFlag(cmd, f)
 	}
+	registerConflicts(cmd, node.Flags)
 
 	// Resolve effective vars and command for this subtree.
 	effectiveVars := mergeVars(inheritedVars, node.Vars)
@@ -82,6 +93,14 @@ func registerFlag(cmd *cobra.Command, f Flag) {
 	case "bool":
 		def, _ := f.Default.(bool)
 		cmd.Flags().BoolP(f.Name, f.Short, def, f.Description)
+		// Default-true bool: register a hidden --no-NAME companion that flips
+		// the flag back to false. Lets users say `--no-verbose` instead of the
+		// awkward `--verbose=false`.
+		if def {
+			neg := "no-" + f.Name
+			cmd.Flags().Bool(neg, false, "Disable --"+f.Name+".")
+			_ = cmd.Flags().MarkHidden(neg)
+		}
 	case "int":
 		var def int
 		switch v := f.Default.(type) {
@@ -108,11 +127,54 @@ func registerFlag(cmd *cobra.Command, f Flag) {
 	}
 }
 
+// registerConflicts wires per-flag `conflicts` lists into cobra's mutual
+// exclusion machinery. Each unordered pair is registered once.
+func registerConflicts(cmd *cobra.Command, flags []Flag) {
+	type pair struct{ a, b string }
+	seen := map[pair]bool{}
+	for _, f := range flags {
+		for _, peer := range f.Conflicts {
+			a, b := f.Name, peer
+			if a > b {
+				a, b = b, a
+			}
+			p := pair{a, b}
+			if seen[p] {
+				continue
+			}
+			seen[p] = true
+			cmd.MarkFlagsMutuallyExclusive(a, b)
+		}
+	}
+}
+
 // gatherArgs builds the .arg sub-map by converting positional args to their
-// declared types.
+// declared types. A variadic arg (always last) collects all remaining values
+// into a typed slice; an unsupplied optional variadic arg yields an empty
+// slice so templates can range over it without nil checks.
 func gatherArgs(node Command, args []string) (map[string]any, error) {
 	out := make(map[string]any, len(node.Args))
 	for i, a := range node.Args {
+		if a.Variadic {
+			rest := []string{}
+			if i < len(args) {
+				rest = args[i:]
+			}
+			if a.Type == "int" {
+				ints := make([]int, len(rest))
+				for j, v := range rest {
+					n, err := strconv.Atoi(v)
+					if err != nil {
+						return nil, fmt.Errorf("arg %q[%d]: %w", a.Name, j, err)
+					}
+					ints[j] = n
+				}
+				out[a.Name] = ints
+			} else {
+				out[a.Name] = rest
+			}
+			break
+		}
 		if i >= len(args) {
 			break
 		}
@@ -131,7 +193,14 @@ func gatherArgs(node Command, args []string) (map[string]any, error) {
 }
 
 // gatherFlags builds the .flag sub-map from the cobra-parsed flag set.
-func gatherFlags(cmd *cobra.Command, node Command) map[string]any {
+//
+// Two non-trivial cases:
+//  1. Bool flags with default=true register a hidden --no-NAME companion;
+//     when set, it flips the value to false.
+//  2. String flags whose configured default is itself a template (contains
+//     `{{`) are rendered against the current context — but only when the
+//     user did not explicitly set the flag.
+func gatherFlags(cmd *cobra.Command, node Command, data any) (map[string]any, error) {
 	out := make(map[string]any, len(node.Flags))
 	for _, f := range node.Flags {
 		typ := f.Type
@@ -141,9 +210,24 @@ func gatherFlags(cmd *cobra.Command, node Command) map[string]any {
 		switch typ {
 		case "string":
 			v, _ := cmd.Flags().GetString(f.Name)
+			if !cmd.Flags().Changed(f.Name) {
+				if def, ok := f.Default.(string); ok && strings.Contains(def, "{{") {
+					rendered, err := renderString(def, data)
+					if err != nil {
+						return nil, fmt.Errorf("flag %q default: %w", f.Name, err)
+					}
+					v = rendered
+				}
+			}
 			out[f.Name] = v
 		case "bool":
 			v, _ := cmd.Flags().GetBool(f.Name)
+			neg := "no-" + f.Name
+			if cmd.Flags().Lookup(neg) != nil && cmd.Flags().Changed(neg) {
+				if no, _ := cmd.Flags().GetBool(neg); no {
+					v = false
+				}
+			}
 			out[f.Name] = v
 		case "int":
 			v, _ := cmd.Flags().GetInt(f.Name)
@@ -153,7 +237,7 @@ func gatherFlags(cmd *cobra.Command, node Command) map[string]any {
 			out[f.Name] = v
 		}
 	}
-	return out
+	return out, nil
 }
 
 // runLeaf is the per-invocation body for every leaf.
@@ -175,19 +259,46 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 	if err != nil {
 		return err
 	}
-	flagMap := gatherFlags(c, node)
+
+	// Templated flag defaults render against {arg, env, var} — not other
+	// flags — so build vars from that partial context first, then resolve
+	// flags, then complete the data map.
+	envM := envMap()
+	preFlagData := map[string]any{
+		"arg":  argMap,
+		"flag": map[string]any{},
+		"env":  envM,
+	}
+	renderedVars, err := renderVars(vars, preFlagData)
+	if err != nil {
+		return fmt.Errorf("render vars: %w", err)
+	}
+	preFlagData["var"] = renderedVars
+
+	flagMap, err := gatherFlags(c, node, preFlagData)
+	if err != nil {
+		return err
+	}
 
 	data := map[string]any{
 		"arg":  argMap,
 		"flag": flagMap,
-		"env":  envMap(),
+		"env":  envM,
+		"var":  renderedVars,
 	}
 
-	renderedVars, err := renderVars(vars, data)
-	if err != nil {
-		return fmt.Errorf("render vars: %w", err)
+	for i, p := range node.Preconditions {
+		msg, perr := renderString(p, data)
+		if perr != nil {
+			return fmt.Errorf("precondition[%d]: %w", i, perr)
+		}
+		msg = strings.TrimSpace(msg)
+		if msg != "" {
+			fmt.Fprintln(execStderr, "error:", msg)
+			exitCode = 1
+			return nil
+		}
 	}
-	data["var"] = renderedVars
 
 	resultMap := map[string]any{}
 	data["result"] = resultMap

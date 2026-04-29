@@ -38,15 +38,16 @@ type Config struct {
 // then stored in `.result.<name>` for use by subsequent steps and the final
 // command template.
 type Command struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description,omitempty"`
-	Args        []Arg           `json:"args,omitempty"`
-	Flags       []Flag          `json:"flags,omitempty"`
-	Vars        map[string]any  `json:"vars,omitempty"`
-	Command     *Cmd            `json:"command,omitempty"`
-	Steps       []Step          `json:"steps,omitempty"`
-	Entry       json.RawMessage `json:"entry,omitempty"`
-	Commands    []Command       `json:"commands,omitempty"`
+	Name          string          `json:"name"`
+	Description   string          `json:"description,omitempty"`
+	Args          []Arg           `json:"args,omitempty"`
+	Flags         []Flag          `json:"flags,omitempty"`
+	Vars          map[string]any  `json:"vars,omitempty"`
+	Command       *Cmd            `json:"command,omitempty"`
+	Steps         []Step          `json:"steps,omitempty"`
+	Entry         json.RawMessage `json:"entry,omitempty"`
+	Preconditions []string        `json:"preconditions,omitempty"`
+	Commands      []Command       `json:"commands,omitempty"`
 }
 
 // Step is a pre-execution stage on a leaf command. Its output is captured,
@@ -59,21 +60,36 @@ type Step struct {
 }
 
 // Arg is a positional argument. Type is "string" or "int" (default string).
+//
+// If Variadic is true, the arg consumes all remaining positional values into a
+// []string (or []int) and must be the last entry in the args list. A required
+// variadic arg requires at least one value; an optional variadic arg accepts
+// zero or more.
 type Arg struct {
 	Name        string `json:"name"`
 	Type        string `json:"type,omitempty"`
 	Required    bool   `json:"required,omitempty"`
+	Variadic    bool   `json:"variadic,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
 // Flag is a named flag. Type is string|bool|int|string-slice (default string).
+//
+// `Default` for a string flag may itself be a template — it is rendered at
+// invocation time against {arg, flag, env, var}, so a flag default can be
+// derived from another arg or flag. Templated defaults only apply to the
+// "string" type.
+//
+// `Conflicts` lists sibling flag names that may not be set together; the CLI
+// rejects the invocation if more than one is supplied.
 type Flag struct {
-	Name        string `json:"name"`
-	Short       string `json:"short,omitempty"`
-	Type        string `json:"type,omitempty"`
-	Default     any    `json:"default,omitempty"`
-	Required    bool   `json:"required,omitempty"`
-	Description string `json:"description,omitempty"`
+	Name        string   `json:"name"`
+	Short       string   `json:"short,omitempty"`
+	Type        string   `json:"type,omitempty"`
+	Default     any      `json:"default,omitempty"`
+	Required    bool     `json:"required,omitempty"`
+	Conflicts   []string `json:"conflicts,omitempty"`
+	Description string   `json:"description,omitempty"`
 }
 
 // Cmd is the executable form of a command. In JSON it may be either:
@@ -226,6 +242,9 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 			return fmt.Errorf("%s: duplicate arg name %q", aw, a.Name)
 		}
 		argNames[a.Name] = true
+		if a.Variadic && i != len(c.Args)-1 {
+			return fmt.Errorf("%s: variadic arg %q must be the last arg", aw, a.Name)
+		}
 		if !a.Required {
 			requiredAfterOptional = true
 		} else if requiredAfterOptional {
@@ -256,6 +275,20 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 			}
 			flagShorts[fl.Short] = true
 		}
+		if strings.HasPrefix(fl.Name, "no-") {
+			return fmt.Errorf("%s: flag name %q cannot start with \"no-\" (reserved for bool negation)", fw, fl.Name)
+		}
+	}
+	for i, fl := range c.Flags {
+		fw := fmt.Sprintf("%s.flags[%d]", where, i)
+		for _, peer := range fl.Conflicts {
+			if peer == fl.Name {
+				return fmt.Errorf("%s: flag %q conflicts with itself", fw, fl.Name)
+			}
+			if !flagNames[peer] {
+				return fmt.Errorf("%s: flag %q conflicts with unknown flag %q", fw, fl.Name, peer)
+			}
+		}
 	}
 
 	haveCmd := inheritedCmd || c.Command.Defined()
@@ -273,6 +306,9 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	}
 	if len(c.Steps) > 0 && len(c.Commands) > 0 {
 		return fmt.Errorf("%s: `steps` is only allowed on leaves (nodes with no subcommands)", where)
+	}
+	if len(c.Preconditions) > 0 && len(c.Commands) > 0 {
+		return fmt.Errorf("%s: `preconditions` is only allowed on leaves (nodes with no subcommands)", where)
 	}
 	stepNames := map[string]bool{}
 	for i, s := range c.Steps {

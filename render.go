@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -25,6 +26,12 @@ func envMap() map[string]string {
 	return out
 }
 
+// spreadSentinel is a NUL byte used to mark and delimit the output of the
+// `spread` helper. NUL never appears in valid argv text, so it's safe to use
+// as an in-band signal that a rendered argv element should be split into
+// multiple slots.
+const spreadSentinel = "\x00"
+
 // funcMap is the template function set available in every rendered template.
 // It combines sprig's text FuncMap (a broad library of string/list/math/json
 // helpers) with a few custom helpers specific to this tool.
@@ -33,7 +40,73 @@ func funcMap() template.FuncMap {
 	fm["querystring"] = queryString
 	fm["shellquote"] = shellQuote
 	fm["urlpath"] = url.PathEscape
+	fm["spread"] = spread
+	fm["fileExists"] = fileExists
+	fm["dirExists"] = dirExists
 	return fm
+}
+
+// spread expands a slice into multiple argv slots when used as the entire
+// content of an argv-form `command` element. It emits a NUL-prefixed,
+// NUL-separated string; the executor recognises the leading NUL and splits
+// the element into N slots (zero for an empty input).
+//
+// Only meaningful in argv form. In shell form, NULs in the rendered command
+// would be passed through to /bin/sh — don't use spread there.
+//
+// Accepted shapes: nil, []string, []int, []any (each element stringified).
+func spread(v any) (string, error) {
+	parts, err := toStringSlice(v)
+	if err != nil {
+		return "", fmt.Errorf("spread: %w", err)
+	}
+	if len(parts) == 0 {
+		return spreadSentinel, nil
+	}
+	return spreadSentinel + strings.Join(parts, spreadSentinel), nil
+}
+
+func toStringSlice(v any) ([]string, error) {
+	switch x := v.(type) {
+	case nil:
+		return nil, nil
+	case []string:
+		return x, nil
+	case []int:
+		out := make([]string, len(x))
+		for i, n := range x {
+			out[i] = strconv.Itoa(n)
+		}
+		return out, nil
+	case []any:
+		out := make([]string, len(x))
+		for i, item := range x {
+			out[i] = fmt.Sprintf("%v", item)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("expected slice, got %T", v)
+	}
+}
+
+// fileExists reports whether path exists and is a regular file. Errors other
+// than "not exist" surface as false (template helpers shouldn't error on
+// permission issues during a precondition check).
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.Mode().IsRegular()
+}
+
+// dirExists reports whether path exists and is a directory.
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
 }
 
 // queryString renders a map (or struct) of parameters as a URL-encoded query

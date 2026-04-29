@@ -52,7 +52,9 @@ command is executed and its exit code propagates.
    `shellquote` helper).
 2. **An array of strings** — each element is rendered and the result is exec'd
    directly without a shell. Safe by default; no shell metacharacters are
-   interpreted.
+   interpreted. To pass a variable number of arguments, use the `spread` helper
+   on a single element: `"{{spread .arg.files}}"` expands to zero or more argv
+   slots from a slice.
 
 ### Example: wrap a REST API
 
@@ -116,6 +118,50 @@ wrapper:
     { "name": "push",  "args": [{"name":"name","required":true}], "entry": {"op": "push -u origin"} }
   ]
 }
+```
+
+### Example: tar wrapper (variadic args, spread, preconditions, dynamic default)
+
+```jsonc
+{
+  "name": "tar-safe",
+  "commands": [
+    {
+      "name": "create",
+      "args": [
+        { "name": "archive", "required": true },
+        { "name": "files", "variadic": true, "required": true,
+          "description": "One or more files/directories to include." }
+      ],
+      "preconditions": [
+        "{{if fileExists .arg.archive}}{{.arg.archive}} already exists; pick a new name or remove it{{end}}"
+      ],
+      // argv form: no shell, no quoting concerns. `spread` expands the
+      // []string slice into N argv slots.
+      "command": ["tar", "-czf", "{{.arg.archive}}", "{{spread .arg.files}}"]
+    },
+    {
+      "name": "extract",
+      "args": [
+        { "name": "archive", "required": true }
+      ],
+      "flags": [
+        // Templated default: if the user doesn't pass --to, derive it from the
+        // archive name (foo.tar.gz → foo).
+        { "name": "to", "default": "{{trimSuffix \".tar.gz\" .arg.archive}}" }
+      ],
+      "preconditions": [
+        "{{if not (fileExists .arg.archive)}}archive {{.arg.archive}} does not exist{{end}}"
+      ],
+      "command": ["tar", "-xzf", "{{.arg.archive}}", "-C", "{{.flag.to}}"]
+    }
+  ]
+}
+```
+
+```sh
+./tar-safe create out.tar.gz src/ README.md  # variadic positional args
+./tar-safe extract out.tar.gz                 # --to defaults to "out"
 ```
 
 ## Result reuse across calls
@@ -194,6 +240,7 @@ then use it), **joins** (fetch two resources and combine fields), and
 | `command`     | string or `[]string` | Overrides inherited command for this subtree.                  |
 | `steps`       | `[]Step`          | Leaf-only. Pre-execution stages; results exposed as `.result.*`.  |
 | `entry`       | any JSON object   | Leaf-only. Arbitrary user-defined data; string leaves templated.  |
+| `preconditions` | `[]string`      | Leaf-only. Templates evaluated against `{arg, flag, env, var}` before any step or command runs; if any renders to a non-empty (post-trim) string, it's treated as a fatal error message and the leaf exits 1. |
 | `commands`    | `[]Command`       | Nested subcommands.                                               |
 
 A node is a **leaf** if it has no `commands`; leaves execute. Groups just print
@@ -214,18 +261,24 @@ help.
 | `name`        | string (required)  | Binding name; accessed as `{{.arg.name}}`.                       |
 | `type`        | `"string"`\|`"int"` | Default `string`.                                               |
 | `required`    | bool               | Required args must precede optional ones.                        |
+| `variadic`    | bool               | Last-only. Collects all remaining positional values into a typed slice. Pair with the `spread` helper to splat into argv form. |
 | `description` | string             | Shown in help.                                                   |
 
 ### `flags`
 
 | Field         | Type                                            | Notes                                                          |
 |---------------|-------------------------------------------------|----------------------------------------------------------------|
-| `name`        | string (required)                               | Long form (`--limit`); accessed as `{{.flag.limit}}`.          |
+| `name`        | string (required)                               | Long form (`--limit`); accessed as `{{.flag.limit}}`. Names starting with `no-` are reserved for bool negation. |
 | `short`       | single character                                | Optional short form (`-l`).                                    |
 | `type`        | `"string"`\|`"bool"`\|`"int"`\|`"string-slice"` | Default `string`.                                              |
-| `default`     | any                                             | Value when the flag isn't set.                                 |
+| `default`     | any                                             | Value when the flag isn't set. For string flags, this may itself be a Go template — it is rendered against `{arg, env, var}` only when the user did not pass the flag. |
 | `required`    | bool                                            | Enforced with a clear error.                                   |
+| `conflicts`   | `[]string`                                      | Sibling flag names that may not be set together.               |
 | `description` | string                                          | Shown in help.                                                 |
+
+A bool flag whose `default` is `true` automatically gets a hidden `--no-NAME`
+companion: `{name: "verbose", default: true}` accepts both `--verbose=false`
+and `--no-verbose`.
 
 ## Template helpers
 
@@ -238,6 +291,9 @@ that's where `toJson`, `upper`, `lower`, `trim`, `default`, `required`,
 | `querystring` | Render a map as `?k=v&k=v` (URL-encoded). Empty values dropped. Empty map → empty string. |
 | `shellquote`  | POSIX single-quote a value for safe interpolation into the string form of `command`.      |
 | `urlpath`     | URL-escape a single path segment.                                                         |
+| `spread`      | Argv-form only: splat a slice into multiple argv slots. The element `"{{spread .arg.files}}"` becomes N entries (zero for an empty slice). Works with `[]string`, `[]int`, `[]any`. |
+| `fileExists`  | Returns true if the path exists and is a regular file. Useful inside `preconditions`.     |
+| `dirExists`   | Returns true if the path exists and is a directory.                                       |
 
 Example:
 
