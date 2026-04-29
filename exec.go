@@ -131,13 +131,26 @@ func buildExecCmd(c *Cmd, data any) (*exec.Cmd, error) {
 	if len(c.Argv) == 0 {
 		return nil, fmt.Errorf("argv command is empty")
 	}
-	argv := make([]string, len(c.Argv))
+	argv := make([]string, 0, len(c.Argv))
 	for i, el := range c.Argv {
 		rendered, err := renderString(el, data)
 		if err != nil {
 			return nil, fmt.Errorf("render argv[%d]: %w", i, err)
 		}
-		argv[i] = rendered
+		// `spread` output is recognised by a leading NUL; expand into
+		// zero or more argv slots.
+		if strings.HasPrefix(rendered, spreadSentinel) {
+			rest := strings.TrimPrefix(rendered, spreadSentinel)
+			if rest == "" {
+				continue
+			}
+			argv = append(argv, strings.Split(rest, spreadSentinel)...)
+			continue
+		}
+		argv = append(argv, rendered)
+	}
+	if len(argv) == 0 {
+		return nil, fmt.Errorf("argv command rendered to no arguments")
 	}
 	return exec.Command(argv[0], argv[1:]...), nil
 }

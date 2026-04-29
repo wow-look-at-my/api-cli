@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -207,4 +208,74 @@ func TestMergeVars(t *testing.T) {
 func TestEnvMap(t *testing.T) {
 	m := envMap()
 	assert.NotEmpty(t, m["PATH"])
+}
+
+func TestSpread_Empty(t *testing.T) {
+	got, err := spread(nil)
+	require.NoError(t, err)
+	assert.Equal(t, spreadSentinel, got)
+
+	got, err = spread([]string{})
+	require.NoError(t, err)
+	assert.Equal(t, spreadSentinel, got)
+}
+
+func TestSpread_StringSlice(t *testing.T) {
+	got, err := spread([]string{"a", "b", "c"})
+	require.NoError(t, err)
+	assert.Equal(t, "\x00a\x00b\x00c", got)
+}
+
+func TestSpread_AnySlice(t *testing.T) {
+	got, err := spread([]any{"a", 1, true})
+	require.NoError(t, err)
+	assert.Equal(t, "\x00a\x001\x00true", got)
+}
+
+func TestSpread_IntSlice(t *testing.T) {
+	got, err := spread([]int{1, 2, 3})
+	require.NoError(t, err)
+	assert.Equal(t, "\x001\x002\x003", got)
+}
+
+func TestSpread_RejectsNonSlice(t *testing.T) {
+	_, err := spread("hello")
+	assert.Error(t, err)
+}
+
+func TestSpreadViaTemplate(t *testing.T) {
+	got, err := renderString(`{{spread .x}}`, map[string]any{"x": []string{"a", "b"}})
+	require.NoError(t, err)
+	assert.Equal(t, "\x00a\x00b", got)
+}
+
+func TestFileExists(t *testing.T) {
+	dir := t.TempDir()
+	f := dir + "/file.txt"
+	require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
+	assert.True(t, fileExists(f))
+	assert.False(t, fileExists(dir))                // directory, not file
+	assert.False(t, fileExists(dir+"/nope.txt"))    // missing
+}
+
+func TestDirExists(t *testing.T) {
+	dir := t.TempDir()
+	f := dir + "/file.txt"
+	require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
+	assert.True(t, dirExists(dir))
+	assert.False(t, dirExists(f))      // file, not dir
+	assert.False(t, dirExists(dir+"/nope"))
+}
+
+func TestFileExistsViaTemplate(t *testing.T) {
+	dir := t.TempDir()
+	f := dir + "/file.txt"
+	require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
+	got, err := renderString(`{{if fileExists .p}}YES{{else}}NO{{end}}`, map[string]any{"p": f})
+	require.NoError(t, err)
+	assert.Equal(t, "YES", got)
+
+	got, err = renderString(`{{if dirExists .p}}YES{{else}}NO{{end}}`, map[string]any{"p": dir})
+	require.NoError(t, err)
+	assert.Equal(t, "YES", got)
 }

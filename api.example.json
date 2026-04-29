@@ -27,12 +27,39 @@
           "name": "list",
           "description": "List users.",
           "flags": [
-            { "name": "limit", "short": "l", "type": "int", "default": 10, "description": "Max results." }
+            { "name": "limit", "short": "l", "type": "int", "default": 10, "description": "Max results." },
+            { "name": "pretty", "type": "bool", "default": true, "description": "Pretty-print JSON output (use --no-pretty to disable)." }
           ],
+          "command": "curl -fsSL -H 'Accept: application/json' {{.var.base_url}}/users{{querystring .entry.query}}{{if .flag.pretty}} | jq .{{end}}",
           "entry": {
-            "path": "/users",
             "query": { "_limit": "{{.flag.limit}}" }
           }
+        },
+        {
+          "name": "batch",
+          "description": "Fetch multiple users by ID. Demonstrates variadic args + the `spread` helper in argv form: each ID becomes its own curl invocation via xargs.",
+          "args": [
+            { "name": "ids", "type": "int", "required": true, "variadic": true, "description": "One or more user IDs." }
+          ],
+          "command": [
+            "sh", "-c",
+            "for id in {{spread .arg.ids}}; do curl -fsSL -H 'Accept: application/json' \"{{.var.base_url}}/users/$id\"; done"
+          ]
+        },
+        {
+          "name": "save",
+          "description": "Save a user record to a local file. Demonstrates preconditions (refuse to overwrite) and a templated default (--out defaults to user-<id>.json).",
+          "args": [
+            { "name": "id", "type": "int", "required": true, "description": "Numeric user ID." }
+          ],
+          "flags": [
+            { "name": "out", "short": "o", "type": "string", "default": "user-{{.arg.id}}.json", "description": "Output file path." },
+            { "name": "force", "short": "f", "type": "bool", "description": "Overwrite an existing file." }
+          ],
+          "preconditions": [
+            "{{if and (fileExists .flag.out) (not .flag.force)}}{{.flag.out}} already exists; pass --force to overwrite{{end}}"
+          ],
+          "command": "curl -fsSL -H 'Accept: application/json' {{.var.base_url}}/users/{{.arg.id}} -o {{shellquote .flag.out}}"
         }
       ]
     },

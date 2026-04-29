@@ -102,4 +102,34 @@ func TestDoExec_StdinPassthrough(t *testing.T) {
 	assert.Equal(t, "piped input\n", out.String())
 }
 
+func TestDoExec_ArgvSpread(t *testing.T) {
+	// `spread` expands a slice into multiple argv slots.
+	out, _ := captureExecStreams(t)
+	c := &Cmd{Argv: []string{"echo", "{{spread .arg.files}}", "tail"}}
+	data := map[string]any{"arg": map[string]any{"files": []string{"a", "b", "c"}}}
+	code := doExec(c, data)
+	require.Equal(t, 0, code)
+	assert.Equal(t, "a b c tail\n", out.String())
+}
+
+func TestDoExec_ArgvSpreadEmpty(t *testing.T) {
+	// Empty spread = zero argv slots; surrounding elements still pass through.
+	out, _ := captureExecStreams(t)
+	c := &Cmd{Argv: []string{"echo", "{{spread .arg.files}}", "only"}}
+	data := map[string]any{"arg": map[string]any{"files": []string{}}}
+	code := doExec(c, data)
+	require.Equal(t, 0, code)
+	assert.Equal(t, "only\n", out.String())
+}
+
+func TestDoExec_ArgvSpreadOnlyEmptyFails(t *testing.T) {
+	// If spread yields zero slots and there are no other elements, the argv
+	// is empty — a useful failure rather than running with no command.
+	captureExecStreams(t)
+	c := &Cmd{Argv: []string{"{{spread .arg.files}}"}}
+	data := map[string]any{"arg": map[string]any{"files": []string{}}}
+	code := doExec(c, data)
+	assert.Equal(t, 1, code)
+}
+
 var _ io.Reader = (*bytes.Buffer)(nil) // keep io import live if unused by coverage
