@@ -55,6 +55,7 @@ type Command struct {
 	Steps         []Step          `json:"steps,omitempty"`
 	Entry         json.RawMessage `json:"entry,omitempty"`
 	Preconditions []string        `json:"preconditions,omitempty"`
+	Confirm       string          `json:"confirm,omitempty"`
 	Commands      []Command       `json:"commands,omitempty"`
 }
 
@@ -318,6 +319,9 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	}
 	if len(c.Preconditions) > 0 && len(c.Commands) > 0 {
 		return fmt.Errorf("%s: `preconditions` is only allowed on leaves (nodes with no subcommands)", where)
+	}
+	if c.Confirm != "" && len(c.Commands) > 0 {
+		return fmt.Errorf("%s: `confirm` is only allowed on leaves (nodes with no subcommands)", where)
 	}
 	stepNames := map[string]bool{}
 	for i, s := range c.Steps {

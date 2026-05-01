@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/wow-look-at-my/testify/assert"
@@ -256,4 +257,151 @@ func TestIntegration_ConflictsAllowSingle(t *testing.T) {
 	code, out := execCmd(t, cfg, "x", "--strip")
 	require.Equal(t, 0, code)
 	assert.Equal(t, "ok\n", out)
+}
+
+// --- Confirm ---
+
+func TestIntegration_ConfirmYesFlag(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:    "rm",
+			Args:    []Arg{{Name: "name", Required: true}},
+			Confirm: "Delete {{.arg.name}}?",
+			Command: &Cmd{Argv: []string{"echo", "deleted"}},
+		}},
+	}
+	code, out := execCmd(t, cfg, "rm", "foo", "--yes")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "deleted\n", out)
+}
+
+func TestIntegration_ConfirmNonTTYWithoutYesFails(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:    "rm",
+			Args:    []Arg{{Name: "name", Required: true}},
+			Confirm: "Delete {{.arg.name}}?",
+			Command: &Cmd{Argv: []string{"echo", "deleted"}},
+		}},
+	}
+	code, out, errOut := execCmdFull(t, cfg, "rm", "foo")
+	assert.Equal(t, 1, code)
+	assert.Empty(t, out)
+	assert.Contains(t, errOut, "refusing to run without confirmation; pass --yes")
+}
+
+func setInteractive(t *testing.T) {
+	t.Helper()
+	prev := isInteractive
+	isInteractive = func() bool { return true }
+	t.Cleanup(func() { isInteractive = prev })
+}
+
+func TestIntegration_ConfirmAcceptY(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:    "rm",
+			Confirm: "Sure?",
+			Command: &Cmd{Argv: []string{"echo", "done"}},
+		}},
+	}
+	setInteractive(t)
+	prev := execStdin
+	execStdin = strings.NewReader("y\n")
+	t.Cleanup(func() { execStdin = prev })
+
+	code, out := execCmd(t, cfg, "rm")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "done\n", out)
+}
+
+func TestIntegration_ConfirmAcceptYes(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:    "rm",
+			Confirm: "Sure?",
+			Command: &Cmd{Argv: []string{"echo", "done"}},
+		}},
+	}
+	setInteractive(t)
+	prev := execStdin
+	execStdin = strings.NewReader("yes\n")
+	t.Cleanup(func() { execStdin = prev })
+
+	code, out := execCmd(t, cfg, "rm")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "done\n", out)
+}
+
+func TestIntegration_ConfirmRejectN(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:    "rm",
+			Confirm: "Sure?",
+			Command: &Cmd{Argv: []string{"echo", "should-not-run"}},
+		}},
+	}
+	setInteractive(t)
+	prev := execStdin
+	execStdin = strings.NewReader("n\n")
+	t.Cleanup(func() { execStdin = prev })
+
+	code, out := execCmd(t, cfg, "rm")
+	assert.Equal(t, 1, code)
+	assert.Empty(t, out)
+}
+
+func TestIntegration_ConfirmRejectEOF(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:    "rm",
+			Confirm: "Sure?",
+			Command: &Cmd{Argv: []string{"echo", "should-not-run"}},
+		}},
+	}
+	setInteractive(t)
+	prev := execStdin
+	execStdin = strings.NewReader("")
+	t.Cleanup(func() { execStdin = prev })
+
+	code, out := execCmd(t, cfg, "rm")
+	assert.Equal(t, 1, code)
+	assert.Empty(t, out)
+}
+
+func TestIntegration_ConfirmTemplateRendersArgs(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:    "rm",
+			Args:    []Arg{{Name: "target", Required: true}},
+			Confirm: "Destroy {{.arg.target}} forever?",
+			Command: &Cmd{Argv: []string{"echo", "destroyed"}},
+		}},
+	}
+	code, out, errOut := execCmdFull(t, cfg, "rm", "my-secret", "--yes")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "destroyed\n", out)
+	assert.Empty(t, errOut)
+}
+
+func TestIntegration_ConfirmEmptyRenderedSkips(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:    "rm",
+			Confirm: "{{if eq .arg.mode \"dangerous\"}}Are you sure?{{end}}",
+			Args:    []Arg{{Name: "mode", Required: true}},
+			Command: &Cmd{Argv: []string{"echo", "ran"}},
+		}},
+	}
+	code, out := execCmd(t, cfg, "rm", "safe")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "ran\n", out)
 }

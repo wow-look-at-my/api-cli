@@ -259,6 +259,7 @@ up automatically.
 | `steps`       | `[]Step`          | Leaf-only. Pre-execution stages; results exposed as `.result.*`.  |
 | `entry`       | any JSON object   | Leaf-only. Arbitrary user-defined data; string leaves templated.  |
 | `preconditions` | `[]string`      | Leaf-only. Templates evaluated against `{arg, flag, env, var}` before any step or command runs; if any renders to a non-empty (post-trim) string, it's treated as a fatal error message and the leaf exits 1. |
+| `confirm`     | string            | Leaf-only. Template rendered against `{arg, flag, env, var}`. If non-empty, the user is prompted `<message> [y/N]` on stderr before any step or command runs. Pass `--yes` / `-y` to bypass. Non-tty stdin without `--yes` is a hard error. |
 | `commands`    | `[]Command`       | Nested subcommands.                                               |
 
 A node is a **leaf** if it has no `commands`; leaves execute. Groups just print

@@ -249,6 +249,20 @@ func TestValidate_PreconditionsLeafOnly(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestValidate_ConfirmLeafOnly(t *testing.T) {
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
+		Commands: []Command{{
+			Name:     "x",
+			Confirm:  "are you sure?",
+			Commands: []Command{{Name: "y"}},
+		}},
+	}
+	err := validate(cfg)
+	assert.Error(t, err)
+}
+
 func TestVariadicArgUsesString(t *testing.T) {
 	cfg := &Config{
 		Name:    "t",

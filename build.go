@@ -1,17 +1,28 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // exitCode is set by a leaf's RunE to the exit status of the child process.
 // main reads it after rootCmd.Execute() returns.
 var exitCode int
+
+var confirmYes = regexp.MustCompile(`^[yY]([eE][sS])?$`)
+
+var isInteractive = func() bool {
+	f, ok := execStdin.(*os.File)
+	return ok && term.IsTerminal(int(f.Fd()))
+}
 
 // buildCommand turns a Command node into a cobra.Command, wiring up args,
 // flags, and subcommands. inheritedVars flow down the tree (child overrides
@@ -310,6 +321,34 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 			fmt.Fprintln(execStderr, "error:", msg)
 			exitCode = 1
 			return nil
+		}
+	}
+
+	if node.Confirm != "" {
+		msg, cerr := renderString(node.Confirm, data)
+		if cerr != nil {
+			return fmt.Errorf("render confirm: %w", cerr)
+		}
+		msg = strings.TrimSpace(msg)
+		if msg != "" {
+			yes, _ := c.Root().PersistentFlags().GetBool("yes")
+			if !yes {
+				if !isInteractive() {
+					fmt.Fprintln(execStderr, "error: refusing to run without confirmation; pass --yes")
+					exitCode = 1
+					return nil
+				}
+				fmt.Fprintf(execStderr, "%s [y/N] ", msg)
+				scanner := bufio.NewScanner(execStdin)
+				if !scanner.Scan() {
+					exitCode = 1
+					return nil
+				}
+				if !confirmYes.MatchString(strings.TrimSpace(scanner.Text())) {
+					exitCode = 1
+					return nil
+				}
+			}
 		}
 	}
 
