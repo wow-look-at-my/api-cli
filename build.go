@@ -18,8 +18,10 @@ var exitCode int
 // parent on key collision). inheritedCmd is the closest-ancestor command
 // template; the node's own command, if set, overrides it for this subtree.
 // inheritedCwd is the closest-ancestor working-directory template; the node's
-// own cwd, if non-empty, overrides it for this subtree.
-func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd, inheritedCwd string) *cobra.Command {
+// own cwd, if non-empty, overrides it for this subtree. inheritedStdin is the
+// closest-ancestor stdin template; the node's own stdin, if non-empty,
+// overrides it for this subtree.
+func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd, inheritedCwd, inheritedStdin string) *cobra.Command {
 	useStr := node.Name
 	requiredArgs := 0
 	hasVariadic := false
@@ -59,7 +61,7 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 	}
 	registerConflicts(cmd, node.Flags)
 
-	// Resolve effective vars, command, and cwd for this subtree.
+	// Resolve effective vars, command, cwd, and stdin for this subtree.
 	effectiveVars := mergeVars(inheritedVars, node.Vars)
 	effectiveCmd := inheritedCmd
 	if node.Command.Defined() {
@@ -69,6 +71,10 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 	if node.Cwd != "" {
 		effectiveCwd = node.Cwd
 	}
+	effectiveStdin := inheritedStdin
+	if node.Stdin != "" {
+		effectiveStdin = node.Stdin
+	}
 
 	// Leaves (no subcommands) execute.
 	if len(node.Commands) == 0 {
@@ -76,13 +82,14 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 		leafVars := effectiveVars
 		leafCmd := effectiveCmd
 		leafCwd := effectiveCwd
+		leafStdin := effectiveStdin
 		cmd.RunE = func(c *cobra.Command, args []string) error {
-			return runLeaf(c, nodeCopy, args, leafVars, leafCmd, leafCwd)
+			return runLeaf(c, nodeCopy, args, leafVars, leafCmd, leafCwd, leafStdin)
 		}
 	}
 
 	for _, child := range node.Commands {
-		cmd.AddCommand(buildCommand(child, effectiveVars, effectiveCmd, effectiveCwd))
+		cmd.AddCommand(buildCommand(child, effectiveVars, effectiveCmd, effectiveCwd, effectiveStdin))
 	}
 
 	return cmd
@@ -267,7 +274,12 @@ func gatherFlags(cmd *cobra.Command, node Command, data any) (map[string]any, er
 // unless the step itself sets `cwd`. The cwd template is rendered fresh per
 // execution against the current data context (so .result and .entry are
 // available where appropriate).
-func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, cwdTmpl string) error {
+//
+// stdinTmpl is the effective stdin template for this leaf; an empty string
+// means "inherit the parent process's stdin". Each step inherits stdinTmpl
+// unless the step itself sets `stdin`. The stdin template is rendered fresh
+// per execution against the current data context.
+func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, cwdTmpl, stdinTmpl string) error {
 	argMap, err := gatherArgs(node, args)
 	if err != nil {
 		return err
@@ -345,7 +357,16 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 			return fmt.Errorf("step %q: render cwd: %w", step.Name, err)
 		}
 
-		out, code := captureExec(stepCmd, stepCwd, data)
+		stepStdinTmpl := stdinTmpl
+		if step.Stdin != "" {
+			stepStdinTmpl = step.Stdin
+		}
+		stepStdin, err := renderStdin(stepStdinTmpl, data)
+		if err != nil {
+			return fmt.Errorf("step %q: render stdin: %w", step.Name, err)
+		}
+
+		out, code := captureExec(stepCmd, stepCwd, stepStdin, data)
 		executions++
 		if code != 0 {
 			exitCode = code
@@ -373,7 +394,12 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		return fmt.Errorf("render cwd: %w", err)
 	}
 
-	exitCode = doExec(cmdTmpl, leafCwd, data)
+	leafStdin, err := renderStdin(stdinTmpl, data)
+	if err != nil {
+		return fmt.Errorf("render stdin: %w", err)
+	}
+
+	exitCode = doExec(cmdTmpl, leafCwd, leafStdin, data)
 	executions++
 	reportExecutions(c, executions)
 	return nil
@@ -383,6 +409,16 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 // circuits to the empty string ("no override"), so we don't pay template
 // machinery on the common no-cwd path.
 func renderCwd(tmpl string, data any) (string, error) {
+	if tmpl == "" {
+		return "", nil
+	}
+	return renderString(tmpl, data)
+}
+
+// renderStdin renders a stdin template against data. An empty template short-
+// circuits to the empty string ("no override" — the child inherits the parent
+// process's stdin).
+func renderStdin(tmpl string, data any) (string, error) {
 	if tmpl == "" {
 		return "", nil
 	}
