@@ -12,12 +12,13 @@ file is a fast orientation for code changes.
 
 ## Module / dependencies
 
-- Module: `github.com/wow-look-at-my/api-cli`, Go 1.24.0.
+- Module: `github.com/wow-look-at-my/api-cli`, Go 1.25.0.
 - CLI parsing: `github.com/spf13/cobra` v1.8.x.
 - Templating: Go stdlib `text/template` + `github.com/Masterminds/sprig/v3`.
 - JSON Schema validation (test only): `github.com/santhosh-tekuri/jsonschema/v5`.
 - TTY / terminal width: `golang.org/x/term`.
 - East Asian Wide width tables: `golang.org/x/text/width`.
+- MCP server: `github.com/modelcontextprotocol/go-sdk`.
 - Test assertions: `github.com/wow-look-at-my/testify` (a fork pin).
 
 Do not add new third-party deps without a clear reason. Stdlib + sprig
@@ -27,15 +28,18 @@ covers most needs.
 
 | File                            | Role                                                        |
 |---------------------------------|-------------------------------------------------------------|
-| `main.go`                       | Entrypoint, root cobra command, persistent flags, config loading. |
+| `main.go`                       | Entrypoint, root cobra command, persistent flags, config loading. Pre-cobra parsing of `--config` and `--mcp`. |
 | `config.go`                     | Schema structs (`Config`, `Command`, `Step`, `Arg`, `Flag`, `Cmd`, `Format`, `View`, `FormatRef`); `Load`; `validate`. |
 | `build.go`                      | Walks `Config.Commands` building `cobra.Command` tree. Threads inheritance for `command`/`cwd`/`stdin`/`confirm`/`format`. Implements `runLeaf`. |
 | `exec.go`                       | `doExec` (streaming), `captureExec` (steps), `captureExecCapped` (format path with 32 MiB cap), `parseResult`, `cappedTee`. |
 | `render.go`                     | `renderString`, `renderEntry`, `funcMap` with sprig + custom helpers (`querystring`, `shellquote`, `urlpath`, `spread`, `fileExists`, `dirExists`, `tabwriter`, `padRight`, `padLeft`, `displayWidth`, `stripANSI`). |
 | `format.go`                     | Format-system runtime: `resolveFormat`, `userVerdictFromFlags`, `stdoutTTY`, `formatContext`, `renderPredicate` (cached), `parseInput`, `selectView`, `execLeaf`, `runFormatted`. |
 | `align.go`                      | Width-aware aligner: `displayWidth`, `stripANSI`, `alignColumns`, `padRight`, `padLeft`. ANSI-stripping state machine + East Asian Width lookup. |
+| `mcp.go`                        | MCP (Model Context Protocol) server entrypoint: `findMcpFlag`, `runMCP` (stdio / http / sse transports), `buildMCPServer`. |
+| `mcp_exec.go`                   | MCP tool registration: turns each leaf in the config into an MCP tool, with arg/flag schema generation and execution wiring. |
 | `api.schema.json`               | Authoritative JSON Schema for configs. Updated alongside `config.go`. |
 | `api.example.json`              | Reference config; covered by `TestExampleConfigMatchesSchema` and integration tests. |
+| `github.example.json`           | Real-world example: read-only GitHub REST API wrapper with table/detail views and `jq`-based response trimming. |
 | `*_test.go`                     | Unit + integration tests (testify). `integration_test.go` has the `execCmd` / `execCmdFull` helpers used by most tests. |
 
 ## Key design rules
