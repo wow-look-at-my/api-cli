@@ -17,7 +17,9 @@ var exitCode int
 // flags, and subcommands. inheritedVars flow down the tree (child overrides
 // parent on key collision). inheritedCmd is the closest-ancestor command
 // template; the node's own command, if set, overrides it for this subtree.
-func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd) *cobra.Command {
+// inheritedCwd is the closest-ancestor working-directory template; the node's
+// own cwd, if non-empty, overrides it for this subtree.
+func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd, inheritedCwd string) *cobra.Command {
 	useStr := node.Name
 	requiredArgs := 0
 	hasVariadic := false
@@ -57,11 +59,15 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd)
 	}
 	registerConflicts(cmd, node.Flags)
 
-	// Resolve effective vars and command for this subtree.
+	// Resolve effective vars, command, and cwd for this subtree.
 	effectiveVars := mergeVars(inheritedVars, node.Vars)
 	effectiveCmd := inheritedCmd
 	if node.Command.Defined() {
 		effectiveCmd = node.Command
+	}
+	effectiveCwd := inheritedCwd
+	if node.Cwd != "" {
+		effectiveCwd = node.Cwd
 	}
 
 	// Leaves (no subcommands) execute.
@@ -69,13 +75,14 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd)
 		nodeCopy := node
 		leafVars := effectiveVars
 		leafCmd := effectiveCmd
+		leafCwd := effectiveCwd
 		cmd.RunE = func(c *cobra.Command, args []string) error {
-			return runLeaf(c, nodeCopy, args, leafVars, leafCmd)
+			return runLeaf(c, nodeCopy, args, leafVars, leafCmd, leafCwd)
 		}
 	}
 
 	for _, child := range node.Commands {
-		cmd.AddCommand(buildCommand(child, effectiveVars, effectiveCmd))
+		cmd.AddCommand(buildCommand(child, effectiveVars, effectiveCmd, effectiveCwd))
 	}
 
 	return cmd
@@ -254,7 +261,13 @@ func gatherFlags(cmd *cobra.Command, node Command, data any) (map[string]any, er
 //     execute it, streaming output to the user.
 //  6. If more than one command was executed and --quiet is not set, print
 //     the execution count to stderr.
-func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd) error {
+//
+// cwdTmpl is the effective working-directory template for this leaf; an empty
+// string means "use the calling process's cwd". Each step inherits cwdTmpl
+// unless the step itself sets `cwd`. The cwd template is rendered fresh per
+// execution against the current data context (so .result and .entry are
+// available where appropriate).
+func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, cwdTmpl string) error {
 	argMap, err := gatherArgs(node, args)
 	if err != nil {
 		return err
@@ -323,7 +336,16 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		}
 		data["entry"] = stepEntry
 
-		out, code := captureExec(stepCmd, data)
+		stepCwdTmpl := cwdTmpl
+		if step.Cwd != "" {
+			stepCwdTmpl = step.Cwd
+		}
+		stepCwd, err := renderCwd(stepCwdTmpl, data)
+		if err != nil {
+			return fmt.Errorf("step %q: render cwd: %w", step.Name, err)
+		}
+
+		out, code := captureExec(stepCmd, stepCwd, data)
 		executions++
 		if code != 0 {
 			exitCode = code
@@ -346,10 +368,25 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		return fmt.Errorf("no command available to run")
 	}
 
-	exitCode = doExec(cmdTmpl, data)
+	leafCwd, err := renderCwd(cwdTmpl, data)
+	if err != nil {
+		return fmt.Errorf("render cwd: %w", err)
+	}
+
+	exitCode = doExec(cmdTmpl, leafCwd, data)
 	executions++
 	reportExecutions(c, executions)
 	return nil
+}
+
+// renderCwd renders a cwd template against data. An empty template short-
+// circuits to the empty string ("no override"), so we don't pay template
+// machinery on the common no-cwd path.
+func renderCwd(tmpl string, data any) (string, error) {
+	if tmpl == "" {
+		return "", nil
+	}
+	return renderString(tmpl, data)
 }
 
 // reportExecutions prints the number of commands run to stderr when n > 1
