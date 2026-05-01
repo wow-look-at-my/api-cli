@@ -19,7 +19,7 @@ func TestCwd_DoExecHonoursDir(t *testing.T) {
 	dir := t.TempDir()
 	out, _ := captureExecStreams(t)
 	c := &Cmd{Shell: true, Template: `pwd`}
-	code := doExec(c, dir, map[string]any{})
+	code := doExec(c, dir, "", map[string]any{})
 	require.Equal(t, 0, code)
 	// macOS' /tmp is a symlink to /private/tmp; resolve both sides for comparison.
 	gotResolved, err := filepath.EvalSymlinks(out.String()[:len(out.String())-1])
@@ -33,7 +33,7 @@ func TestCwd_CaptureExecHonoursDir(t *testing.T) {
 	dir := t.TempDir()
 	captureExecStreams(t)
 	c := &Cmd{Shell: true, Template: `pwd`}
-	out, code := captureExec(c, dir, map[string]any{})
+	out, code := captureExec(c, dir, "", map[string]any{})
 	require.Equal(t, 0, code)
 	gotResolved, err := filepath.EvalSymlinks(out[:len(out)-1])
 	require.NoError(t, err)
@@ -47,7 +47,7 @@ func TestCwd_EmptyMeansProcessCwd(t *testing.T) {
 	// runs in the calling process's working directory.
 	captureExecStreams(t)
 	c := &Cmd{Shell: true, Template: `pwd`}
-	out, code := captureExec(c, "", map[string]any{})
+	out, code := captureExec(c, "", "", map[string]any{})
 	require.Equal(t, 0, code)
 	wd, err := os.Getwd()
 	require.NoError(t, err)
