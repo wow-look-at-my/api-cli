@@ -6,8 +6,15 @@ a Go `text/template` for each leaf and executes the result. Help at every
 level, shell tab completion, and strong templating come for free.
 
 It's not an HTTP client — it just runs shell or `argv` commands — but the
-canonical use case is wrapping a REST API with `curl`, which the shipped
-[`api.example.json`](./api.example.json) demonstrates.
+canonical use case is wrapping a REST API with `curl`. Two example configs
+ship in this repo:
+
+- [`api.example.json`](./api.example.json) — a minimal demo against
+  `jsonplaceholder.typicode.com`.
+- [`github.example.json`](./github.example.json) — a real, useful read-only
+  wrapper for the GitHub REST API with table/detail views and aggressive
+  noise-trimming (drops every `*url` field with `jq`, cutting response size
+  by 50–70%). See [GitHub example](#github-example) below.
 
 ## Install
 
@@ -606,6 +613,55 @@ The CLI inherits the exit code of the executed child command. Additionally:
 | 2    | Config not found or invalid.               |
 | 127  | Child binary not found or failed to start. |
 | N    | Any other value is the child's exit code.  |
+
+## GitHub example
+
+[`github.example.json`](./github.example.json) wraps the read-only slice of
+the GitHub REST API and is a more realistic showcase than the toy
+jsonplaceholder demo. Highlights:
+
+- **Subcommands**: `user get|repos|orgs`, `repo get|issues|issue|prs|pr|releases|release|commits|commit|branches|tags|contents|readme|languages|topics`, `org get|members|repos`, `search repos|code|issues|users`, `rate-limit`.
+- **Token-aware**: picks up `$GITHUB_TOKEN` or `$GH_TOKEN` automatically (5000 req/hr authenticated vs. 60 req/hr without).
+- **Noise stripping**: every response is piped through `jq` with a recursive `walk` that drops every key ending in `url` (the GitHub API's notorious `*_url` template links and `url`/`html_url` self-links). On a single repo response that's ~66% fewer bytes; on a user it's ~56%.
+- **Format views**: each resource gets a `table` view (for list endpoints) and a `detail` view (for single-object endpoints), selected automatically by inspecting the parsed JSON shape.
+
+### Quickstart
+
+```sh
+./build/api-cli --config github.example.json --help
+./build/api-cli --config github.example.json user get octocat
+./build/api-cli --config github.example.json repo get golang/go
+./build/api-cli --config github.example.json repo issues cli/cli --state open -n 10
+./build/api-cli --config github.example.json search repos 'language:go stars:>10000' --sort stars
+./build/api-cli --config github.example.json rate-limit
+```
+
+To make it as ergonomic as `gh`, drop a wrapper on `$PATH`:
+
+```bash
+#!/bin/bash
+# ~/.local/bin/ghr  (a tiny "gh-read" alias)
+set -euo pipefail
+api-cli --config ~/.config/ghr/github.example.json "$@"
+```
+
+Then `ghr repo get golang/go` works from anywhere.
+
+### How URL-stripping works
+
+The shared root command appends a `jq` step to every request:
+
+```text
+curl ... '<url>' | jq 'walk(if type == "object" then with_entries(select(.key | endswith("url") | not)) else . end)'
+```
+
+`walk` recurses through every nested object; `with_entries(...)` rebuilds each
+object excluding any key whose name ends in `url`. URL *values* in non-`url`
+keys (e.g. a user's `blog: "https://example.com"`) are preserved — only the
+key-name-based noise gets trimmed.
+
+If you ever need the raw shape (for piping into another tool that wants the
+templated `*_url` links), edit the `filter` var in the config to be `.`.
 
 ## Development
 
