@@ -35,21 +35,16 @@ func run(argv []string, errOut io.Writer) int {
 		cfg = loaded
 	}
 
-	// If --mcp is set, run as MCP server (config required).
-	if mcpTransport != "" {
-		if cfg == nil {
-			fmt.Fprintln(errOut, "error: --mcp requires a config; pass --config <path> or place api.json in the current directory")
-			return 2
-		}
-		return runMCP(mcpTransport, cfg)
-	}
-
 	// No config and user invoked a real subcommand — they need a config.
 	// Bare invocation (no args) and help flags fall through to cobra so the
 	// user sees --help output.
 	if cfg == nil && !isHelpInvocation(argv) {
 		fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.json in the current directory")
 		return 2
+	}
+
+	if mcpTransport != "" {
+		return runMCP(mcpTransport, cfg)
 	}
 
 	root := newRoot(cfg)
