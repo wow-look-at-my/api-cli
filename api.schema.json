@@ -26,6 +26,12 @@
     "command": {
       "$ref": "#/definitions/command"
     },
+    "cwd": {
+      "$ref": "#/definitions/cwd"
+    },
+    "stdin": {
+      "$ref": "#/definitions/stdin"
+    },
     "commands": {
       "type": "array",
       "description": "Top-level subcommands.",
@@ -53,6 +59,16 @@
           "description": "Argv form: each element rendered, then exec'd directly with no shell."
         }
       ]
+    },
+    "cwd": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Working directory for executed commands. Rendered as a Go template against the same data context as the command it applies to. Inherits down the tree (closest non-empty ancestor wins); a leaf step may override its leaf's cwd. Empty/unset means the calling process's cwd."
+    },
+    "stdin": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Input fed to the child process's stdin. Rendered as a Go template against the same data context as the command it applies to. Inherits down the tree (closest non-empty ancestor wins); a leaf step may override its leaf's stdin. When empty/unset, the child inherits the parent process's stdin."
     },
     "commandNode": {
       "type": "object",
@@ -83,6 +99,8 @@
         },
         "vars": { "$ref": "#/definitions/vars" },
         "command": { "$ref": "#/definitions/command" },
+        "cwd": { "$ref": "#/definitions/cwd" },
+        "stdin": { "$ref": "#/definitions/stdin" },
         "steps": {
           "type": "array",
           "description": "Leaf-only. Pre-execution stages run sequentially; each step's stdout is captured, parsed as JSON if valid, and exposed under `.result.<name>`.",
@@ -133,7 +151,9 @@
         "entry": {
           "description": "Rendered like a leaf `entry`; available as `.entry` when this step's command runs."
         },
-        "command": { "$ref": "#/definitions/command" }
+        "command": { "$ref": "#/definitions/command" },
+        "cwd": { "$ref": "#/definitions/cwd" },
+        "stdin": { "$ref": "#/definitions/stdin" }
       }
     },
     "arg": {

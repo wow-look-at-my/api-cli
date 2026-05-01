@@ -242,6 +242,8 @@ up automatically.
 | `description` | string            | Shown as the CLI's header in `--help`.                            |
 | `vars`        | `map<string,any>` | Shared variables inherited by all subcommands.                    |
 | `command`     | string or `[]string` | Default command template for the whole CLI.                   |
+| `cwd`         | string            | Default working directory template for executed commands. Inherited by every subcommand unless overridden. See [Working directory](#working-directory). |
+| `stdin`       | string            | Default stdin template for executed commands. Inherited by every subcommand unless overridden. See [Stdin](#stdin). |
 | `commands`    | `[]Command`       | Top-level subcommands.                                            |
 
 ### Command node
@@ -254,6 +256,8 @@ up automatically.
 | `flags`       | `[]Flag`          | Named flags.                                                      |
 | `vars`        | `map<string,any>` | Merged with ancestor vars (this node wins on collision).          |
 | `command`     | string or `[]string` | Overrides inherited command for this subtree.                  |
+| `cwd`         | string            | Overrides inherited working directory for this subtree. See [Working directory](#working-directory). |
+| `stdin`       | string            | Overrides inherited stdin template for this subtree. See [Stdin](#stdin). |
 | `steps`       | `[]Step`          | Leaf-only. Pre-execution stages; results exposed as `.result.*`.  |
 | `entry`       | any JSON object   | Leaf-only. Arbitrary user-defined data; string leaves templated.  |
 | `preconditions` | `[]string`      | Leaf-only. Templates evaluated against `{arg, flag, env, var}` before any step or command runs; if any renders to a non-empty (post-trim) string, it's treated as a fatal error message and the leaf exits 1. |
@@ -269,6 +273,8 @@ help.
 | `name`    | string (required) | Key under `.result`; accessed as `{{.result.name}}`.              |
 | `entry`   | any JSON object   | Rendered like a leaf `entry`; available as `.entry` when the step's command runs. |
 | `command` | string or `[]string` | Overrides the inherited command for this step only.             |
+| `cwd`     | string            | Overrides the inherited working directory for this step only. See [Working directory](#working-directory). |
+| `stdin`   | string            | Overrides the inherited stdin template for this step only. See [Stdin](#stdin). |
 
 ### `args`
 
@@ -328,6 +334,100 @@ command: "curl {{.var.base_url}}/search?q={{urlpath .arg.q}}"
   result is exposed as `.entry` for the command template.
 - `vars` are rendered the same way as `entry`, with `{arg, flag, env}` in scope.
 - Template errors on either stage abort the run with a clear message.
+
+## Working directory
+
+Every executed command — leaf commands and steps alike — runs in some working
+directory. By default that's the calling process's cwd, exactly as if you'd
+typed the command in your shell. The `cwd` field overrides that default and
+inherits down the tree, mirroring how `command` works:
+
+- `cwd` may appear at the top level of the config, on any `Command` node, and
+  on any `Step`.
+- The closest non-empty `cwd` up the ancestor chain wins. A leaf can override
+  its group's cwd; a step can override its leaf's.
+- The value is a Go template, rendered against the same context as the command
+  it applies to (so `.arg`, `.flag`, `.env`, `.var`, and — where they're in
+  scope — `.entry` and `.result` are all available).
+- An empty/unset `cwd` means "no override" — fall through to the next
+  ancestor, or ultimately to the calling process's cwd.
+
+Typical use is a repo-scoped CLI that should always run from the repo root:
+
+```jsonc
+{
+  "name": "stack",
+  "cwd": "{{.env.STACKS_ROOT}}",
+  "command": ["docker", "compose", "{{.entry.op}}"],
+  "commands": [
+    { "name": "up",   "entry": { "op": "up" } },
+    { "name": "down", "entry": { "op": "down" } }
+  ]
+}
+```
+
+A step can override the leaf's cwd to run a one-off command somewhere else:
+
+```jsonc
+{
+  "name": "deploy",
+  "cwd": "{{.env.REPO_ROOT}}",
+  "steps": [
+    { "name": "version", "cwd": "{{.env.REPO_ROOT}}/infra", "command": "git rev-parse HEAD" }
+  ],
+  "command": ["./bin/deploy", "--sha", "{{.result.version}}"]
+}
+```
+
+If the rendered `cwd` doesn't exist, the child fails to start and exits 127.
+
+## Stdin
+
+The `stdin` field feeds a rendered string to the child process's standard input.
+It inherits down the tree exactly like `cwd`: the closest non-empty ancestor
+wins, and a step can override its leaf's stdin.
+
+- `stdin` may appear at the top level of the config, on any `Command` node, and
+  on any `Step`.
+- The value is a Go template, rendered against the same context as the command
+  it applies to.
+- When non-empty, the rendered string is fed to the child's stdin (and stdin
+  closes after). When empty/unset, the child inherits the parent process's stdin.
+- The template author controls newline handling: append `\n` in the template if
+  the tool expects a trailing newline.
+
+This is especially useful with argv-form commands that need input on stdin
+without resorting to shell pipes:
+
+```jsonc
+{
+  "name": "jq-tool",
+  "commands": [
+    {
+      "name": "format",
+      "flags": [
+        { "name": "body", "short": "b", "type": "string", "required": true }
+      ],
+      // No shell, no pipe, no quoting hazards.
+      "command": ["jq", "-s", "."],
+      "stdin": "{{.flag.body}}"
+    }
+  ]
+}
+```
+
+A step can override the leaf's stdin:
+
+```jsonc
+{
+  "name": "deploy",
+  "stdin": "default-input\n",
+  "steps": [
+    { "name": "check", "stdin": "step-specific-input\n", "command": ["cat"] }
+  ],
+  "command": ["cat"]
+}
+```
 
 ## Config discovery
 

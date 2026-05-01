@@ -20,11 +20,19 @@ var (
 
 // doExec renders the command template against data and executes it.
 //
+// cwd, if non-empty, is set as the child's working directory; the empty
+// string means "use the calling process's cwd". cwd is taken as already
+// rendered — callers are expected to template-evaluate cwd themselves so it
+// can use any data context they choose.
+//
+// stdin, if non-empty, is fed to the child's standard input (and closed
+// after). When empty, the child inherits the parent process's stdin.
+//
 // Returns the child's exit code on normal exit; 127 if the binary couldn't
 // be located or the command was malformed; 1 on render errors or unexpected
 // I/O failures. A nil *Cmd is a bug caught by validation — this function
 // treats it as a render error.
-func doExec(c *Cmd, data any) int {
+func doExec(c *Cmd, cwd, stdin string, data any) int {
 	if !c.Defined() {
 		fmt.Fprintln(execStderr, "error: command is empty")
 		return 1
@@ -34,7 +42,12 @@ func doExec(c *Cmd, data any) int {
 		fmt.Fprintln(execStderr, "error:", err)
 		return 1
 	}
-	cmd.Stdin = execStdin
+	cmd.Dir = cwd
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	} else {
+		cmd.Stdin = execStdin
+	}
 	cmd.Stdout = execStdout
 	cmd.Stderr = execStderr
 
@@ -51,7 +64,7 @@ func doExec(c *Cmd, data any) int {
 // captureExec is like doExec but captures the child's stdout and returns it
 // as a string. stderr still flows to execStderr. Returns the captured output
 // and the child's exit code (non-zero on failure).
-func captureExec(c *Cmd, data any) (string, int) {
+func captureExec(c *Cmd, cwd, stdin string, data any) (string, int) {
 	if !c.Defined() {
 		fmt.Fprintln(execStderr, "error: command is empty")
 		return "", 1
@@ -61,8 +74,13 @@ func captureExec(c *Cmd, data any) (string, int) {
 		fmt.Fprintln(execStderr, "error:", err)
 		return "", 1
 	}
+	cmd.Dir = cwd
 	var buf bytes.Buffer
-	cmd.Stdin = execStdin
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	} else {
+		cmd.Stdin = execStdin
+	}
 	cmd.Stdout = &buf
 	cmd.Stderr = execStderr
 
