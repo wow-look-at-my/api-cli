@@ -282,6 +282,7 @@ up automatically.
 | `steps`       | `[]Step`          | Leaf-only. Pre-execution stages; results exposed as `.result.*`.  |
 | `entry`       | any JSON object   | Leaf-only. Arbitrary user-defined data; string leaves templated.  |
 | `preconditions` | `[]string`      | Leaf-only. Templates evaluated against `{arg, flag, env, var}` before any step or command runs; if any renders to a non-empty (post-trim) string, it's treated as a fatal error message and the leaf exits 1. |
+| `confirm`     | string            | Template rendered against `{arg, flag, env, var}`. If non-empty, the user is prompted `<message> [y/N]` on stderr before any step or command runs. Pass `--yes` / `-y` to bypass. Non-tty stdin without `--yes` is a hard error. Inherits down the tree like `command` and `cwd` (closest non-empty ancestor wins). |
 | `format`      | string or Format  | Output format for the leaf's stdout. A string names an entry in top-level `formats`; an object is an inline definition. Inherits down the tree like `command`/`cwd`/`stdin`. See [Output formatting](#output-formatting). |
 | `commands`    | `[]Command`       | Nested subcommands.                                               |
 
