@@ -1,6 +1,6 @@
 module github.com/wow-look-at-my/api-cli
 
-go 1.23
+go 1.24.0
 
 require (
 	github.com/Masterminds/sprig/v3 v3.2.3
@@ -21,6 +21,6 @@ require (
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/crypto v0.3.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
