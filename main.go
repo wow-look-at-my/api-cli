@@ -74,7 +74,7 @@ func newRoot(cfg *Config) *cobra.Command {
 
 	if cfg != nil {
 		for _, c := range cfg.Commands {
-			root.AddCommand(buildCommand(c, cfg.Vars, cfg.Command))
+			root.AddCommand(buildCommand(c, cfg.Vars, cfg.Command, cfg.Cwd))
 		}
 	} else {
 		// Cobra's default help template only renders the flags/usage block
