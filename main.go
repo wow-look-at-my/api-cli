@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 )
+
+const configFileName = "api.json"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stderr))
@@ -18,9 +21,7 @@ func main() {
 func run(argv []string, errOut io.Writer) int {
 	cfgPath := findConfigFlag(argv)
 	if cfgPath == "" {
-		if _, err := os.Stat("api.json"); err == nil {
-			cfgPath = "api.json"
-		}
+		cfgPath = findConfigWalkUp()
 	}
 
 	var cfg *Config
@@ -37,7 +38,7 @@ func run(argv []string, errOut io.Writer) int {
 	// Bare invocation (no args) and help flags fall through to cobra so the
 	// user sees --help output.
 	if cfg == nil && !isHelpInvocation(argv) {
-		fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.json in the current directory")
+		fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.json in the current or any ancestor directory")
 		return 2
 	}
 
@@ -69,7 +70,7 @@ func newRoot(cfg *Config) *cobra.Command {
 	}
 	// Declared so --help lists it. Actual parsing happens in findConfigFlag
 	// before the tree is built.
-	root.PersistentFlags().String("config", "", "Path to JSON config file (default: ./api.json).")
+	root.PersistentFlags().String("config", "", "Path to JSON config file (default: api.json in cwd or ancestor).")
 	root.PersistentFlags().BoolP("quiet", "q", false, "Suppress execution count on stderr.")
 
 	if cfg != nil {
@@ -101,6 +102,27 @@ func isHelpInvocation(argv []string) bool {
 		}
 	}
 	return false
+}
+
+// findConfigWalkUp looks for configFileName in the cwd, then in each ancestor
+// directory up to the filesystem root. Returns the absolute path of the first
+// match, or "" if none is found.
+func findConfigWalkUp() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	for {
+		candidate := filepath.Join(dir, configFileName)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
 }
 
 // findConfigFlag walks the argv looking for --config=<value> or --config <value>.

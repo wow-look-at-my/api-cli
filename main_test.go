@@ -132,6 +132,77 @@ func TestRun_PicksUpCwdAPIJson(t *testing.T) {
 	assert.Equal(t, 0, code)
 }
 
+func TestRun_FindsConfigInAncestorDir(t *testing.T) {
+	root := t.TempDir()
+	cfg := `{
+      "name": "t",
+      "command": "true",
+      "commands": [{"name":"ping"}]
+    }`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "api.json"), []byte(cfg), 0o600))
+
+	sub := filepath.Join(root, "a", "b", "c")
+	require.NoError(t, os.MkdirAll(sub, 0o755))
+	chdir(t, sub)
+
+	prevOut := execStdout
+	execStdout = io.Discard
+	execStderr = io.Discard
+	t.Cleanup(func() {
+		execStdout = prevOut
+		execStderr = os.Stderr
+	})
+
+	var errOut bytes.Buffer
+	code := run([]string{"ping"}, &errOut)
+	assert.Equal(t, 0, code, "expected config to be found in ancestor; stderr: %s", errOut.String())
+}
+
+func TestRun_NoConfigAnywhereFails(t *testing.T) {
+	chdir(t, t.TempDir())
+	var errOut bytes.Buffer
+	code := run([]string{"whatever"}, &errOut)
+	assert.Equal(t, 2, code)
+	assert.Contains(t, errOut.String(), "no config found")
+}
+
+func TestRun_ConfigFlagBeatsWalkUp(t *testing.T) {
+	root := t.TempDir()
+	// Place a config in the ancestor that would be found by walk-up.
+	ancestorCfg := `{
+      "name": "ancestor",
+      "command": "true",
+      "commands": [{"name":"a"}]
+    }`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "api.json"), []byte(ancestorCfg), 0o600))
+
+	// Place a different config that --config points to.
+	flagCfg := `{
+      "name": "flag-wins",
+      "command": "true",
+      "commands": [{"name":"b"}]
+    }`
+	flagPath := filepath.Join(root, "custom.json")
+	require.NoError(t, os.WriteFile(flagPath, []byte(flagCfg), 0o600))
+
+	sub := filepath.Join(root, "sub")
+	require.NoError(t, os.MkdirAll(sub, 0o755))
+	chdir(t, sub)
+
+	prevOut := execStdout
+	execStdout = io.Discard
+	execStderr = io.Discard
+	t.Cleanup(func() {
+		execStdout = prevOut
+		execStderr = os.Stderr
+	})
+
+	// --config should win: "b" is a valid command in custom.json but not in ancestor api.json.
+	var errOut bytes.Buffer
+	code := run([]string{"--config", flagPath, "b"}, &errOut)
+	assert.Equal(t, 0, code, "stderr: %s", errOut.String())
+}
+
 func TestRegisterFlag_AllTypes(t *testing.T) {
 	cfg := &Config{
 		Name:    "t",

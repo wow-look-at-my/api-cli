@@ -383,7 +383,11 @@ If the rendered `cwd` doesn't exist, the child fails to start and exits 127.
 First hit wins:
 
 1. `--config <path>` anywhere on the command line (`--config=x` or `--config x`).
-2. `./api.json` in the current working directory.
+2. `api.json` in the current working directory.
+3. `api.json` in any ancestor directory, walking up to the filesystem root.
+
+This mirrors how git finds `.git` -- you can run the CLI from any subdirectory
+of a repo that contains `api.json` at its root.
 
 ## Shell completion
 
