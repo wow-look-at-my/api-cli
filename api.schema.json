@@ -107,7 +107,7 @@
         },
         "confirm": {
           "type": "string",
-          "description": "Leaf-only. Template rendered against {arg, flag, env, var}. If non-empty, the user is prompted to confirm before any step or command runs. Pass --yes / -y to bypass."
+          "description": "Template rendered against {arg, flag, env, var}. If non-empty, the user is prompted to confirm before any step or command runs. Pass --yes / -y to bypass. Inherits down the tree like `command` and `cwd` (closest non-empty ancestor wins)."
         },
         "commands": {
           "type": "array",
@@ -126,8 +126,7 @@
               "anyOf": [
                 { "required": ["entry"] },
                 { "required": ["steps"] },
-                { "required": ["preconditions"] },
-                { "required": ["confirm"] }
+                { "required": ["preconditions"] }
               ]
             }
           }

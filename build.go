@@ -30,7 +30,7 @@ var isInteractive = func() bool {
 // template; the node's own command, if set, overrides it for this subtree.
 // inheritedCwd is the closest-ancestor working-directory template; the node's
 // own cwd, if non-empty, overrides it for this subtree.
-func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd, inheritedCwd string) *cobra.Command {
+func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd, inheritedCwd string, inheritedConfirm string) *cobra.Command {
 	useStr := node.Name
 	requiredArgs := 0
 	hasVariadic := false
@@ -80,6 +80,10 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 	if node.Cwd != "" {
 		effectiveCwd = node.Cwd
 	}
+	effectiveConfirm := inheritedConfirm
+	if node.Confirm != "" {
+		effectiveConfirm = node.Confirm
+	}
 
 	// Leaves (no subcommands) execute.
 	if len(node.Commands) == 0 {
@@ -87,13 +91,14 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 		leafVars := effectiveVars
 		leafCmd := effectiveCmd
 		leafCwd := effectiveCwd
+		leafConfirm := effectiveConfirm
 		cmd.RunE = func(c *cobra.Command, args []string) error {
-			return runLeaf(c, nodeCopy, args, leafVars, leafCmd, leafCwd)
+			return runLeaf(c, nodeCopy, args, leafVars, leafCmd, leafCwd, leafConfirm)
 		}
 	}
 
 	for _, child := range node.Commands {
-		cmd.AddCommand(buildCommand(child, effectiveVars, effectiveCmd, effectiveCwd))
+		cmd.AddCommand(buildCommand(child, effectiveVars, effectiveCmd, effectiveCwd, effectiveConfirm))
 	}
 
 	return cmd
@@ -278,7 +283,7 @@ func gatherFlags(cmd *cobra.Command, node Command, data any) (map[string]any, er
 // unless the step itself sets `cwd`. The cwd template is rendered fresh per
 // execution against the current data context (so .result and .entry are
 // available where appropriate).
-func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, cwdTmpl string) error {
+func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, cwdTmpl string, confirmTmpl string) error {
 	argMap, err := gatherArgs(node, args)
 	if err != nil {
 		return err
@@ -324,8 +329,8 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		}
 	}
 
-	if node.Confirm != "" {
-		msg, cerr := renderString(node.Confirm, data)
+	if confirmTmpl != "" {
+		msg, cerr := renderString(confirmTmpl, data)
 		if cerr != nil {
 			return fmt.Errorf("render confirm: %w", cerr)
 		}

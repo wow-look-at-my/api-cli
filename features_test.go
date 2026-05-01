@@ -405,3 +405,51 @@ func TestIntegration_ConfirmEmptyRenderedSkips(t *testing.T) {
 	require.Equal(t, 0, code)
 	assert.Equal(t, "ran\n", out)
 }
+
+func TestIntegration_ConfirmInherited(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:    "secrets",
+			Confirm: "This is destructive. Continue?",
+			Command: &Cmd{Argv: []string{"echo", "ok"}},
+			Commands: []Command{
+				{Name: "rm", Args: []Arg{{Name: "name", Required: true}}},
+				{Name: "list"},
+			},
+		}},
+	}
+	// Leaf inherits confirm from group — non-tty without --yes fails.
+	code, out, errOut := execCmdFull(t, cfg, "secrets", "rm", "foo")
+	assert.Equal(t, 1, code)
+	assert.Empty(t, out)
+	assert.Contains(t, errOut, "refusing to run without confirmation; pass --yes")
+
+	// --yes bypasses the inherited confirm.
+	code, out = execCmd(t, cfg, "secrets", "list", "--yes")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "ok\n", out)
+}
+
+func TestIntegration_ConfirmLeafOverridesGroup(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:    "secrets",
+			Confirm: "group confirm",
+			Command: &Cmd{Argv: []string{"echo", "ok"}},
+			Commands: []Command{
+				{Name: "rm", Confirm: "leaf confirm"},
+			},
+		}},
+	}
+	setInteractive(t)
+	prev := execStdin
+	execStdin = strings.NewReader("y\n")
+	t.Cleanup(func() { execStdin = prev })
+
+	code, _, errOut := execCmdFull(t, cfg, "secrets", "rm")
+	require.Equal(t, 0, code)
+	assert.Contains(t, errOut, "leaf confirm")
+	assert.NotContains(t, errOut, "group confirm")
+}

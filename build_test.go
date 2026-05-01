@@ -249,7 +249,7 @@ func TestValidate_PreconditionsLeafOnly(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestValidate_ConfirmLeafOnly(t *testing.T) {
+func TestValidate_ConfirmAllowedOnGroup(t *testing.T) {
 	cfg := &Config{
 		Name:    "t",
 		Command: &Cmd{Shell: true, Template: "true"},
@@ -260,7 +260,7 @@ func TestValidate_ConfirmLeafOnly(t *testing.T) {
 		}},
 	}
 	err := validate(cfg)
-	assert.Error(t, err)
+	assert.NoError(t, err)
 }
 
 func TestVariadicArgUsesString(t *testing.T) {

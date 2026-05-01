@@ -320,9 +320,6 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	if len(c.Preconditions) > 0 && len(c.Commands) > 0 {
 		return fmt.Errorf("%s: `preconditions` is only allowed on leaves (nodes with no subcommands)", where)
 	}
-	if c.Confirm != "" && len(c.Commands) > 0 {
-		return fmt.Errorf("%s: `confirm` is only allowed on leaves (nodes with no subcommands)", where)
-	}
 	stepNames := map[string]bool{}
 	for i, s := range c.Steps {
 		sw := fmt.Sprintf("%s.steps[%d]", where, i)
