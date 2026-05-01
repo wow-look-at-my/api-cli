@@ -17,6 +17,26 @@ go-toolchain     # runs tests + builds ./build/api-cli
 
 Drop the binary on your `$PATH`.
 
+## Recommended setup
+
+`api-cli` is the engine; each API or alias group you wrap gets its own thin
+wrapper script on your `$PATH` that pins the config. That gives you a stable
+top-level command name (with help, completion, and templating all flowing
+through it) without rebuilding the binary per use case.
+
+1. Put the `api-cli` binary on your `$PATH` (see [Install](#install)).
+2. Save your config somewhere stable, e.g. `~/.config/myapi/api.json`.
+3. Create an executable shell script like `~/.local/bin/myapi`:
+
+   ```bash
+   #!/bin/bash
+   set -euo pipefail
+   api-cli --config ~/.config/myapi/api.json "$@"
+   ```
+
+Now `myapi users get 1` works from anywhere. Repeat per API to maintain
+several wrappers from one `api-cli` install.
+
 ## Quickstart
 
 ```sh
