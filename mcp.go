@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -41,18 +42,28 @@ func runMCP(transport string, cfg *Config) int {
 		return 0
 	case strings.HasPrefix(transport, "http://"):
 		addr := strings.TrimPrefix(transport, "http://")
+		if addr == "" {
+			fmt.Fprintln(execStderr, "error: --mcp http:// requires an address, e.g. http://127.0.0.1:8080")
+			return 2
+		}
 		fmt.Fprintf(execStderr, "MCP HTTP server listening on http://%s\n", addr)
 		h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
-		if err := http.ListenAndServe(addr, h); err != nil {
+		srv2 := &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
+		if err := srv2.ListenAndServe(); err != nil {
 			fmt.Fprintln(execStderr, "error:", err)
 			return 1
 		}
 		return 0
 	case strings.HasPrefix(transport, "sse://"):
 		addr := strings.TrimPrefix(transport, "sse://")
+		if addr == "" {
+			fmt.Fprintln(execStderr, "error: --mcp sse:// requires an address, e.g. sse://127.0.0.1:8080")
+			return 2
+		}
 		fmt.Fprintf(execStderr, "MCP SSE server listening on http://%s\n", addr)
 		h := mcp.NewSSEHandler(func(*http.Request) *mcp.Server { return srv }, nil)
-		if err := http.ListenAndServe(addr, h); err != nil {
+		srv2 := &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
+		if err := srv2.ListenAndServe(); err != nil {
 			fmt.Fprintln(execStderr, "error:", err)
 			return 1
 		}
@@ -199,8 +210,9 @@ func buildToolInputSchema(node Command) map[string]any {
 	}
 
 	schema := map[string]any{
-		"type":       "object",
-		"properties": props,
+		"type":                 "object",
+		"properties":           props,
+		"additionalProperties": false,
 	}
 	if len(required) > 0 {
 		schema["required"] = required

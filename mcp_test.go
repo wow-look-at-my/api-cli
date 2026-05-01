@@ -300,15 +300,50 @@ func TestMcpGatherFlags_StringSliceEmptyDefault(t *testing.T) {
 
 func TestMcpGatherFlags_StringSliceNotArray(t *testing.T) {
 	node := Command{Flags: []Flag{{Name: "tags", Type: "string-slice"}}}
-	got, err := mcpGatherFlags(node, map[string]any{"tags": "not-array"}, nil)
-	require.NoError(t, err)
-	assert.Equal(t, []string{}, got["tags"])
+	_, err := mcpGatherFlags(node, map[string]any{"tags": "not-array"}, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "expected array")
 }
 
 func TestMcpGatherFlags_IntInvalidString(t *testing.T) {
 	node := Command{Flags: []Flag{{Name: "n", Type: "int"}}}
 	_, err := mcpGatherFlags(node, map[string]any{"n": "nope"}, nil)
 	assert.Error(t, err)
+}
+
+func TestMcpGatherFlags_IntFractional(t *testing.T) {
+	node := Command{Flags: []Flag{{Name: "n", Type: "int"}}}
+	_, err := mcpGatherFlags(node, map[string]any{"n": float64(3.7)}, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "expected integer")
+}
+
+func TestMcpGatherFlags_BoolNotBool(t *testing.T) {
+	node := Command{Flags: []Flag{{Name: "v", Type: "bool"}}}
+	_, err := mcpGatherFlags(node, map[string]any{"v": "true"}, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "expected boolean")
+}
+
+func TestMcpGatherArgs_IntFractional(t *testing.T) {
+	node := Command{Args: []Arg{{Name: "n", Type: "int"}}}
+	_, err := mcpGatherArgs(node, map[string]any{"n": float64(2.5)})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "expected integer")
+}
+
+func TestMcpGatherArgs_VariadicIntStringCoercion(t *testing.T) {
+	node := Command{Args: []Arg{{Name: "ids", Type: "int", Variadic: true}}}
+	got, err := mcpGatherArgs(node, map[string]any{"ids": []any{"1", "2", "3"}})
+	require.NoError(t, err)
+	assert.Equal(t, []int{1, 2, 3}, got["ids"])
+}
+
+func TestMcpGatherArgs_VariadicIntFractional(t *testing.T) {
+	node := Command{Args: []Arg{{Name: "ids", Type: "int", Variadic: true}}}
+	_, err := mcpGatherArgs(node, map[string]any{"ids": []any{float64(1.5)}})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "expected integer")
 }
 
 // --- mcpCombine ---

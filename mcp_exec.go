@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -190,11 +191,19 @@ func mcpGatherArgs(node Command, arguments map[string]any) (map[string]any, erro
 			if a.Type == "int" {
 				ints := make([]int, len(arr))
 				for i, v := range arr {
-					f, ok := v.(float64)
-					if !ok {
-						return nil, fmt.Errorf("arg %q[%d]: expected number, got %T", a.Name, i, v)
+					switch n := v.(type) {
+					case float64:
+						if n != math.Trunc(n) {
+							return nil, fmt.Errorf("arg %q[%d]: expected integer, got %v", a.Name, i, n)
+						}
+						ints[i] = int(n)
+					default:
+						parsed, err := strconv.Atoi(fmt.Sprintf("%v", v))
+						if err != nil {
+							return nil, fmt.Errorf("arg %q[%d]: expected integer, got %v", a.Name, i, v)
+						}
+						ints[i] = parsed
 					}
-					ints[i] = int(f)
 				}
 				out[a.Name] = ints
 			} else {
@@ -212,6 +221,9 @@ func mcpGatherArgs(node Command, arguments map[string]any) (map[string]any, erro
 		if a.Type == "int" {
 			switch v := val.(type) {
 			case float64:
+				if v != math.Trunc(v) {
+					return nil, fmt.Errorf("arg %q: expected integer, got %v", a.Name, v)
+				}
 				out[a.Name] = int(v)
 			default:
 				n, err := strconv.Atoi(fmt.Sprintf("%v", v))
@@ -240,7 +252,10 @@ func mcpGatherFlags(node Command, arguments map[string]any, preFlagData any) (ma
 		switch typ {
 		case "bool":
 			if provided {
-				b, _ := val.(bool)
+				b, ok := val.(bool)
+				if !ok {
+					return nil, fmt.Errorf("flag %q: expected boolean", f.Name)
+				}
 				out[f.Name] = b
 			} else {
 				def, _ := f.Default.(bool)
@@ -250,6 +265,9 @@ func mcpGatherFlags(node Command, arguments map[string]any, preFlagData any) (ma
 			if provided {
 				switch v := val.(type) {
 				case float64:
+					if v != math.Trunc(v) {
+						return nil, fmt.Errorf("flag %q: expected integer, got %v", f.Name, v)
+					}
 					out[f.Name] = int(v)
 				default:
 					n, err := strconv.Atoi(fmt.Sprintf("%v", v))
@@ -270,15 +288,15 @@ func mcpGatherFlags(node Command, arguments map[string]any, preFlagData any) (ma
 			}
 		case "string-slice":
 			if provided {
-				if arr, ok := val.([]any); ok {
-					strs := make([]string, len(arr))
-					for i, v := range arr {
-						strs[i] = fmt.Sprintf("%v", v)
-					}
-					out[f.Name] = strs
-				} else {
-					out[f.Name] = []string{}
+				arr, ok := val.([]any)
+				if !ok {
+					return nil, fmt.Errorf("flag %q: expected array", f.Name)
 				}
+				strs := make([]string, len(arr))
+				for i, v := range arr {
+					strs[i] = fmt.Sprintf("%v", v)
+				}
+				out[f.Name] = strs
 			} else {
 				if raw, ok := f.Default.([]any); ok {
 					strs := make([]string, len(raw))
