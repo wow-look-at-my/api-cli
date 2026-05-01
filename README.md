@@ -264,6 +264,7 @@ up automatically.
 | `command`     | string or `[]string` | Default command template for the whole CLI.                   |
 | `cwd`         | string            | Default working directory template for executed commands. Inherited by every subcommand unless overridden. See [Working directory](#working-directory). |
 | `stdin`       | string            | Default stdin template for executed commands. Inherited by every subcommand unless overridden. See [Stdin](#stdin). |
+| `formats`     | `map<string,Format>` | Named, reusable output formats; commands reference them by name. See [Output formatting](#output-formatting). |
 | `commands`    | `[]Command`       | Top-level subcommands.                                            |
 
 ### Command node
@@ -281,6 +282,7 @@ up automatically.
 | `steps`       | `[]Step`          | Leaf-only. Pre-execution stages; results exposed as `.result.*`.  |
 | `entry`       | any JSON object   | Leaf-only. Arbitrary user-defined data; string leaves templated.  |
 | `preconditions` | `[]string`      | Leaf-only. Templates evaluated against `{arg, flag, env, var}` before any step or command runs; if any renders to a non-empty (post-trim) string, it's treated as a fatal error message and the leaf exits 1. |
+| `format`      | string or Format  | Output format for the leaf's stdout. A string names an entry in top-level `formats`; an object is an inline definition. Inherits down the tree like `command`/`cwd`/`stdin`. See [Output formatting](#output-formatting). |
 | `commands`    | `[]Command`       | Nested subcommands.                                               |
 
 A node is a **leaf** if it has no `commands`; leaves execute. Groups just print
@@ -322,6 +324,127 @@ A bool flag whose `default` is `true` automatically gets a hidden `--no-NAME`
 companion: `{name: "verbose", default: true}` accepts both `--verbose=false`
 and `--no-verbose`.
 
+## Output formatting
+
+Inspired by PowerShell's `.format.ps1xml`. A `Format` is a presentation layer
+between a leaf command's stdout and the user. The wrapped command emits
+structured data (typically JSON); the format renders it through a Go template
+for display. Authors define formats once in the config; the runtime decides
+when to apply them.
+
+### When formatting is applied
+
+Output is formatted **iff both sides agree**: the format author allows it AND
+the user allows it. Either side can veto.
+
+- Author side: `format.when` is a Go-template predicate evaluated against
+  `{.tty, .width, .data, .arg, .flag, .env, .var, .entry, .result}`. Empty
+  defaults to `{{.tty}}` — only format on a terminal. Falsy values:
+  empty string, `false`, `0`, `no` (case-insensitive).
+- User side: enabled by default. To disable, pass `--no-format` or
+  `--format=raw`, or set `NO_FORMAT=1`. To force-on (overriding `NO_FORMAT`
+  in the environment), pass `--format=always` — the user "lies" about being
+  on a TTY, but the author's `when` still has final say.
+
+Precedence (top wins):
+
+1. `--no-format` flag
+2. `--format=raw|auto|always`
+3. `NO_FORMAT` env var (any non-empty value)
+4. `API_CLI_FORMAT=raw|auto|always`
+5. Default: `auto`
+
+### Format definition
+
+| Field   | Type            | Notes                                                              |
+|---------|-----------------|--------------------------------------------------------------------|
+| `input` | `"json"`\|`"lines"`\|`"raw"` | How to parse captured stdout. Default `json`. `lines` splits on `\n` into `[]string`; `raw` is the trimmed string. |
+| `when`  | string          | Predicate template; default `{{.tty}}`.                            |
+| `views` | `[]View`        | At least one view. The runtime selects which one to render.        |
+
+### View definition
+
+| Field      | Type   | Notes                                                                   |
+|------------|--------|-------------------------------------------------------------------------|
+| `name`     | string | Unique within the format. Selectable via `--view=<name>`.               |
+| `when`     | string | Predicate template; first matching view wins.                           |
+| `default`  | bool   | If no `when` matches, the view marked default wins.                     |
+| `template` | string | Go template rendered against the format context.                        |
+
+View selection order: `--view=<name>` flag wins; else first view whose `when`
+predicate is truthy; else first view with `default: true`; else first view.
+
+### Template context
+
+The view (and `when`) templates receive:
+
+| Key       | Value                                                          |
+|-----------|----------------------------------------------------------------|
+| `.data`   | Parsed stdout. JSON: `map[string]any` / `[]any` / scalars (numbers normalized to int64/float64). Lines: `[]string`. Raw: trimmed string. |
+| `.tty`    | `true` when stdout is a terminal (or when the user passes `--format=always`). |
+| `.width`  | Terminal width (columns), or 80 fallback.                      |
+| `.arg`, `.flag`, `.env`, `.var`, `.entry`, `.result` | Same data the leaf's `command` template sees. |
+
+### Worked example
+
+```json
+{
+  "name": "apicli",
+  "command": "curl -fsSL https://jsonplaceholder.typicode.com{{.entry.path}}",
+  "formats": {
+    "user": {
+      "input": "json",
+      "when": "{{.tty}}",
+      "views": [
+        {
+          "name": "table",
+          "when": "{{ kindIs \"slice\" .data }}",
+          "template": "{{ $rows := list \"ID\\tNAME\\tEMAIL\" }}{{ range .data }}{{ $rows = append $rows (printf \"%v\\t%v\\t%v\" .id .name .email) }}{{ end }}{{ tabwriter $rows }}"
+        },
+        {
+          "name": "detail",
+          "default": true,
+          "template": "ID:    {{.data.id}}\nName:  {{.data.name}}\nEmail: {{.data.email}}\n"
+        }
+      ]
+    }
+  },
+  "commands": [{
+    "name": "users",
+    "format": "user",
+    "commands": [
+      { "name": "get",  "args": [{"name":"id","type":"int","required":true}], "entry": {"path":"/users/{{.arg.id}}"} },
+      { "name": "list", "entry": {"path":"/users"} }
+    ]
+  }]
+}
+```
+
+Behavior:
+
+| Invocation | Output |
+|---|---|
+| `apicli users get 1` (interactive) | Detail view (object data; predicate doesn't match `slice`; default wins) |
+| `apicli users list` (interactive) | Table view (slice data; first predicate matches) |
+| `apicli users list \| jq .` | Raw JSON (not a TTY → `when` false) |
+| `apicli users list --no-format` | Raw JSON (user veto) |
+| `apicli users list --format=always \| less` | Table (user lies about TTY; author still says yes) |
+| `apicli users get 1 --view=table` | Forces the table view |
+
+### Streaming and large outputs
+
+The format path captures the child's stdout into a 32 MiB buffer. If the
+child's output exceeds that, the buffered prefix is streamed unmodified, the
+remainder pipes straight through, and formatting is silently skipped. So
+a `format`-equipped command never breaks for large outputs — it just falls
+back to the streaming behavior you'd get without the format.
+
+### Errors
+
+If the leaf command exits non-zero while a format would have applied, the
+captured body is written to stderr and the exit code propagates. Nothing is
+written to stdout — the user sees the unmodified failure body.
+
 ## Template helpers
 
 Every [sprig v3](https://masterminds.github.io/sprig/) helper is available —
@@ -336,6 +459,11 @@ that's where `toJson`, `upper`, `lower`, `trim`, `default`, `required`,
 | `spread`      | Argv-form only: splat a slice into multiple argv slots. The element `"{{spread .arg.files}}"` becomes N entries (zero for an empty slice). Works with `[]string`, `[]int`, `[]any`. |
 | `fileExists`  | Returns true if the path exists and is a regular file. Useful inside `preconditions`.     |
 | `dirExists`   | Returns true if the path exists and is a directory.                                       |
+| `tabwriter`   | Format rows of tab-separated cells into aligned columns. Display-width aware (correct in the presence of ANSI escape codes and East Asian wide characters). Used by output formatters. |
+| `padRight`    | `padRight 8 s` — pad `s` with spaces on the right to display width 8. Width-aware.        |
+| `padLeft`     | `padLeft 8 s` — pad on the left to display width 8.                                       |
+| `displayWidth`| Returns the visual column count of a string (ANSI escapes contribute 0; CJK wide runes contribute 2). |
+| `stripANSI`   | Returns a string with all ANSI escape sequences removed.                                  |
 
 Example:
 
