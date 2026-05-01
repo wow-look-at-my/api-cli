@@ -661,7 +661,18 @@ keys (e.g. a user's `blog: "https://example.com"`) are preserved — only the
 key-name-based noise gets trimmed.
 
 If you ever need the raw shape (for piping into another tool that wants the
-templated `*_url` links), edit the `filter` var in the config to be `.`.
+templated `*_url` links), set `GITHUB_RAW=1` for that invocation. The shared
+`filter` var is itself a Go template — when `GITHUB_RAW` is non-empty it
+collapses to `.`, so `jq` becomes a pretty-printer pass-through:
+
+```sh
+GITHUB_RAW=1 api-cli --config github.example.json repo get golang/go --no-format
+```
+
+The `search issues` command additionally exempts `repository_url` from the
+filter (overrides `vars.filter` on that one subtree) because its table view
+parses the repo name out of that field — a useful demonstration of how
+`vars` cascade.
 
 ## Development
 

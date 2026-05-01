@@ -6,10 +6,10 @@
   "vars": {
     "base_url": "https://api.github.com",
     "ua": "api-cli-github-example",
-    "filter": "walk(if type == \"object\" then with_entries(select(.key | endswith(\"url\") | not)) else . end)"
+    "filter": "{{if .env.GITHUB_RAW}}.{{else}}walk(if type == \"object\" then with_entries(select(.key | endswith(\"url\") | not)) else . end){{end}}"
   },
 
-  "command": "curl -fsSL -H 'User-Agent: {{.var.ua}}' -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28'{{if .env.GITHUB_TOKEN}} -H 'Authorization: Bearer {{.env.GITHUB_TOKEN}}'{{else if .env.GH_TOKEN}} -H 'Authorization: Bearer {{.env.GH_TOKEN}}'{{end}} '{{.var.base_url}}{{.entry.path}}{{querystring .entry.query}}' | jq {{shellquote .var.filter}}",
+  "command": "curl -fsSL -H {{shellquote (printf \"User-Agent: %s\" .var.ua)}} -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28'{{if .env.GITHUB_TOKEN}} -H {{shellquote (printf \"Authorization: Bearer %s\" .env.GITHUB_TOKEN)}}{{else if .env.GH_TOKEN}} -H {{shellquote (printf \"Authorization: Bearer %s\" .env.GH_TOKEN)}}{{end}} {{shellquote (printf \"%s%s%s\" .var.base_url .entry.path (querystring .entry.query))}} | jq {{shellquote .var.filter}}",
 
   "formats": {
     "user": {
@@ -363,16 +363,16 @@
         },
         {
           "name": "contents",
-          "description": "Fetch a file or directory listing. PATH may be empty (root) or a slash-delimited path; not URL-encoded.",
+          "description": "Fetch a file or directory listing. Omit PATH to list the repo root; otherwise a slash-delimited path (not URL-encoded).",
           "args": [
             { "name": "repo", "type": "string", "required": true },
-            { "name": "path", "type": "string", "required": true }
+            { "name": "path", "type": "string", "description": "File or directory path within the repo. Omit for the root listing." }
           ],
           "flags": [
             { "name": "ref", "short": "r", "type": "string", "default": "", "description": "Branch / SHA / tag." }
           ],
           "entry": {
-            "path": "/repos/{{.arg.repo}}/contents/{{.arg.path}}",
+            "path": "/repos/{{.arg.repo}}/contents{{if .arg.path}}/{{.arg.path}}{{end}}",
             "query": { "ref": "{{.flag.ref}}" }
           }
         },
@@ -385,7 +385,7 @@
           "flags": [
             { "name": "ref", "short": "r", "type": "string", "default": "", "description": "Branch / SHA / tag." }
           ],
-          "command": "curl -fsSL -H 'User-Agent: {{.var.ua}}' -H 'Accept: application/vnd.github.raw'{{if .env.GITHUB_TOKEN}} -H 'Authorization: Bearer {{.env.GITHUB_TOKEN}}'{{else if .env.GH_TOKEN}} -H 'Authorization: Bearer {{.env.GH_TOKEN}}'{{end}} '{{.var.base_url}}/repos/{{.arg.repo}}/readme{{if .flag.ref}}?ref={{urlpath .flag.ref}}{{end}}'"
+          "command": "curl -fsSL -H {{shellquote (printf \"User-Agent: %s\" .var.ua)}} -H 'Accept: application/vnd.github.raw'{{if .env.GITHUB_TOKEN}} -H {{shellquote (printf \"Authorization: Bearer %s\" .env.GITHUB_TOKEN)}}{{else if .env.GH_TOKEN}} -H {{shellquote (printf \"Authorization: Bearer %s\" .env.GH_TOKEN)}}{{end}} {{if .flag.ref}}{{shellquote (printf \"%s/repos/%s/readme?ref=%s\" .var.base_url .arg.repo (urlpath .flag.ref))}}{{else}}{{shellquote (printf \"%s/repos/%s/readme\" .var.base_url .arg.repo)}}{{end}}"
         },
         {
           "name": "languages",
@@ -574,6 +574,9 @@
             { "name": "page", "short": "p", "type": "int", "default": 1 },
             { "name": "sort", "type": "string", "default": "", "description": "comments|reactions|created|updated." }
           ],
+          "vars": {
+            "filter": "{{if .env.GITHUB_RAW}}.{{else}}walk(if type == \"object\" then with_entries(select(.key == \"repository_url\" or (.key | endswith(\"url\") | not))) else . end){{end}}"
+          },
           "format": {
             "input": "json",
             "views": [
