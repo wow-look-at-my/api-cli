@@ -23,6 +23,8 @@ func run(argv []string, errOut io.Writer) int {
 		}
 	}
 
+	mcpTransport := findMcpFlag(argv)
+
 	var cfg *Config
 	if cfgPath != "" {
 		loaded, err := Load(cfgPath)
@@ -35,10 +37,15 @@ func run(argv []string, errOut io.Writer) int {
 
 	// No config and user invoked a real subcommand — they need a config.
 	// Bare invocation (no args) and help flags fall through to cobra so the
-	// user sees --help output.
-	if cfg == nil && !isHelpInvocation(argv) {
+	// user sees --help output. --mcp mode always requires a config, so don't
+	// exempt help invocations when --mcp is present (that would panic).
+	if cfg == nil && (!isHelpInvocation(argv) || mcpTransport != "") {
 		fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.json in the current directory")
 		return 2
+	}
+
+	if mcpTransport != "" {
+		return runMCP(mcpTransport, cfg)
 	}
 
 	root := newRoot(cfg)
@@ -67,9 +74,10 @@ func newRoot(cfg *Config) *cobra.Command {
 		Short:        short,
 		SilenceUsage: true,
 	}
-	// Declared so --help lists it. Actual parsing happens in findConfigFlag
-	// before the tree is built.
+	// Declared so --help lists them. Actual parsing of --config and --mcp
+	// happens before the cobra tree is built (findConfigFlag / findMcpFlag).
 	root.PersistentFlags().String("config", "", "Path to JSON config file (default: ./api.json).")
+	root.PersistentFlags().String("mcp", "", `Run as MCP server. Value: "stdio", "http://<addr>", or "sse://<addr>".`)
 	root.PersistentFlags().BoolP("quiet", "q", false, "Suppress execution count on stderr.")
 	root.PersistentFlags().BoolP("yes", "y", false, "Skip confirmation prompts.")
 	root.PersistentFlags().Bool("no-format", false, "Disable output formatting (synonym for --format=raw).")
