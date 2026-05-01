@@ -71,10 +71,11 @@ func newRoot(cfg *Config) *cobra.Command {
 	// before the tree is built.
 	root.PersistentFlags().String("config", "", "Path to JSON config file (default: ./api.json).")
 	root.PersistentFlags().BoolP("quiet", "q", false, "Suppress execution count on stderr.")
+	root.PersistentFlags().BoolP("yes", "y", false, "Skip confirmation prompts.")
 
 	if cfg != nil {
 		for _, c := range cfg.Commands {
-			root.AddCommand(buildCommand(c, cfg.Vars, cfg.Command, cfg.Cwd, cfg.Stdin))
+			root.AddCommand(buildCommand(c, cfg.Vars, cfg.Command, cfg.Cwd, cfg.Stdin, ""))
 		}
 	} else {
 		// Cobra's default help template only renders the flags/usage block

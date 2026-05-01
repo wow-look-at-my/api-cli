@@ -114,6 +114,10 @@
           "description": "Leaf-only. Templates evaluated against {arg, flag, env, var} before any step or command runs. Any non-empty (post-trim) result is treated as a fatal error message; the leaf exits 1.",
           "items": { "type": "string" }
         },
+        "confirm": {
+          "type": "string",
+          "description": "Template rendered against {arg, flag, env, var}. If non-empty, the user is prompted to confirm before any step or command runs. Pass --yes / -y to bypass. Inherits down the tree like `command` and `cwd` (closest non-empty ancestor wins)."
+        },
         "commands": {
           "type": "array",
           "description": "Nested subcommands. If present and non-empty, this node is a group and may not declare `entry`, `steps`, or `preconditions`.",

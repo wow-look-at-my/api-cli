@@ -61,6 +61,7 @@ type Command struct {
 	Steps         []Step          `json:"steps,omitempty"`
 	Entry         json.RawMessage `json:"entry,omitempty"`
 	Preconditions []string        `json:"preconditions,omitempty"`
+	Confirm       string          `json:"confirm,omitempty"`
 	Commands      []Command       `json:"commands,omitempty"`
 }
 
