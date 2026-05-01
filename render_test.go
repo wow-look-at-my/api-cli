@@ -279,3 +279,54 @@ func TestFileExistsViaTemplate(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "YES", got)
 }
+
+func TestTabwriter_StringSlice(t *testing.T) {
+	rows := []any{"ID\tNAME", "1\tAda", "42\tHopper"}
+	got, err := renderString(`{{ tabwriter . }}`, rows)
+	require.NoError(t, err)
+	want := "ID  NAME\n1   Ada\n42  Hopper\n"
+	assert.Equal(t, want, got)
+}
+
+func TestTabwriter_MalformedInput(t *testing.T) {
+	_, err := renderString(`{{ tabwriter . }}`, 42)
+	assert.Error(t, err)
+}
+
+func TestPadTemplateHelpers(t *testing.T) {
+	got, err := renderString(`[{{ padRight 6 "ab" }}]`, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "[ab    ]", got)
+
+	got, err = renderString(`[{{ padLeft 6 "ab" }}]`, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "[    ab]", got)
+}
+
+func TestDisplayWidthAndStripANSITemplateHelpers(t *testing.T) {
+	got, err := renderString(`{{ displayWidth . }}`, "\x1b[31mhi\x1b[0m")
+	require.NoError(t, err)
+	assert.Equal(t, "2", got)
+
+	got, err = renderString(`{{ stripANSI . }}`, "\x1b[31mhi\x1b[0m")
+	require.NoError(t, err)
+	assert.Equal(t, "hi", got)
+}
+
+func TestToRows_NilAndExoticShapes(t *testing.T) {
+	rows, err := toRows(nil)
+	assert.NoError(t, err)
+	assert.Nil(t, rows)
+
+	rows, err = toRows([][]string{{"a", "b"}, {"c", "d"}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a\tb", "c\td"}, rows)
+
+	rows, err = toRows([][]any{{"a", 1}, {"b", 2}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a\t1", "b\t2"}, rows)
+
+	rows, err = toRows([]any{[]any{"x", 1}, "y\tz"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"x\t1", "y\tz"}, rows)
+}

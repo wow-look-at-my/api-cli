@@ -94,6 +94,79 @@ func captureExec(c *Cmd, cwd, stdin string, data any) (string, int) {
 	return buf.String(), 0
 }
 
+// captureExecCapped is the format-path capture variant. It buffers the
+// child's stdout up to maxBytes; if the child exceeds the cap, the buffered
+// prefix is flushed to execStdout and the remainder streams through. The
+// caller treats overflow == true as "skip formatting, output already streamed."
+//
+// Returns (capturedOrEmpty, overflowed, exitCode). When overflowed is true the
+// returned string is empty — the caller MUST NOT format it; bytes are already
+// on stdout.
+func captureExecCapped(c *Cmd, cwd, stdin string, data any, maxBytes int) (string, bool, int) {
+	if !c.Defined() {
+		fmt.Fprintln(execStderr, "error: command is empty")
+		return "", false, 1
+	}
+	cmd, err := buildExecCmd(c, data)
+	if err != nil {
+		fmt.Fprintln(execStderr, "error:", err)
+		return "", false, 1
+	}
+	cmd.Dir = cwd
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	} else {
+		cmd.Stdin = execStdin
+	}
+	tee := &cappedTee{buf: &bytes.Buffer{}, out: execStdout, max: maxBytes}
+	cmd.Stdout = tee
+	cmd.Stderr = execStderr
+
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if tee.overflowed {
+				return "", true, exitErr.ExitCode()
+			}
+			return tee.buf.String(), false, exitErr.ExitCode()
+		}
+		fmt.Fprintln(execStderr, "error:", err)
+		return "", false, 127
+	}
+	if tee.overflowed {
+		return "", true, 0
+	}
+	return tee.buf.String(), false, 0
+}
+
+// cappedTee buffers writes up to max bytes. Once the cap would be exceeded by
+// the next Write, it flushes the buffered prefix to out and switches to
+// passthrough mode, where every subsequent Write goes straight to out. This
+// gives the format path a "first 32MB or whatever fits" buffer with a
+// transparent fallback to streaming for larger outputs.
+type cappedTee struct {
+	buf        *bytes.Buffer
+	out        io.Writer
+	max        int
+	overflowed bool
+}
+
+func (c *cappedTee) Write(p []byte) (int, error) {
+	if c.overflowed {
+		return c.out.Write(p)
+	}
+	if c.buf.Len()+len(p) > c.max {
+		c.overflowed = true
+		if c.buf.Len() > 0 {
+			if _, err := c.out.Write(c.buf.Bytes()); err != nil {
+				return 0, err
+			}
+		}
+		c.buf.Reset()
+		return c.out.Write(p)
+	}
+	return c.buf.Write(p)
+}
+
 // parseResult tries to decode s as JSON. If s is valid JSON, the decoded value
 // is returned (arrays and objects remain structured so templates can index
 // into them). JSON numbers are normalized to int64 or float64 so that sprig

@@ -80,10 +80,13 @@ func newRoot(cfg *Config) *cobra.Command {
 	root.PersistentFlags().String("mcp", "", `Run as MCP server. Value: "stdio", "http://<addr>", or "sse://<addr>".`)
 	root.PersistentFlags().BoolP("quiet", "q", false, "Suppress execution count on stderr.")
 	root.PersistentFlags().BoolP("yes", "y", false, "Skip confirmation prompts.")
+	root.PersistentFlags().Bool("no-format", false, "Disable output formatting (synonym for --format=raw).")
+	root.PersistentFlags().String("format", "auto", "Output formatting mode: raw|auto|always.")
+	root.PersistentFlags().String("view", "", "Select a named view from the active format (overrides selectors).")
 
 	if cfg != nil {
 		for _, c := range cfg.Commands {
-			root.AddCommand(buildCommand(c, cfg.Vars, cfg.Command, cfg.Cwd, cfg.Stdin, ""))
+			root.AddCommand(buildCommand(c, cfg.Vars, cfg.Command, cfg.Cwd, cfg.Stdin, "", nil, cfg.Formats))
 		}
 	} else {
 		// Cobra's default help template only renders the flags/usage block

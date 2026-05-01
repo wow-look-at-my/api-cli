@@ -6,8 +6,15 @@ a Go `text/template` for each leaf and executes the result. Help at every
 level, shell tab completion, and strong templating come for free.
 
 It's not an HTTP client — it just runs shell or `argv` commands — but the
-canonical use case is wrapping a REST API with `curl`, which the shipped
-[`api.example.json`](./api.example.json) demonstrates.
+canonical use case is wrapping a REST API with `curl`. Two example configs
+ship in this repo:
+
+- [`api.example.json`](./api.example.json) — a minimal demo against
+  `jsonplaceholder.typicode.com`.
+- [`github.example.json`](./github.example.json) — a real, useful read-only
+  wrapper for the GitHub REST API with table/detail views and aggressive
+  noise-trimming (drops every `*url` field with `jq`, cutting response size
+  by 50–70%). See [GitHub example](#github-example) below.
 
 ## Install
 
@@ -264,6 +271,7 @@ up automatically.
 | `command`     | string or `[]string` | Default command template for the whole CLI.                   |
 | `cwd`         | string            | Default working directory template for executed commands. Inherited by every subcommand unless overridden. See [Working directory](#working-directory). |
 | `stdin`       | string            | Default stdin template for executed commands. Inherited by every subcommand unless overridden. See [Stdin](#stdin). |
+| `formats`     | `map<string,Format>` | Named, reusable output formats; commands reference them by name. See [Output formatting](#output-formatting). |
 | `commands`    | `[]Command`       | Top-level subcommands.                                            |
 
 ### Command node
@@ -282,6 +290,7 @@ up automatically.
 | `entry`       | any JSON object   | Leaf-only. Arbitrary user-defined data; string leaves templated.  |
 | `preconditions` | `[]string`      | Leaf-only. Templates evaluated against `{arg, flag, env, var}` before any step or command runs; if any renders to a non-empty (post-trim) string, it's treated as a fatal error message and the leaf exits 1. |
 | `confirm`     | string            | Template rendered against `{arg, flag, env, var}`. If non-empty, the user is prompted `<message> [y/N]` on stderr before any step or command runs. Pass `--yes` / `-y` to bypass. Non-tty stdin without `--yes` is a hard error. Inherits down the tree like `command` and `cwd` (closest non-empty ancestor wins). |
+| `format`      | string or Format  | Output format for the leaf's stdout. A string names an entry in top-level `formats`; an object is an inline definition. Inherits down the tree like `command`/`cwd`/`stdin`. See [Output formatting](#output-formatting). |
 | `commands`    | `[]Command`       | Nested subcommands.                                               |
 
 A node is a **leaf** if it has no `commands`; leaves execute. Groups just print
@@ -323,6 +332,148 @@ A bool flag whose `default` is `true` automatically gets a hidden `--no-NAME`
 companion: `{name: "verbose", default: true}` accepts both `--verbose=false`
 and `--no-verbose`.
 
+## Output formatting
+
+Inspired by PowerShell's `.format.ps1xml`. A `Format` is a presentation layer
+between a leaf command's stdout and the user. The wrapped command emits
+structured data (typically JSON); the format renders it through a Go template
+for display. Authors define formats once in the config; the runtime decides
+when to apply them.
+
+### When formatting is applied
+
+Output is formatted **iff both sides agree**: the format author allows it AND
+the user allows it. Either side can veto.
+
+- Author side: `format.when` is a Go-template predicate evaluated against
+  `{.tty, .width, .data, .arg, .flag, .env, .var, .entry, .result}`. Empty
+  defaults to `{{.tty}}` — only format on a terminal. Falsy values:
+  empty string, `false`, `0`, `no` (case-insensitive).
+- User side: enabled by default. To disable, pass `--no-format` or
+  `--format=raw`, or set `NO_FORMAT=1`. To force-on (overriding `NO_FORMAT`
+  in the environment), pass `--format=always` — the user "lies" about being
+  on a TTY, but the author's `when` still has final say.
+
+Precedence (top wins):
+
+1. `--no-format` flag
+2. `--format=raw|auto|always`
+3. `NO_FORMAT` env var (any non-empty value)
+4. `API_CLI_FORMAT=raw|auto|always`
+5. Default: `auto`
+
+### Format definition
+
+| Field   | Type            | Notes                                                              |
+|---------|-----------------|--------------------------------------------------------------------|
+| `input` | `"json"`\|`"lines"`\|`"raw"` | How to parse captured stdout. Default `json`. `lines` splits on `\n` into `[]string`; `raw` is the trimmed string. |
+| `when`  | string          | Predicate template; default `{{.tty}}`.                            |
+| `views` | `[]View`        | At least one view. The runtime selects which one to render.        |
+
+### View definition
+
+| Field      | Type   | Notes                                                                   |
+|------------|--------|-------------------------------------------------------------------------|
+| `name`     | string | Unique within the format. Selectable via `--view=<name>`.               |
+| `when`     | string | Predicate template; first matching view wins.                           |
+| `default`  | bool   | If no `when` matches, the view marked default wins.                     |
+| `template` | string | Go template rendered against the format context.                        |
+
+View selection order: `--view=<name>` flag wins; else first view whose `when`
+predicate is truthy; else first view with `default: true`; else first view.
+
+### Template context
+
+The view (and `when`) templates receive:
+
+| Key       | Value                                                          |
+|-----------|----------------------------------------------------------------|
+| `.data`   | Parsed stdout. JSON: `map[string]any` / `[]any` / scalars (numbers normalized to int64/float64). Lines: `[]string`. Raw: trimmed string. |
+| `.tty`    | `true` when stdout is a terminal (or when the user passes `--format=always`). |
+| `.width`  | Terminal width (columns), or 80 fallback.                      |
+| `.arg`, `.flag`, `.env`, `.var`, `.entry`, `.result` | Same data the leaf's `command` template sees. |
+
+### Worked example
+
+```json
+{
+  "name": "apicli",
+  "command": "curl -fsSL https://jsonplaceholder.typicode.com{{.entry.path}}",
+  "formats": {
+    "user": {
+      "input": "json",
+      "when": "{{.tty}}",
+      "views": [
+        {
+          "name": "table",
+          "when": "{{ kindIs \"slice\" .data }}",
+          "template": "{{ $rows := list \"ID\\tNAME\\tEMAIL\" }}{{ range .data }}{{ $rows = append $rows (printf \"%v\\t%v\\t%v\" .id .name .email) }}{{ end }}{{ tabwriter $rows }}"
+        },
+        {
+          "name": "detail",
+          "default": true,
+          "template": "ID:    {{.data.id}}\nName:  {{.data.name}}\nEmail: {{.data.email}}\n"
+        }
+      ]
+    }
+  },
+  "commands": [{
+    "name": "users",
+    "format": "user",
+    "commands": [
+      { "name": "get",  "args": [{"name":"id","type":"int","required":true}], "entry": {"path":"/users/{{.arg.id}}"} },
+      { "name": "list", "entry": {"path":"/users"} }
+    ]
+  }]
+}
+```
+
+### Inline format
+
+For a one-off format that doesn't need to be reused, use the inline object
+form on the command instead of a named reference:
+
+```json
+{
+  "name": "ping",
+  "command": "curl -fsSL https://example.test/health",
+  "format": {
+    "when": "true",
+    "views": [
+      { "name": "v", "default": true, "template": "{{.data.status}} ({{.data.uptime}}s)\n" }
+    ]
+  }
+}
+```
+
+The same inheritance rules apply — a leaf's inline format overrides the
+ancestor's named or inline format.
+
+Behavior:
+
+| Invocation | Output |
+|---|---|
+| `apicli users get 1` (interactive) | Detail view (object data; predicate doesn't match `slice`; default wins) |
+| `apicli users list` (interactive) | Table view (slice data; first predicate matches) |
+| `apicli users list \| jq .` | Raw JSON (not a TTY → `when` false) |
+| `apicli users list --no-format` | Raw JSON (user veto) |
+| `apicli users list --format=always \| less` | Table (user lies about TTY; author still says yes) |
+| `apicli users get 1 --view=table` | Forces the table view |
+
+### Streaming and large outputs
+
+The format path captures the child's stdout into a 32 MiB buffer. If the
+child's output exceeds that, the buffered prefix is streamed unmodified, the
+remainder pipes straight through, and formatting is silently skipped. So
+a `format`-equipped command never breaks for large outputs — it just falls
+back to the streaming behavior you'd get without the format.
+
+### Errors
+
+If the leaf command exits non-zero while a format would have applied, the
+captured body is written to stderr and the exit code propagates. Nothing is
+written to stdout — the user sees the unmodified failure body.
+
 ## Template helpers
 
 Every [sprig v3](https://masterminds.github.io/sprig/) helper is available —
@@ -337,6 +488,11 @@ that's where `toJson`, `upper`, `lower`, `trim`, `default`, `required`,
 | `spread`      | Argv-form only: splat a slice into multiple argv slots. The element `"{{spread .arg.files}}"` becomes N entries (zero for an empty slice). Works with `[]string`, `[]int`, `[]any`. |
 | `fileExists`  | Returns true if the path exists and is a regular file. Useful inside `preconditions`.     |
 | `dirExists`   | Returns true if the path exists and is a directory.                                       |
+| `tabwriter`   | Format rows of tab-separated cells into aligned columns. Display-width aware (correct in the presence of ANSI escape codes and East Asian wide characters). Used by output formatters. |
+| `padRight`    | `padRight 8 s` — pad `s` with spaces on the right to display width 8. Width-aware.        |
+| `padLeft`     | `padLeft 8 s` — pad on the left to display width 8.                                       |
+| `displayWidth`| Returns the visual column count of a string (ANSI escapes contribute 0; CJK wide runes contribute 2). |
+| `stripANSI`   | Returns a string with all ANSI escape sequences removed.                                  |
 
 Example:
 
@@ -450,6 +606,28 @@ A step can override the leaf's stdin:
 }
 ```
 
+## Global flags
+
+These persistent flags are registered on the root and inherited by every
+subcommand:
+
+| Flag              | Short | Default | Notes                                                                                     |
+|-------------------|-------|---------|-------------------------------------------------------------------------------------------|
+| `--config <path>` |       |         | Path to JSON config file. Falls back to `./api.json` if unset. See [Config discovery](#config-discovery). |
+| `--mcp <transport>` |     |         | Run the loaded config as an MCP (Model Context Protocol) server instead of a CLI. Values: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes an MCP tool. |
+| `--quiet`         | `-q`  | false   | Suppress the `N executions` line on stderr (printed when a leaf with `steps` runs more than one command). |
+| `--yes`           | `-y`  | false   | Skip `confirm` prompts. Without this, a non-tty stdin combined with a non-empty `confirm` is a hard error. |
+| `--no-format`     |       | false   | Disable output formatting. Equivalent to `--format=raw`.                                  |
+| `--format <mode>` |       | `auto`  | `raw` (off), `auto` (default; format only on TTY), `always` (force `.tty=true` in predicates). See [Output formatting](#output-formatting). |
+| `--view <name>`   |       |         | Pick a specific view by name, bypassing the format's predicate-based selection. Errors if the view is unknown. |
+
+Two environment variables also affect formatting (lower precedence than flags):
+
+| Variable          | Effect                                                                  |
+|-------------------|-------------------------------------------------------------------------|
+| `NO_FORMAT`       | Any non-empty value disables formatting (NO_COLOR-style).               |
+| `API_CLI_FORMAT`  | `raw` / `auto` / `always` — same semantics as `--format`.               |
+
 ## Config discovery
 
 First hit wins:
@@ -478,6 +656,66 @@ The CLI inherits the exit code of the executed child command. Additionally:
 | 2    | Config not found or invalid.               |
 | 127  | Child binary not found or failed to start. |
 | N    | Any other value is the child's exit code.  |
+
+## GitHub example
+
+[`github.example.json`](./github.example.json) wraps the read-only slice of
+the GitHub REST API and is a more realistic showcase than the toy
+jsonplaceholder demo. Highlights:
+
+- **Subcommands**: `user get|repos|orgs`, `repo get|issues|issue|prs|pr|releases|release|commits|commit|branches|tags|contents|readme|languages|topics`, `org get|members|repos`, `search repos|code|issues|users`, `rate-limit`.
+- **Token-aware**: picks up `$GITHUB_TOKEN` or `$GH_TOKEN` automatically (5000 req/hr authenticated vs. 60 req/hr without).
+- **Noise stripping**: every response is piped through `jq` with a recursive `walk` that drops every key ending in `url` (the GitHub API's notorious `*_url` template links and `url`/`html_url` self-links). On a single repo response that's ~66% fewer bytes; on a user it's ~56%.
+- **Format views**: each resource gets a `table` view (for list endpoints) and a `detail` view (for single-object endpoints), selected automatically by inspecting the parsed JSON shape.
+
+### Quickstart
+
+```sh
+./build/api-cli --config github.example.json --help
+./build/api-cli --config github.example.json user get octocat
+./build/api-cli --config github.example.json repo get golang/go
+./build/api-cli --config github.example.json repo issues cli/cli --state open -n 10
+./build/api-cli --config github.example.json search repos 'language:go stars:>10000' --sort stars
+./build/api-cli --config github.example.json rate-limit
+```
+
+To make it as ergonomic as `gh`, drop a wrapper on `$PATH`:
+
+```bash
+#!/bin/bash
+# ~/.local/bin/ghr  (a tiny "gh-read" alias)
+set -euo pipefail
+api-cli --config ~/.config/ghr/github.example.json "$@"
+```
+
+Then `ghr repo get golang/go` works from anywhere.
+
+### How URL-stripping works
+
+The shared root command appends a `jq` step to every request:
+
+```text
+curl ... '<url>' | jq 'walk(if type == "object" then with_entries(select(.key | endswith("url") | not)) else . end)'
+```
+
+`walk` recurses through every nested object; `with_entries(...)` rebuilds each
+object excluding any key whose name ends in `url`. URL *values* in non-`url`
+keys (e.g. a user's `blog: "https://example.com"`) are preserved — only the
+key-name-based noise gets trimmed.
+
+If you ever need the raw shape (for piping into another tool that wants the
+templated `*_url` links), set `GITHUB_RAW=1` for that invocation. The shared
+`filter` var is itself a Go template — when `GITHUB_RAW` is non-empty it
+collapses to `.`, so `jq` becomes a pretty-printer pass-through:
+
+```sh
+GITHUB_RAW=1 api-cli --config github.example.json repo get golang/go --no-format
+```
+
+The `search issues` command additionally exempts `repository_url` from the
+filter (overrides `vars.filter` on that one subtree) because its table view
+parses the repo name out of that field — a useful demonstration of how
+`vars` cascade.
 
 ## Development
 

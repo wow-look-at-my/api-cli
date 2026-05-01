@@ -9,6 +9,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/wow-look-at-my/testify v0.0.0-20260217010200-5fd2c08e3abb
 	golang.org/x/term v0.37.0
+	golang.org/x/text v0.31.0
 )
 
 require (

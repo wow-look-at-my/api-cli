@@ -9,10 +9,30 @@
 
   "command": "curl -fsSL -H 'Accept: application/json' {{.var.base_url}}{{.entry.path}}{{querystring .entry.query}}",
 
+  "formats": {
+    "user": {
+      "input": "json",
+      "when": "{{.tty}}",
+      "views": [
+        {
+          "name": "table",
+          "when": "{{ kindIs \"slice\" .data }}",
+          "template": "{{ $rows := list \"ID\\tNAME\\tUSERNAME\\tEMAIL\" }}{{ range .data }}{{ $rows = append $rows (printf \"%v\\t%v\\t%v\\t%v\" .id .name .username .email) }}{{ end }}{{ tabwriter $rows }}"
+        },
+        {
+          "name": "detail",
+          "default": true,
+          "template": "ID:       {{.data.id}}\nName:     {{.data.name}}\nUsername: {{.data.username}}\nEmail:    {{.data.email}}\nPhone:    {{.data.phone}}\nWebsite:  {{.data.website}}\n"
+        }
+      ]
+    }
+  },
+
   "commands": [
     {
       "name": "users",
       "description": "Work with users.",
+      "format": "user",
       "commands": [
         {
           "name": "get",

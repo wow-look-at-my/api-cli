@@ -43,7 +43,72 @@ func funcMap() template.FuncMap {
 	fm["spread"] = spread
 	fm["fileExists"] = fileExists
 	fm["dirExists"] = dirExists
+	fm["tabwriter"] = tabwriter
+	fm["padRight"] = padRight
+	fm["padLeft"] = padLeft
+	fm["displayWidth"] = displayWidth
+	fm["stripANSI"] = stripANSI
 	return fm
+}
+
+// tabwriter formats rows with columns aligned by displayWidth. Accepts:
+//   - []string: one row per element, tab-separated columns.
+//   - [][]string or [][]any: explicit cells per row.
+//   - []any: each element is a row; either a string or a []any of cells.
+//
+// Default padding between columns is 2 spaces. ANSI escapes pass through.
+func tabwriter(v any) (string, error) {
+	rows, err := toRows(v)
+	if err != nil {
+		return "", fmt.Errorf("tabwriter: %w", err)
+	}
+	return alignColumns(rows, 2), nil
+}
+
+func toRows(v any) ([]string, error) {
+	switch x := v.(type) {
+	case nil:
+		return nil, nil
+	case []string:
+		return x, nil
+	case [][]string:
+		out := make([]string, len(x))
+		for i, row := range x {
+			out[i] = strings.Join(row, "\t")
+		}
+		return out, nil
+	case [][]any:
+		out := make([]string, len(x))
+		for i, row := range x {
+			cells := make([]string, len(row))
+			for j, cell := range row {
+				cells[j] = fmt.Sprintf("%v", cell)
+			}
+			out[i] = strings.Join(cells, "\t")
+		}
+		return out, nil
+	case []any:
+		out := make([]string, 0, len(x))
+		for _, row := range x {
+			switch r := row.(type) {
+			case string:
+				out = append(out, r)
+			case []any:
+				cells := make([]string, len(r))
+				for j, c := range r {
+					cells[j] = fmt.Sprintf("%v", c)
+				}
+				out = append(out, strings.Join(cells, "\t"))
+			case []string:
+				out = append(out, strings.Join(r, "\t"))
+			default:
+				return nil, fmt.Errorf("row %T not supported (string or []any expected)", row)
+			}
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("expected []string / [][]string / []any, got %T", v)
+	}
 }
 
 // spread expands a slice into multiple argv slots when used as the entire

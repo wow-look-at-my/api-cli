@@ -31,8 +31,12 @@ var isInteractive = func() bool {
 // inheritedCwd is the closest-ancestor working-directory template; the node's
 // own cwd, if non-empty, overrides it for this subtree. inheritedStdin is the
 // closest-ancestor stdin template; the node's own stdin, if non-empty,
-// overrides it for this subtree.
-func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd, inheritedCwd, inheritedStdin, inheritedConfirm string) *cobra.Command {
+// overrides it for this subtree. inheritedConfirm is the closest-ancestor
+// confirm template; the node's own confirm, if non-empty, overrides it.
+// inheritedFormat is the closest-ancestor format reference; the node's own
+// format, if set, overrides it. formats is the top-level format registry used
+// to resolve named references.
+func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd, inheritedCwd, inheritedStdin, inheritedConfirm string, inheritedFormat *FormatRef, formats map[string]*Format) *cobra.Command {
 	useStr := node.Name
 	requiredArgs := 0
 	hasVariadic := false
@@ -72,7 +76,7 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 	}
 	registerConflicts(cmd, node.Flags)
 
-	// Resolve effective vars, command, cwd, and stdin for this subtree.
+	// Resolve effective vars, command, cwd, stdin, and format for this subtree.
 	effectiveVars := mergeVars(inheritedVars, node.Vars)
 	effectiveCmd := inheritedCmd
 	if node.Command.Defined() {
@@ -90,6 +94,10 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 	if node.Confirm != "" {
 		effectiveConfirm = node.Confirm
 	}
+	effectiveFormat := inheritedFormat
+	if node.Format.Defined() {
+		effectiveFormat = node.Format
+	}
 
 	// Leaves (no subcommands) execute.
 	if len(node.Commands) == 0 {
@@ -99,13 +107,15 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 		leafCwd := effectiveCwd
 		leafStdin := effectiveStdin
 		leafConfirm := effectiveConfirm
+		leafFormat := effectiveFormat
+		leafFormats := formats
 		cmd.RunE = func(c *cobra.Command, args []string) error {
-			return runLeaf(c, nodeCopy, args, leafVars, leafCmd, leafCwd, leafStdin, leafConfirm)
+			return runLeaf(c, nodeCopy, args, leafVars, leafCmd, leafCwd, leafStdin, leafConfirm, leafFormat, leafFormats)
 		}
 	}
 
 	for _, child := range node.Commands {
-		cmd.AddCommand(buildCommand(child, effectiveVars, effectiveCmd, effectiveCwd, effectiveStdin, effectiveConfirm))
+		cmd.AddCommand(buildCommand(child, effectiveVars, effectiveCmd, effectiveCwd, effectiveStdin, effectiveConfirm, effectiveFormat, formats))
 	}
 
 	return cmd
@@ -295,7 +305,7 @@ func gatherFlags(cmd *cobra.Command, node Command, data any) (map[string]any, er
 // means "inherit the parent process's stdin". Each step inherits stdinTmpl
 // unless the step itself sets `stdin`. The stdin template is rendered fresh
 // per execution against the current data context.
-func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, cwdTmpl, stdinTmpl, confirmTmpl string) error {
+func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, cwdTmpl, stdinTmpl, confirmTmpl string, formatRef *FormatRef, formats map[string]*Format) error {
 	argMap, err := gatherArgs(node, args)
 	if err != nil {
 		return err
@@ -443,7 +453,10 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		return fmt.Errorf("render stdin: %w", err)
 	}
 
-	exitCode = doExec(cmdTmpl, leafCwd, leafStdin, data)
+	exitCode, err = execLeaf(c, cmdTmpl, leafCwd, leafStdin, data, formatRef, formats)
+	if err != nil {
+		return err
+	}
 	executions++
 	reportExecutions(c, executions)
 	return nil
