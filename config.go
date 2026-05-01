@@ -20,6 +20,7 @@ type Config struct {
 	Vars        map[string]any `json:"vars,omitempty"`
 	Command     *Cmd           `json:"command,omitempty"`
 	Cwd         string         `json:"cwd,omitempty"`
+	Stdin       string         `json:"stdin,omitempty"`
 	Commands    []Command      `json:"commands,omitempty"`
 }
 
@@ -40,6 +41,10 @@ type Config struct {
 // and is rendered as a Go template against the same data context as the
 // command it applies to.
 //
+// `stdin`, if set, overrides the inherited stdin template for this subtree.
+// The rendered string is fed to the child process's stdin. When empty/unset,
+// the child inherits the parent process's stdin.
+//
 // `steps` run sequentially before the leaf's own command. Each step's stdout
 // is captured and parsed as JSON (or kept as a raw string if not valid JSON),
 // then stored in `.result.<name>` for use by subsequent steps and the final
@@ -52,6 +57,7 @@ type Command struct {
 	Vars          map[string]any  `json:"vars,omitempty"`
 	Command       *Cmd            `json:"command,omitempty"`
 	Cwd           string          `json:"cwd,omitempty"`
+	Stdin         string          `json:"stdin,omitempty"`
 	Steps         []Step          `json:"steps,omitempty"`
 	Entry         json.RawMessage `json:"entry,omitempty"`
 	Preconditions []string        `json:"preconditions,omitempty"`
@@ -67,6 +73,7 @@ type Step struct {
 	Entry   json.RawMessage `json:"entry,omitempty"`
 	Command *Cmd            `json:"command,omitempty"`
 	Cwd     string          `json:"cwd,omitempty"`
+	Stdin   string          `json:"stdin,omitempty"`
 }
 
 // Arg is a positional argument. Type is "string" or "int" (default string).

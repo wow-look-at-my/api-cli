@@ -243,6 +243,7 @@ up automatically.
 | `vars`        | `map<string,any>` | Shared variables inherited by all subcommands.                    |
 | `command`     | string or `[]string` | Default command template for the whole CLI.                   |
 | `cwd`         | string            | Default working directory template for executed commands. Inherited by every subcommand unless overridden. See [Working directory](#working-directory). |
+| `stdin`       | string            | Default stdin template for executed commands. Inherited by every subcommand unless overridden. See [Stdin](#stdin). |
 | `commands`    | `[]Command`       | Top-level subcommands.                                            |
 
 ### Command node
@@ -256,6 +257,7 @@ up automatically.
 | `vars`        | `map<string,any>` | Merged with ancestor vars (this node wins on collision).          |
 | `command`     | string or `[]string` | Overrides inherited command for this subtree.                  |
 | `cwd`         | string            | Overrides inherited working directory for this subtree. See [Working directory](#working-directory). |
+| `stdin`       | string            | Overrides inherited stdin template for this subtree. See [Stdin](#stdin). |
 | `steps`       | `[]Step`          | Leaf-only. Pre-execution stages; results exposed as `.result.*`.  |
 | `entry`       | any JSON object   | Leaf-only. Arbitrary user-defined data; string leaves templated.  |
 | `preconditions` | `[]string`      | Leaf-only. Templates evaluated against `{arg, flag, env, var}` before any step or command runs; if any renders to a non-empty (post-trim) string, it's treated as a fatal error message and the leaf exits 1. |
@@ -273,6 +275,7 @@ help.
 | `entry`   | any JSON object   | Rendered like a leaf `entry`; available as `.entry` when the step's command runs. |
 | `command` | string or `[]string` | Overrides the inherited command for this step only.             |
 | `cwd`     | string            | Overrides the inherited working directory for this step only. See [Working directory](#working-directory). |
+| `stdin`   | string            | Overrides the inherited stdin template for this step only. See [Stdin](#stdin). |
 
 ### `args`
 
@@ -378,6 +381,54 @@ A step can override the leaf's cwd to run a one-off command somewhere else:
 ```
 
 If the rendered `cwd` doesn't exist, the child fails to start and exits 127.
+
+## Stdin
+
+The `stdin` field feeds a rendered string to the child process's standard input.
+It inherits down the tree exactly like `cwd`: the closest non-empty ancestor
+wins, and a step can override its leaf's stdin.
+
+- `stdin` may appear at the top level of the config, on any `Command` node, and
+  on any `Step`.
+- The value is a Go template, rendered against the same context as the command
+  it applies to.
+- When non-empty, the rendered string is fed to the child's stdin (and stdin
+  closes after). When empty/unset, the child inherits the parent process's stdin.
+- The template author controls newline handling: append `\n` in the template if
+  the tool expects a trailing newline.
+
+This is especially useful with argv-form commands that need input on stdin
+without resorting to shell pipes:
+
+```jsonc
+{
+  "name": "jq-tool",
+  "commands": [
+    {
+      "name": "format",
+      "flags": [
+        { "name": "body", "short": "b", "type": "string", "required": true }
+      ],
+      // No shell, no pipe, no quoting hazards.
+      "command": ["jq", "-s", "."],
+      "stdin": "{{.flag.body}}"
+    }
+  ]
+}
+```
+
+A step can override the leaf's stdin:
+
+```jsonc
+{
+  "name": "deploy",
+  "stdin": "default-input\n",
+  "steps": [
+    { "name": "check", "stdin": "step-specific-input\n", "command": ["cat"] }
+  ],
+  "command": ["cat"]
+}
+```
 
 ## Config discovery
 
