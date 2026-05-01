@@ -428,6 +428,27 @@ The view (and `when`) templates receive:
 }
 ```
 
+### Inline format
+
+For a one-off format that doesn't need to be reused, use the inline object
+form on the command instead of a named reference:
+
+```json
+{
+  "name": "ping",
+  "command": "curl -fsSL https://example.test/health",
+  "format": {
+    "when": "true",
+    "views": [
+      { "name": "v", "default": true, "template": "{{.data.status}} ({{.data.uptime}}s)\n" }
+    ]
+  }
+}
+```
+
+The same inheritance rules apply — a leaf's inline format overrides the
+ancestor's named or inline format.
+
 Behavior:
 
 | Invocation | Output |
@@ -584,6 +605,27 @@ A step can override the leaf's stdin:
   "command": ["cat"]
 }
 ```
+
+## Global flags
+
+These persistent flags are registered on the root and inherited by every
+subcommand:
+
+| Flag              | Short | Default | Notes                                                                                     |
+|-------------------|-------|---------|-------------------------------------------------------------------------------------------|
+| `--config <path>` |       |         | Path to JSON config file. Falls back to `./api.json` if unset. See [Config discovery](#config-discovery). |
+| `--quiet`         | `-q`  | false   | Suppress the `N executions` line on stderr (printed when a leaf with `steps` runs more than one command). |
+| `--yes`           | `-y`  | false   | Skip `confirm` prompts. Without this, a non-tty stdin combined with a non-empty `confirm` is a hard error. |
+| `--no-format`     |       | false   | Disable output formatting. Equivalent to `--format=raw`.                                  |
+| `--format <mode>` |       | `auto`  | `raw` (off), `auto` (default; format only on TTY), `always` (force `.tty=true` in predicates). See [Output formatting](#output-formatting). |
+| `--view <name>`   |       |         | Pick a specific view by name, bypassing the format's predicate-based selection. Errors if the view is unknown. |
+
+Two environment variables also affect formatting (lower precedence than flags):
+
+| Variable          | Effect                                                                  |
+|-------------------|-------------------------------------------------------------------------|
+| `NO_FORMAT`       | Any non-empty value disables formatting (NO_COLOR-style).               |
+| `API_CLI_FORMAT`  | `raw` / `auto` / `always` — same semantics as `--format`.               |
 
 ## Config discovery
 
