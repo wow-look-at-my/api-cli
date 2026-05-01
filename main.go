@@ -23,6 +23,8 @@ func run(argv []string, errOut io.Writer) int {
 		}
 	}
 
+	mcpTransport := findMcpFlag(argv)
+
 	var cfg *Config
 	if cfgPath != "" {
 		loaded, err := Load(cfgPath)
@@ -31,6 +33,15 @@ func run(argv []string, errOut io.Writer) int {
 			return 2
 		}
 		cfg = loaded
+	}
+
+	// If --mcp is set, run as MCP server (config required).
+	if mcpTransport != "" {
+		if cfg == nil {
+			fmt.Fprintln(errOut, "error: --mcp requires a config; pass --config <path> or place api.json in the current directory")
+			return 2
+		}
+		return runMCP(mcpTransport, cfg)
 	}
 
 	// No config and user invoked a real subcommand — they need a config.
@@ -67,9 +78,10 @@ func newRoot(cfg *Config) *cobra.Command {
 		Short:        short,
 		SilenceUsage: true,
 	}
-	// Declared so --help lists it. Actual parsing happens in findConfigFlag
-	// before the tree is built.
+	// Declared so --help lists them. Actual parsing of --config and --mcp
+	// happens before the cobra tree is built (findConfigFlag / findMcpFlag).
 	root.PersistentFlags().String("config", "", "Path to JSON config file (default: ./api.json).")
+	root.PersistentFlags().String("mcp", "", `Run as MCP server. Value: "stdio", "http://<addr>", or "sse://<addr>".`)
 	root.PersistentFlags().BoolP("quiet", "q", false, "Suppress execution count on stderr.")
 	root.PersistentFlags().BoolP("yes", "y", false, "Skip confirmation prompts.")
 
