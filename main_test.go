@@ -159,6 +159,97 @@ func TestRegisterFlag_AllTypes(t *testing.T) {
 	require.NotNil(t, cmd.Flags().Lookup("untyped"))
 }
 
+func TestRun_Argv0PicksNamedConfig(t *testing.T) {
+	dir := t.TempDir()
+	named := `{
+      "name": "unraid-config",
+      "command": "true",
+      "commands": [{"name":"ping"}]
+    }`
+	decoy := `{
+      "name": "decoy",
+      "command": "true",
+      "commands": [{"name":"pong"}]
+    }`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "unraid-config.json"), []byte(named), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "api.json"), []byte(decoy), 0o600))
+	chdir(t, dir)
+
+	prev := os.Args[0]
+	os.Args[0] = "/usr/local/bin/unraid-config"
+	t.Cleanup(func() { os.Args[0] = prev })
+
+	prevOut := execStdout
+	execStdout = io.Discard
+	execStderr = io.Discard
+	t.Cleanup(func() {
+		execStdout = prevOut
+		execStderr = os.Stderr
+	})
+
+	var errOut bytes.Buffer
+	code := run([]string{"ping"}, &errOut)
+	assert.Equal(t, 0, code)
+
+	// "pong" comes from api.json (the decoy) -- it should NOT be found.
+	code = run([]string{"pong"}, &errOut)
+	assert.NotEqual(t, 0, code)
+}
+
+func TestRun_Argv0ApiCliFallsBack(t *testing.T) {
+	dir := t.TempDir()
+	cfg := `{
+      "name": "t",
+      "command": "true",
+      "commands": [{"name":"ping"}]
+    }`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "api.json"), []byte(cfg), 0o600))
+	chdir(t, dir)
+
+	prev := os.Args[0]
+	os.Args[0] = "api-cli"
+	t.Cleanup(func() { os.Args[0] = prev })
+
+	prevOut := execStdout
+	execStdout = io.Discard
+	execStderr = io.Discard
+	t.Cleanup(func() {
+		execStdout = prevOut
+		execStderr = os.Stderr
+	})
+
+	var errOut bytes.Buffer
+	code := run([]string{"ping"}, &errOut)
+	assert.Equal(t, 0, code)
+}
+
+func TestRun_Argv0ExeSuffixStripped(t *testing.T) {
+	dir := t.TempDir()
+	cfg := `{
+      "name": "myapp",
+      "command": "true",
+      "commands": [{"name":"ping"}]
+    }`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "myapp.json"), []byte(cfg), 0o600))
+	chdir(t, dir)
+
+	prev := os.Args[0]
+	os.Args[0] = filepath.Join(dir, "myapp.exe")
+	t.Cleanup(func() { os.Args[0] = prev })
+
+	prevOut := execStdout
+	execStdout = io.Discard
+	execStderr = io.Discard
+	t.Cleanup(func() {
+		execStdout = prevOut
+		execStderr = os.Stderr
+	})
+
+	var errOut bytes.Buffer
+	code := run([]string{"ping"}, &errOut)
+	assert.Equal(t, 0, code)
+}
+
 func TestStringSlice_PreservesCommas(t *testing.T) {
 	// StringArrayVar (vs StringSliceVar) keeps commas inside values.
 	cfg := &Config{

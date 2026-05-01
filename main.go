@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -17,6 +18,9 @@ func main() {
 // slice of arguments (os.Args[1:] in production); errOut receives diagnostics.
 func run(argv []string, errOut io.Writer) int {
 	cfgPath := findConfigFlag(argv)
+	if cfgPath == "" {
+		cfgPath = findConfigByArgv0()
+	}
 	if cfgPath == "" {
 		if _, err := os.Stat("api.json"); err == nil {
 			cfgPath = "api.json"
@@ -37,7 +41,7 @@ func run(argv []string, errOut io.Writer) int {
 	// Bare invocation (no args) and help flags fall through to cobra so the
 	// user sees --help output.
 	if cfg == nil && !isHelpInvocation(argv) {
-		fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.json in the current directory")
+		fmt.Fprintln(errOut, "error: no config found; pass --config <path>, symlink the binary and place <name>.json, or place api.json in the current directory")
 		return 2
 	}
 
@@ -101,6 +105,26 @@ func isHelpInvocation(argv []string) bool {
 		}
 	}
 	return false
+}
+
+// findConfigByArgv0 checks whether a <basename>.json file exists in the
+// current directory, where basename is derived from os.Args[0]. Returns the
+// empty string when the binary name is "api-cli" (the default name) or when
+// no matching file is found.
+func findConfigByArgv0() string {
+	if len(os.Args) == 0 {
+		return ""
+	}
+	base := filepath.Base(os.Args[0])
+	base = strings.TrimSuffix(base, filepath.Ext(base))
+	if base == "" || base == "api-cli" {
+		return ""
+	}
+	candidate := base + ".json"
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
+	}
+	return ""
 }
 
 // findConfigFlag walks the argv looking for --config=<value> or --config <value>.

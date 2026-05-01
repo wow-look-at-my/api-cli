@@ -383,7 +383,20 @@ If the rendered `cwd` doesn't exist, the child fails to start and exits 127.
 First hit wins:
 
 1. `--config <path>` anywhere on the command line (`--config=x` or `--config x`).
-2. `./api.json` in the current working directory.
+2. `./<argv0-basename>.json` in the current working directory, where
+   `argv0-basename` is the filename portion of the invoked binary with any
+   `.exe` suffix stripped. Skipped when the basename is `api-cli`.
+3. `./api.json` in the current working directory.
+
+This means you can symlink (or copy) the binary and place a matching config
+next to it:
+
+```sh
+ln -s api-cli unraid-config
+ls
+# unraid-config  unraid-config.json
+./unraid-config status   # finds unraid-config.json without --config
+```
 
 ## Shell completion
 
