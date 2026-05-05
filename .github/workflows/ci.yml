@@ -13,6 +13,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: wow-look-at-my/go-toolchain@v1
+        with:
+          autorelease: 'true'
       - name: Run github.example.json demo into the step summary
         # Hits the live GitHub API; transient network/quota hiccups should not
         # fail CI when the unit tests are green. The summary is best-effort.
