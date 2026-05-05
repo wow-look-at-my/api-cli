@@ -145,6 +145,25 @@
         "path": "/posts",
         "query": { "userId": "{{(index .result.user 0).id}}" }
       }
+    },
+
+    {
+      "name": "user-or-id",
+      "description": "Fetch a user by numeric ID or username (demonstrates conditional steps). If the argument looks like a number, use it directly; otherwise resolve the username first.",
+      "args": [
+        { "name": "id", "type": "string", "required": true, "description": "Numeric user ID or username." }
+      ],
+      "steps": [
+        {
+          "name": "resolved",
+          "when": "{{not (regexMatch `^[0-9]+$` .arg.id)}}",
+          "entry": { "path": "/users", "query": { "username": "{{.arg.id}}" } }
+        }
+      ],
+      "entry": {
+        "path": "/users/{{if .result.resolved}}{{(index .result.resolved 0).id}}{{else}}{{.arg.id}}{{end}}"
+      },
+      "format": "user"
     }
   ]
 }

@@ -385,6 +385,16 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 	executions := 0
 
 	for _, step := range node.Steps {
+		if step.When != "" {
+			whenOut, err := renderString(step.When, data)
+			if err != nil {
+				return fmt.Errorf("step %q: render when: %w", step.Name, err)
+			}
+			if !isTruthy(whenOut) {
+				continue
+			}
+		}
+
 		stepCmd := cmdTmpl
 		if step.Command.Defined() {
 			stepCmd = step.Command

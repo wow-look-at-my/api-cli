@@ -62,10 +62,12 @@ covers most needs.
    `--format=always` lies about `.tty` in predicate context but cannot
    override an explicit `when: "false"`.
 4. **Steps capture, leaves stream (or capture if formatted).** Steps
-   always capture via `captureExec` (no cap — step output is expected to
-   be small structured data feeding `.result.<name>`). The leaf's own
-   command streams unless a format applies, in which case it goes through
-   `captureExecCapped`.
+   capture via `captureExec` (no cap — step output is expected to be
+   small structured data feeding `.result.<name>`). A step with a `when`
+   predicate that evaluates falsy is skipped entirely: no command runs,
+   `.result.<name>` is not set, and the execution count is unaffected.
+   The leaf's own command streams unless a format applies, in which case
+   it goes through `captureExecCapped`.
 5. **Templates use missingkey=zero.** Missing map keys render as nil (or
    `<no value>` for `map[string]any`). For strict mode, use sprig's
    `required`. Don't change this default.
@@ -110,6 +112,12 @@ covers most needs.
 - **Number normalization in step results.** `parseResult` (`exec.go`)
   normalizes JSON numbers to `int64` / `float64` so sprig arithmetic works
   without casts. The format path's `parseInput("json", ...)` reuses this.
+- **`when` predicate reuse.** `Step.When` and `Format.When` / `View.When`
+  share the same truthiness rules (`isTruthy` in `format.go`): empty,
+  `"false"`, `"0"`, `"no"` are falsy, everything else is truthy. Step
+  `when` is evaluated in `runLeaf` (`build.go`) before entry rendering or
+  command execution; format/view `when` is evaluated in `format.go` via
+  `renderPredicate`.
 
 ## Tooling
 

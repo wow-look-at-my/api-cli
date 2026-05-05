@@ -160,6 +160,7 @@ func (r *FormatRef) Defined() bool {
 // subsequent steps and the leaf's own entry/command templates.
 type Step struct {
 	Name    string          `json:"name"`
+	When    string          `json:"when,omitempty"`
 	Entry   json.RawMessage `json:"entry,omitempty"`
 	Command *Cmd            `json:"command,omitempty"`
 	Cwd     string          `json:"cwd,omitempty"`

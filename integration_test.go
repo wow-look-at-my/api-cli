@@ -371,3 +371,163 @@ func TestIntegration_ArrayResultIndexed(t *testing.T) {
 	require.Equal(t, 0, code)
 	assert.Equal(t, "bob\n", out)
 }
+
+// --- Conditional step (when) tests ---
+
+func TestIntegration_StepWhenTruthy_Runs(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Args: []Arg{{Name: "x", Required: true}},
+			Steps: []Step{{
+				Name:    "s",
+				When:    "{{.arg.x}}",
+				Command: &Cmd{Shell: true, Template: `printf '{"v":"ran"}'`},
+			}},
+			Command: &Cmd{Shell: true, Template: `echo {{.result.s.v}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "run", "yes")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "ran\n", out)
+}
+
+func TestIntegration_StepWhenFalsy_Skipped(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{{
+				Name:    "s",
+				When:    "false",
+				Command: &Cmd{Shell: true, Template: `printf '{"v":"ran"}'`},
+			}},
+			Command: &Cmd{Shell: true, Template: `echo done`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "run")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "done\n", out)
+}
+
+func TestIntegration_StepWhenFalsy_ResultAbsent(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{{
+				Name:    "skipped",
+				When:    "0",
+				Command: &Cmd{Shell: true, Template: `printf '{"v":"ran"}'`},
+			}},
+			Command: &Cmd{Shell: true, Template: `printf '{{if .result.skipped}}found{{else}}absent{{end}}'`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "run")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "absent", out)
+}
+
+func TestIntegration_StepWhenEmpty_Runs(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{{
+				Name:    "s",
+				Command: &Cmd{Shell: true, Template: `printf '{"v":"ran"}'`},
+			}},
+			Command: &Cmd{Shell: true, Template: `echo {{.result.s.v}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "run")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "ran\n", out)
+}
+
+func TestIntegration_StepWhenSkipped_NoExecutionCount(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{{
+				Name:    "s",
+				When:    "no",
+				Command: &Cmd{Shell: true, Template: `printf '{}'`},
+			}},
+			Command: &Cmd{Shell: true, Template: `true`},
+		}},
+	}
+	_, _, errOut := execCmdFull(t, cfg, "run")
+	assert.Empty(t, errOut)
+}
+
+func TestIntegration_StepWhenUsesResultFromPriorStep(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{
+				{
+					Name:    "check",
+					Command: &Cmd{Shell: true, Template: `printf '{"need_resolve":true}'`},
+				},
+				{
+					Name:    "resolve",
+					When:    "{{.result.check.need_resolve}}",
+					Command: &Cmd{Shell: true, Template: `printf '{"id":42}'`},
+				},
+			},
+			Command: &Cmd{Shell: true, Template: `echo {{.result.resolve.id}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "run")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "42\n", out)
+}
+
+func TestIntegration_StepWhenSkipsMidChain(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{
+				{
+					Name:    "a",
+					Command: &Cmd{Shell: true, Template: `printf '{"x":"first"}'`},
+				},
+				{
+					Name:    "b",
+					When:    "false",
+					Command: &Cmd{Shell: true, Template: `printf '{"x":"should-not-run"}'`},
+				},
+				{
+					Name:    "c",
+					Command: &Cmd{Shell: true, Template: `printf '{"x":"third"}'`},
+				},
+			},
+			Command: &Cmd{Shell: true, Template: `printf '%s-%s-%s' {{.result.a.x}} {{if .result.b}}{{.result.b.x}}{{else}}skipped{{end}} {{.result.c.x}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "run")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "first-skipped-third", out)
+}
+
+func TestIntegration_StepWhenBadTemplate_Errors(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{{
+				Name:    "s",
+				When:    "{{.nonexistent | badFunc}}",
+				Command: &Cmd{Shell: true, Template: `true`},
+			}},
+			Command: &Cmd{Shell: true, Template: `true`},
+		}},
+	}
+	code, _ := execCmd(t, cfg, "run")
+	assert.NotEqual(t, 0, code)
+}
