@@ -160,6 +160,10 @@
           "minLength": 1,
           "description": "Key under `.result`; accessed as `{{.result.name}}`."
         },
+        "when": {
+          "type": "string",
+          "description": "Go-template predicate evaluated against the current data context ({.arg, .flag, .env, .var, .result}). When absent or truthy, the step runs normally. When falsy (empty, `false`, `0`, `no`), the step is skipped and `.result.<name>` is not set."
+        },
         "entry": {
           "description": "Rendered like a leaf `entry`; available as `.entry` when this step's command runs."
         },

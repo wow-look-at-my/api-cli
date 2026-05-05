@@ -243,6 +243,39 @@ then use it), **joins** (fetch two resources and combine fields), and
   ```
   Pass `--quiet` / `-q` anywhere on the command line to suppress this.
 
+### Conditional steps
+
+A step can include a `when` predicate — a Go template evaluated against the
+current data context (`{.arg, .flag, .env, .var, .result}`). When `when` is
+absent, the step runs unconditionally. When present and falsy (empty string,
+`"false"`, `"0"`, `"no"`), the step is skipped entirely and `.result.<name>`
+is not populated.
+
+This lets config authors skip expensive or irrelevant API calls based on input
+shape. Common pattern: if the user supplies a numeric ID use it directly;
+otherwise resolve it via a lookup step.
+
+```jsonc
+{
+  "name": "user-or-id",
+  "args": [{ "name": "id", "required": true }],
+  "steps": [
+    {
+      "name": "resolved",
+      // Only run the lookup when the arg is NOT a bare number.
+      "when": "{{not (regexMatch `^[0-9]+$` .arg.id)}}",
+      "command": "curl -fsSL https://api.example.com/users?username={{.arg.id}}"
+    }
+  ],
+  // Branch on whether the step ran.
+  "command": "curl -fsSL https://api.example.com/users/{{if .result.resolved}}{{(index .result.resolved 0).id}}{{else}}{{.arg.id}}{{end}}"
+}
+```
+
+A skipped step does not count toward the execution count and does not affect
+subsequent steps — they see `.result.<name>` as absent (nil), which is the
+zero value for `missingkey=zero` templates.
+
 ## Config schema
 
 A complete JSON Schema (draft-07) lives at [`api.schema.json`](./api.schema.json).
@@ -301,6 +334,7 @@ help.
 | Field     | Type              | Notes                                                              |
 |-----------|-------------------|--------------------------------------------------------------------|
 | `name`    | string (required) | Key under `.result`; accessed as `{{.result.name}}`.              |
+| `when`    | string            | Go-template predicate. When absent or truthy, the step runs normally. When falsy (empty string, `false`, `0`, `no`), the step is skipped and `.result.<name>` is not set. Same truthiness rules as `format.when`. |
 | `entry`   | any JSON object   | Rendered like a leaf `entry`; available as `.entry` when the step's command runs. |
 | `command` | string or `[]string` | Overrides the inherited command for this step only.             |
 | `cwd`     | string            | Overrides the inherited working directory for this step only. See [Working directory](#working-directory). |
