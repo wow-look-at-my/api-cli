@@ -47,7 +47,12 @@ func runMCP(transport string, cfg *Config) int {
 			return 2
 		}
 		fmt.Fprintf(execStderr, "MCP HTTP server listening on http://%s\n", addr)
-		h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, &mcp.StreamableHTTPOptions{DisableLocalhostProtection: true})
+		cop := &http.CrossOriginProtection{}
+		cop.AddInsecureBypassPattern("/")
+		h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, &mcp.StreamableHTTPOptions{
+			DisableLocalhostProtection: true,
+			CrossOriginProtection:      cop,
+		})
 		srv2 := &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 		if err := srv2.ListenAndServe(); err != nil {
 			fmt.Fprintln(execStderr, "error:", err)
