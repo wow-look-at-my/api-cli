@@ -85,7 +85,7 @@
           "type": "string",
           "minLength": 1,
           "pattern": "^[^\\s/]+$",
-          "not": { "enum": ["help", "completion", "__complete"] },
+          "not": { "enum": ["help", "completion", "__complete", "docs"] },
           "description": "Subcommand name. Cannot contain whitespace or slashes, and cannot be `help`, `completion`, or `__complete` (reserved by cobra)."
         },
         "description": {

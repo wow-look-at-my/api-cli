@@ -629,6 +629,23 @@ Two environment variables also affect formatting (lower precedence than flags):
 | `NO_FORMAT`       | Any non-empty value disables formatting (NO_COLOR-style).               |
 | `API_CLI_FORMAT`  | `raw` / `auto` / `always` — same semantics as `--format`.               |
 
+## Built-in subcommands
+
+The binary includes a `docs` subcommand that prints embedded documentation
+to stdout.  It works without a config file, so an LLM (or a human) can
+query it before writing any JSON.
+
+| Command                    | Output                                           |
+|----------------------------|--------------------------------------------------|
+| `api-cli docs`             | Full README (this file).                         |
+| `api-cli docs schema`      | The JSON Schema for config files.                |
+| `api-cli docs schema <key>`| A single definition or property from the schema. |
+| `api-cli docs example`     | The minimal reference config (`api.example.json`).|
+
+`docs schema <key>` looks up the key in the schema's `definitions` first,
+then top-level `properties`.  If the key is not found, it prints the list
+of available keys.
+
 ## Config discovery
 
 First hit wins:
