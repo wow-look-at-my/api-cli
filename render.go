@@ -43,6 +43,7 @@ func funcMap() template.FuncMap {
 	fm["spread"] = spread
 	fm["fileExists"] = fileExists
 	fm["dirExists"] = dirExists
+	fm["repeatkey"] = repeatKey
 	fm["tabwriter"] = tabwriter
 	fm["padRight"] = padRight
 	fm["padLeft"] = padLeft
@@ -243,6 +244,24 @@ func addQueryValue(values url.Values, key string, v any) error {
 		return fmt.Errorf("querystring: unsupported value type %T for key %q", v, key)
 	}
 	return nil
+}
+
+// repeatKey emits repeated query-string parameters for a single key, one per
+// slice element: repeatkey "tag" ["a","b"] → "tag=a&tag=b" (URL-encoded, no
+// leading "?"). Empty string elements are dropped. Nil/empty slices yield "".
+func repeatKey(key string, v any) (string, error) {
+	parts, err := toStringSlice(v)
+	if err != nil {
+		return "", fmt.Errorf("repeatkey: %w", err)
+	}
+	values := url.Values{}
+	for _, p := range parts {
+		if p != "" {
+			values.Add(key, p)
+		}
+	}
+	enc := values.Encode()
+	return enc, nil
 }
 
 // shellQuote wraps s in single quotes for safe interpolation into a POSIX sh
