@@ -37,6 +37,7 @@ covers most needs.
 | `align.go`                      | Width-aware aligner: `displayWidth`, `stripANSI`, `alignColumns`, `padRight`, `padLeft`. ANSI-stripping state machine + East Asian Width lookup. |
 | `mcp.go`                        | MCP (Model Context Protocol) server entrypoint: `findMcpFlag`, `runMCP` (stdio / http / sse transports), `buildMCPServer`. |
 | `mcp_exec.go`                   | MCP tool registration: turns each leaf in the config into an MCP tool, with arg/flag schema generation and execution wiring. |
+| `docs.go`                       | Built-in `docs` subcommand: embeds README, schema, and example via `go:embed`. Schema key lookup via `schemaLookup`. |
 | `api.schema.json`               | Authoritative JSON Schema for configs. Updated alongside `config.go`. |
 | `api.example.json`              | Reference config; covered by `TestExampleConfigMatchesSchema` and integration tests. |
 | `github.example.json`           | Real-world example: read-only GitHub REST API wrapper with table/detail views and `jq`-based response trimming. |

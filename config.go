@@ -264,6 +264,7 @@ var reservedCommandNames = map[string]bool{
 	"help":       true,
 	"completion": true,
 	"__complete": true,
+	"docs":       true,
 }
 
 var validFlagTypes = map[string]bool{

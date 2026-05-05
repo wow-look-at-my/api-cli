@@ -39,7 +39,7 @@ func run(argv []string, errOut io.Writer) int {
 	// Bare invocation (no args) and help flags fall through to cobra so the
 	// user sees --help output. --mcp mode always requires a config, so don't
 	// exempt help invocations when --mcp is present (that would panic).
-	if cfg == nil && (!isHelpInvocation(argv) || mcpTransport != "") {
+	if cfg == nil && ((!isHelpInvocation(argv) && !isDocsInvocation(argv)) || mcpTransport != "") {
 		fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.json in the current directory")
 		return 2
 	}
@@ -97,6 +97,7 @@ func newRoot(cfg *Config) *cobra.Command {
 			return c.Help()
 		}
 	}
+	root.AddCommand(docsCommand())
 	return root
 }
 
