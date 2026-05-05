@@ -483,6 +483,7 @@ that's where `toJson`, `upper`, `lower`, `trim`, `default`, `required`,
 | Helper        | Purpose                                                                                   |
 |---------------|-------------------------------------------------------------------------------------------|
 | `querystring` | Render a map as `?k=v&k=v` (URL-encoded). Empty values dropped. Empty map → empty string. |
+| `repeatkey`   | Emit repeated query params for one key over a slice: `repeatkey "tag" .arg.tags` → `tag=a&tag=b` (URL-encoded, no leading `?`). Empty elements dropped. Works with `[]string`, `[]int`, `[]any`. |
 | `shellquote`  | POSIX single-quote a value for safe interpolation into the string form of `command`.      |
 | `urlpath`     | URL-escape a single path segment.                                                         |
 | `spread`      | Argv-form only: splat a slice into multiple argv slots. The element `"{{spread .arg.files}}"` becomes N entries (zero for an empty slice). Works with `[]string`, `[]int`, `[]any`. |

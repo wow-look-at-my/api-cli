@@ -129,6 +129,53 @@ func TestQueryString_RejectsNonMap(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestRepeatKey_Empty(t *testing.T) {
+	got, err := repeatKey("k", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "", got)
+
+	got, err = repeatKey("k", []string{})
+	require.NoError(t, err)
+	assert.Equal(t, "", got)
+}
+
+func TestRepeatKey_StringSlice(t *testing.T) {
+	got, err := repeatKey("tag", []string{"a", "b", "c"})
+	require.NoError(t, err)
+	assert.Equal(t, "tag=a&tag=b&tag=c", got)
+}
+
+func TestRepeatKey_AnySlice(t *testing.T) {
+	got, err := repeatKey("id", []any{"1", 2, true})
+	require.NoError(t, err)
+	assert.Equal(t, "id=1&id=2&id=true", got)
+}
+
+func TestRepeatKey_SpecialChars(t *testing.T) {
+	got, err := repeatKey("tags[]", []string{"hello world", "a&b"})
+	require.NoError(t, err)
+	assert.Equal(t, "tags%5B%5D=hello+world&tags%5B%5D=a%26b", got)
+}
+
+func TestRepeatKey_DropsEmpty(t *testing.T) {
+	got, err := repeatKey("k", []string{"a", "", "b"})
+	require.NoError(t, err)
+	assert.Equal(t, "k=a&k=b", got)
+}
+
+func TestRepeatKey_RejectsNonSlice(t *testing.T) {
+	_, err := repeatKey("k", "hello")
+	assert.Error(t, err)
+}
+
+func TestRepeatKeyViaTemplate(t *testing.T) {
+	got, err := renderString(`{{repeatkey "tag" .tags}}`, map[string]any{
+		"tags": []string{"x", "y"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "tag=x&tag=y", got)
+}
+
 func TestShellQuote(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"hello", `'hello'`},
