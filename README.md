@@ -649,7 +649,7 @@ subcommand:
 | Flag              | Short | Default | Notes                                                                                     |
 |-------------------|-------|---------|-------------------------------------------------------------------------------------------|
 | `--config <path>` |       |         | Path to JSON config file. Falls back to `./api.json` if unset. See [Config discovery](#config-discovery). |
-| `--mcp <transport>` |     |         | Run the loaded config as an MCP (Model Context Protocol) server instead of a CLI. Values: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes an MCP tool. |
+| `--mcp <transport>` |     |         | Run the loaded config as an MCP (Model Context Protocol) server instead of a CLI. Values: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes an MCP tool. HTTP and SSE transports also expose `GET /health` → `{"status":"ok"}`. |
 | `--quiet`         | `-q`  | false   | Suppress the `N executions` line on stderr (printed when a leaf with `steps` runs more than one command). |
 | `--yes`           | `-y`  | false   | Skip `confirm` prompts. Without this, a non-tty stdin combined with a non-empty `confirm` is a hard error. |
 | `--no-format`     |       | false   | Disable output formatting. Equivalent to `--format=raw`.                                  |

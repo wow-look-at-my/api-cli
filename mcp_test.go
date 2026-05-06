@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/wow-look-at-my/testify/assert"
@@ -462,6 +464,49 @@ func TestMcpExecLeaf_Stdin(t *testing.T) {
 	out, isErr := mcpExecLeaf(leaf, map[string]any{})
 	assert.False(t, isErr)
 	assert.Equal(t, "hello\n", out)
+}
+
+// --- withHealthEndpoint ---
+
+func TestWithHealthEndpoint_OK(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	})
+	h := withHealthEndpoint(inner)
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+	assert.Equal(t, `{"status":"ok"}`, rec.Body.String())
+}
+
+func TestWithHealthEndpoint_MethodNotAllowed(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	})
+	h := withHealthEndpoint(inner)
+
+	req := httptest.NewRequest(http.MethodPost, "/health", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
+}
+
+func TestWithHealthEndpoint_PassesThrough(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	})
+	h := withHealthEndpoint(inner)
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusTeapot, rec.Code)
 }
 
 // --- runMCP (unit, invalid transport) ---

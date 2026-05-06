@@ -47,8 +47,8 @@ func runMCP(transport string, cfg *Config) int {
 			return 2
 		}
 		fmt.Fprintf(execStderr, "MCP HTTP server listening on http://%s\n", addr)
-		h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
-		srv2 := &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
+		mcpH := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
+		srv2 := &http.Server{Addr: addr, Handler: withHealthEndpoint(mcpH), ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 		if err := srv2.ListenAndServe(); err != nil {
 			fmt.Fprintln(execStderr, "error:", err)
 			return 1
@@ -61,8 +61,8 @@ func runMCP(transport string, cfg *Config) int {
 			return 2
 		}
 		fmt.Fprintf(execStderr, "MCP SSE server listening on http://%s\n", addr)
-		h := mcp.NewSSEHandler(func(*http.Request) *mcp.Server { return srv }, nil)
-		srv2 := &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
+		mcpH := mcp.NewSSEHandler(func(*http.Request) *mcp.Server { return srv }, nil)
+		srv2 := &http.Server{Addr: addr, Handler: withHealthEndpoint(mcpH), ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 		if err := srv2.ListenAndServe(); err != nil {
 			fmt.Fprintln(execStderr, "error:", err)
 			return 1
@@ -117,6 +117,23 @@ func buildMCPServer(cfg *Config) *mcp.Server {
 		)
 	}
 	return srv
+}
+
+// withHealthEndpoint wraps an HTTP handler to also serve GET /health.
+// The health response is always 200 OK with {"status":"ok"}.
+func withHealthEndpoint(h http.Handler) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"status":"ok"}`)
+	})
+	mux.Handle("/", h)
+	return mux
 }
 
 func collectMCPLeaves(cmds []Command, prefix string, vars map[string]any, cmd *Cmd, cwd, stdin string) []mcpLeaf {
