@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 func main() {
@@ -16,14 +16,12 @@ func main() {
 // run is the process body, split out of main for testability. argv is the
 // slice of arguments (os.Args[1:] in production); errOut receives diagnostics.
 func run(argv []string, errOut io.Writer) int {
-	cfgPath := findConfigFlag(argv)
+	cfgPath, mcpTransport, corsValue := preparseGlobalFlags(argv)
 	if cfgPath == "" {
 		if _, err := os.Stat("api.json"); err == nil {
 			cfgPath = "api.json"
 		}
 	}
-
-	mcpTransport := findMcpFlag(argv)
 
 	var cfg *Config
 	if cfgPath != "" {
@@ -45,7 +43,6 @@ func run(argv []string, errOut io.Writer) int {
 	}
 
 	if mcpTransport != "" {
-		corsValue := findCorsFlag(argv)
 		if corsValue == "" {
 			corsValue = "strict"
 		}
@@ -83,8 +80,9 @@ func newRoot(cfg *Config) *cobra.Command {
 		Short:        short,
 		SilenceUsage: true,
 	}
-	// Declared so --help lists them. Actual parsing of --config and --mcp
-	// happens before the cobra tree is built (findConfigFlag / findMcpFlag).
+	// Declared so --help lists them. In MCP mode we extract --config /
+	// --mcp / --cors from argv before the cobra tree exists; see
+	// preparseGlobalFlags.
 	root.PersistentFlags().String("config", "", "Path to JSON config file (default: ./api.json).")
 	root.PersistentFlags().String("mcp", "", `Run as MCP server. Value: "stdio", "http://<addr>", or "sse://<addr>".`)
 	root.PersistentFlags().String("cors", "strict", "CORS policy for MCP HTTP/SSE: disabled|permissive|strict|enabled.")
@@ -126,17 +124,24 @@ func isHelpInvocation(argv []string) bool {
 	return false
 }
 
-// findConfigFlag walks the argv looking for --config=<value> or --config <value>.
-// Returns the empty string if no value is found.
-func findConfigFlag(args []string) string {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if strings.HasPrefix(a, "--config=") {
-			return strings.TrimPrefix(a, "--config=")
-		}
-		if a == "--config" && i+1 < len(args) {
-			return args[i+1]
-		}
-	}
-	return ""
+// preparseGlobalFlags pulls --config, --mcp, and --cors out of argv before
+// the cobra tree exists. We can't ask cobra: root.Execute() runs the
+// command tree, and we need --mcp to decide whether to build that tree at
+// all. pflag's ContinueOnError + UnknownFlags whitelist lets us do a
+// single permissive parse that handles both --flag=value and --flag value
+// without choking on unknown subcommand args/flags.
+//
+// Each return value is the empty string when the flag is absent or
+// dangling.
+func preparseGlobalFlags(argv []string) (configPath, mcpTransport, corsValue string) {
+	fs := pflag.NewFlagSet("api-cli-preparse", pflag.ContinueOnError)
+	fs.ParseErrorsWhitelist.UnknownFlags = true
+	fs.SetOutput(io.Discard)
+
+	fs.StringVar(&configPath, "config", "", "")
+	fs.StringVar(&mcpTransport, "mcp", "", "")
+	fs.StringVar(&corsValue, "cors", "", "")
+
+	_ = fs.Parse(argv)
+	return
 }

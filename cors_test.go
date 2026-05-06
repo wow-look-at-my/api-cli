@@ -58,17 +58,6 @@ func TestCorsLevel_String(t *testing.T) {
 	assert.Equal(t, "unknown", CorsLevel(99).String())
 }
 
-// --- findCorsFlag ---
-
-func TestFindCorsFlag(t *testing.T) {
-	assert.Equal(t, "", findCorsFlag(nil))
-	assert.Equal(t, "", findCorsFlag([]string{"foo", "bar"}))
-	assert.Equal(t, "strict", findCorsFlag([]string{"--cors", "strict"}))
-	assert.Equal(t, "disabled", findCorsFlag([]string{"--cors=disabled"}))
-	assert.Equal(t, "", findCorsFlag([]string{"--cors"})) // dangling
-	assert.Equal(t, "permissive", findCorsFlag([]string{"--mcp=stdio", "--cors=permissive"}))
-}
-
 // --- sameOrigin / localhostOrigin ---
 
 func TestSameOrigin(t *testing.T) {

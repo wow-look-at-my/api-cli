@@ -11,20 +11,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// findMcpFlag walks argv looking for --mcp=<value> or --mcp <value>.
-func findMcpFlag(args []string) string {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if strings.HasPrefix(a, "--mcp=") {
-			return strings.TrimPrefix(a, "--mcp=")
-		}
-		if a == "--mcp" && i+1 < len(args) {
-			return args[i+1]
-		}
-	}
-	return ""
-}
-
 // runMCP starts an MCP server using the given transport spec.
 // transport is one of:
 //   - "stdio"              MCP over stdin/stdout

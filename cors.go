@@ -60,20 +60,6 @@ func parseCorsLevel(s string) (CorsLevel, error) {
 	return 0, fmt.Errorf("invalid --cors value %q; want one of: disabled, permissive, strict, enabled", s)
 }
 
-// findCorsFlag walks argv looking for --cors=<value> or --cors <value>.
-func findCorsFlag(args []string) string {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if strings.HasPrefix(a, "--cors=") {
-			return strings.TrimPrefix(a, "--cors=")
-		}
-		if a == "--cors" && i+1 < len(args) {
-			return args[i+1]
-		}
-	}
-	return ""
-}
-
 // withCORS wraps inner with CORS handling at the given level. listenAddr
 // is the server's bound TCP address (host:port); used to compute
 // same-origin matches for CorsStrict and CorsPermissive.

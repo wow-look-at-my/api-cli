@@ -159,6 +159,51 @@ func TestRegisterFlag_AllTypes(t *testing.T) {
 	require.NotNil(t, cmd.Flags().Lookup("untyped"))
 }
 
+func TestPreparseGlobalFlags(t *testing.T) {
+	cases := []struct {
+		name string
+		argv []string
+		cfg  string
+		mcp  string
+		cors string
+	}{
+		{"empty", nil, "", "", ""},
+		{"only positionals", []string{"foo", "bar"}, "", "", ""},
+
+		// --config
+		{"config space", []string{"--config", "path.json", "foo"}, "path.json", "", ""},
+		{"config equals", []string{"--config=path.json", "foo"}, "path.json", "", ""},
+		{"config after positional", []string{"foo", "--config", "path.json"}, "path.json", "", ""},
+		{"config dangling", []string{"--config"}, "", "", ""},
+
+		// --mcp
+		{"mcp space", []string{"--mcp", "stdio"}, "", "stdio", ""},
+		{"mcp equals", []string{"--mcp=stdio"}, "", "stdio", ""},
+		{"mcp sse", []string{"--mcp=sse://0.0.0.0:9000"}, "", "sse://0.0.0.0:9000", ""},
+		{"mcp dangling", []string{"--mcp"}, "", "", ""},
+		{"config + mcp", []string{"--config", "x", "--mcp", "http://localhost:8080"}, "x", "http://localhost:8080", ""},
+
+		// --cors
+		{"cors space", []string{"--cors", "strict"}, "", "", "strict"},
+		{"cors equals", []string{"--cors=disabled"}, "", "", "disabled"},
+		{"cors dangling", []string{"--cors"}, "", "", ""},
+		{"mcp + cors", []string{"--mcp=stdio", "--cors=permissive"}, "", "stdio", "permissive"},
+
+		// Tolerant of subcommand args / unknown flags / short flags.
+		{"unknown flag survives", []string{"--unknown", "v", "--mcp=stdio"}, "", "stdio", ""},
+		{"short flag survives", []string{"-q", "show", "--cors=strict", "42"}, "", "", "strict"},
+		{"combined short", []string{"-qy", "--mcp=stdio"}, "", "stdio", ""},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, mcp, cors := preparseGlobalFlags(tt.argv)
+			assert.Equal(t, tt.cfg, cfg, "config")
+			assert.Equal(t, tt.mcp, mcp, "mcp")
+			assert.Equal(t, tt.cors, cors, "cors")
+		})
+	}
+}
+
 func TestStringSlice_PreservesCommas(t *testing.T) {
 	// StringArrayVar (vs StringSliceVar) keeps commas inside values.
 	cfg := &Config{

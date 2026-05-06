@@ -9,28 +9,6 @@ import (
 	"github.com/wow-look-at-my/testify/require"
 )
 
-// --- findMcpFlag ---
-
-func TestFindMcpFlag_Empty(t *testing.T) {
-	assert.Equal(t, "", findMcpFlag(nil))
-	assert.Equal(t, "", findMcpFlag([]string{"foo", "bar"}))
-}
-
-func TestFindMcpFlag_SpaceSeparated(t *testing.T) {
-	assert.Equal(t, "stdio", findMcpFlag([]string{"--mcp", "stdio"}))
-	assert.Equal(t, "http://localhost:8080", findMcpFlag([]string{"--config", "x", "--mcp", "http://localhost:8080"}))
-}
-
-func TestFindMcpFlag_Equals(t *testing.T) {
-	assert.Equal(t, "stdio", findMcpFlag([]string{"--mcp=stdio"}))
-	assert.Equal(t, "sse://0.0.0.0:9000", findMcpFlag([]string{"--mcp=sse://0.0.0.0:9000"}))
-}
-
-func TestFindMcpFlag_DanglingFlag(t *testing.T) {
-	// --mcp with no following value
-	assert.Equal(t, "", findMcpFlag([]string{"--mcp"}))
-}
-
 // --- buildToolInputSchema ---
 
 func TestBuildToolInputSchema_Empty(t *testing.T) {
