@@ -160,6 +160,7 @@ func TestRegisterFlag_AllTypes(t *testing.T) {
 }
 
 func TestPreparseGlobalFlags(t *testing.T) {
+	// --cors defaults to "strict"; --config and --mcp default to "".
 	cases := []struct {
 		name string
 		argv []string
@@ -167,32 +168,32 @@ func TestPreparseGlobalFlags(t *testing.T) {
 		mcp  string
 		cors string
 	}{
-		{"empty", nil, "", "", ""},
-		{"only positionals", []string{"foo", "bar"}, "", "", ""},
+		{"empty", nil, "", "", "strict"},
+		{"only positionals", []string{"foo", "bar"}, "", "", "strict"},
 
 		// --config
-		{"config space", []string{"--config", "path.json", "foo"}, "path.json", "", ""},
-		{"config equals", []string{"--config=path.json", "foo"}, "path.json", "", ""},
-		{"config after positional", []string{"foo", "--config", "path.json"}, "path.json", "", ""},
-		{"config dangling", []string{"--config"}, "", "", ""},
+		{"config space", []string{"--config", "path.json", "foo"}, "path.json", "", "strict"},
+		{"config equals", []string{"--config=path.json", "foo"}, "path.json", "", "strict"},
+		{"config after positional", []string{"foo", "--config", "path.json"}, "path.json", "", "strict"},
+		{"config dangling", []string{"--config"}, "", "", "strict"},
 
 		// --mcp
-		{"mcp space", []string{"--mcp", "stdio"}, "", "stdio", ""},
-		{"mcp equals", []string{"--mcp=stdio"}, "", "stdio", ""},
-		{"mcp sse", []string{"--mcp=sse://0.0.0.0:9000"}, "", "sse://0.0.0.0:9000", ""},
-		{"mcp dangling", []string{"--mcp"}, "", "", ""},
-		{"config + mcp", []string{"--config", "x", "--mcp", "http://localhost:8080"}, "x", "http://localhost:8080", ""},
+		{"mcp space", []string{"--mcp", "stdio"}, "", "stdio", "strict"},
+		{"mcp equals", []string{"--mcp=stdio"}, "", "stdio", "strict"},
+		{"mcp sse", []string{"--mcp=sse://0.0.0.0:9000"}, "", "sse://0.0.0.0:9000", "strict"},
+		{"mcp dangling", []string{"--mcp"}, "", "", "strict"},
+		{"config + mcp", []string{"--config", "x", "--mcp", "http://localhost:8080"}, "x", "http://localhost:8080", "strict"},
 
 		// --cors
-		{"cors space", []string{"--cors", "strict"}, "", "", "strict"},
-		{"cors equals", []string{"--cors=disabled"}, "", "", "disabled"},
-		{"cors dangling", []string{"--cors"}, "", "", ""},
+		{"cors space", []string{"--cors", "disabled"}, "", "", "disabled"},
+		{"cors equals", []string{"--cors=enabled"}, "", "", "enabled"},
+		{"cors dangling", []string{"--cors"}, "", "", "strict"},
 		{"mcp + cors", []string{"--mcp=stdio", "--cors=permissive"}, "", "stdio", "permissive"},
 
 		// Tolerant of subcommand args / unknown flags / short flags.
-		{"unknown flag survives", []string{"--unknown", "v", "--mcp=stdio"}, "", "stdio", ""},
-		{"short flag survives", []string{"-q", "show", "--cors=strict", "42"}, "", "", "strict"},
-		{"combined short", []string{"-qy", "--mcp=stdio"}, "", "stdio", ""},
+		{"unknown flag survives", []string{"--unknown", "v", "--mcp=stdio"}, "", "stdio", "strict"},
+		{"short flag survives", []string{"-q", "show", "--cors=disabled", "42"}, "", "", "disabled"},
+		{"combined short", []string{"-qy", "--mcp=stdio"}, "", "stdio", "strict"},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {

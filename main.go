@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 func main() {
@@ -43,9 +42,6 @@ func run(argv []string, errOut io.Writer) int {
 	}
 
 	if mcpTransport != "" {
-		if corsValue == "" {
-			corsValue = "strict"
-		}
 		corsLevel, err := parseCorsLevel(corsValue)
 		if err != nil {
 			fmt.Fprintln(errOut, "error:", err)
@@ -124,24 +120,27 @@ func isHelpInvocation(argv []string) bool {
 	return false
 }
 
-// preparseGlobalFlags pulls --config, --mcp, and --cors out of argv before
-// the cobra tree exists. We can't ask cobra: root.Execute() runs the
-// command tree, and we need --mcp to decide whether to build that tree at
-// all. pflag's ContinueOnError + UnknownFlags whitelist lets us do a
-// single permissive parse that handles both --flag=value and --flag value
-// without choking on unknown subcommand args/flags.
+// preparseGlobalFlags pulls --config, --mcp, and --cors out of argv with
+// a throwaway cobra.Command. We need these values before the real root
+// tree exists, because --mcp decides whether we even build that tree.
+// FParseErrWhitelist.UnknownFlags lets the parse skip over subcommand
+// flags it doesn't know about; positional args (subcommand names) fall
+// through harmlessly.
 //
-// Each return value is the empty string when the flag is absent or
-// dangling.
+// The defaults registered here mirror those on the real root in newRoot.
 func preparseGlobalFlags(argv []string) (configPath, mcpTransport, corsValue string) {
-	fs := pflag.NewFlagSet("api-cli-preparse", pflag.ContinueOnError)
-	fs.ParseErrorsWhitelist.UnknownFlags = true
-	fs.SetOutput(io.Discard)
+	pre := &cobra.Command{SilenceErrors: true, SilenceUsage: true}
+	pre.SetOut(io.Discard)
+	pre.SetErr(io.Discard)
+	pre.FParseErrWhitelist.UnknownFlags = true
 
-	fs.StringVar(&configPath, "config", "", "")
-	fs.StringVar(&mcpTransport, "mcp", "", "")
-	fs.StringVar(&corsValue, "cors", "", "")
+	pre.Flags().String("config", "", "")
+	pre.Flags().String("mcp", "", "")
+	pre.Flags().String("cors", "strict", "")
 
-	_ = fs.Parse(argv)
+	_ = pre.ParseFlags(argv)
+	configPath, _ = pre.Flags().GetString("config")
+	mcpTransport, _ = pre.Flags().GetString("mcp")
+	corsValue, _ = pre.Flags().GetString("cors")
 	return
 }
