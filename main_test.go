@@ -159,6 +159,52 @@ func TestRegisterFlag_AllTypes(t *testing.T) {
 	require.NotNil(t, cmd.Flags().Lookup("untyped"))
 }
 
+func TestPreparseGlobalFlags(t *testing.T) {
+	// --cors defaults to "strict"; --config and --mcp default to "".
+	cases := []struct {
+		name string
+		argv []string
+		cfg  string
+		mcp  string
+		cors string
+	}{
+		{"empty", nil, "", "", "strict"},
+		{"only positionals", []string{"foo", "bar"}, "", "", "strict"},
+
+		// --config
+		{"config space", []string{"--config", "path.json", "foo"}, "path.json", "", "strict"},
+		{"config equals", []string{"--config=path.json", "foo"}, "path.json", "", "strict"},
+		{"config after positional", []string{"foo", "--config", "path.json"}, "path.json", "", "strict"},
+		{"config dangling", []string{"--config"}, "", "", "strict"},
+
+		// --mcp
+		{"mcp space", []string{"--mcp", "stdio"}, "", "stdio", "strict"},
+		{"mcp equals", []string{"--mcp=stdio"}, "", "stdio", "strict"},
+		{"mcp sse", []string{"--mcp=sse://0.0.0.0:9000"}, "", "sse://0.0.0.0:9000", "strict"},
+		{"mcp dangling", []string{"--mcp"}, "", "", "strict"},
+		{"config + mcp", []string{"--config", "x", "--mcp", "http://localhost:8080"}, "x", "http://localhost:8080", "strict"},
+
+		// --cors
+		{"cors space", []string{"--cors", "disabled"}, "", "", "disabled"},
+		{"cors equals", []string{"--cors=enabled"}, "", "", "enabled"},
+		{"cors dangling", []string{"--cors"}, "", "", "strict"},
+		{"mcp + cors", []string{"--mcp=stdio", "--cors=permissive"}, "", "stdio", "permissive"},
+
+		// Tolerant of subcommand args / unknown flags / short flags.
+		{"unknown flag survives", []string{"--unknown", "v", "--mcp=stdio"}, "", "stdio", "strict"},
+		{"short flag survives", []string{"-q", "show", "--cors=disabled", "42"}, "", "", "disabled"},
+		{"combined short", []string{"-qy", "--mcp=stdio"}, "", "stdio", "strict"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, mcp, cors := preparseGlobalFlags(tt.argv)
+			assert.Equal(t, tt.cfg, cfg, "config")
+			assert.Equal(t, tt.mcp, mcp, "mcp")
+			assert.Equal(t, tt.cors, cors, "cors")
+		})
+	}
+}
+
 func TestStringSlice_PreservesCommas(t *testing.T) {
 	// StringArrayVar (vs StringSliceVar) keeps commas inside values.
 	cfg := &Config{

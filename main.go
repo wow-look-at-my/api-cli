@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -16,14 +15,12 @@ func main() {
 // run is the process body, split out of main for testability. argv is the
 // slice of arguments (os.Args[1:] in production); errOut receives diagnostics.
 func run(argv []string, errOut io.Writer) int {
-	cfgPath := findConfigFlag(argv)
+	cfgPath, mcpTransport, corsValue := preparseGlobalFlags(argv)
 	if cfgPath == "" {
 		if _, err := os.Stat("api.json"); err == nil {
 			cfgPath = "api.json"
 		}
 	}
-
-	mcpTransport := findMcpFlag(argv)
 
 	var cfg *Config
 	if cfgPath != "" {
@@ -45,7 +42,12 @@ func run(argv []string, errOut io.Writer) int {
 	}
 
 	if mcpTransport != "" {
-		return runMCP(mcpTransport, cfg)
+		corsLevel, err := parseCorsLevel(corsValue)
+		if err != nil {
+			fmt.Fprintln(errOut, "error:", err)
+			return 2
+		}
+		return runMCP(mcpTransport, cfg, corsLevel)
 	}
 
 	root := newRoot(cfg)
@@ -74,10 +76,12 @@ func newRoot(cfg *Config) *cobra.Command {
 		Short:        short,
 		SilenceUsage: true,
 	}
-	// Declared so --help lists them. Actual parsing of --config and --mcp
-	// happens before the cobra tree is built (findConfigFlag / findMcpFlag).
+	// Declared so --help lists them. In MCP mode we extract --config /
+	// --mcp / --cors from argv before the cobra tree exists; see
+	// preparseGlobalFlags.
 	root.PersistentFlags().String("config", "", "Path to JSON config file (default: ./api.json).")
 	root.PersistentFlags().String("mcp", "", `Run as MCP server. Value: "stdio", "http://<addr>", or "sse://<addr>".`)
+	root.PersistentFlags().String("cors", "strict", "CORS policy for MCP HTTP/SSE: disabled|permissive|strict|enabled.")
 	root.PersistentFlags().BoolP("quiet", "q", false, "Suppress execution count on stderr.")
 	root.PersistentFlags().BoolP("yes", "y", false, "Skip confirmation prompts.")
 	root.PersistentFlags().Bool("no-format", false, "Disable output formatting (synonym for --format=raw).")
@@ -116,17 +120,27 @@ func isHelpInvocation(argv []string) bool {
 	return false
 }
 
-// findConfigFlag walks the argv looking for --config=<value> or --config <value>.
-// Returns the empty string if no value is found.
-func findConfigFlag(args []string) string {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if strings.HasPrefix(a, "--config=") {
-			return strings.TrimPrefix(a, "--config=")
-		}
-		if a == "--config" && i+1 < len(args) {
-			return args[i+1]
-		}
-	}
-	return ""
+// preparseGlobalFlags pulls --config, --mcp, and --cors out of argv with
+// a throwaway cobra.Command. We need these values before the real root
+// tree exists, because --mcp decides whether we even build that tree.
+// FParseErrWhitelist.UnknownFlags lets the parse skip over subcommand
+// flags it doesn't know about; positional args (subcommand names) fall
+// through harmlessly.
+//
+// The defaults registered here mirror those on the real root in newRoot.
+func preparseGlobalFlags(argv []string) (configPath, mcpTransport, corsValue string) {
+	pre := &cobra.Command{SilenceErrors: true, SilenceUsage: true}
+	pre.SetOut(io.Discard)
+	pre.SetErr(io.Discard)
+	pre.FParseErrWhitelist.UnknownFlags = true
+
+	pre.Flags().String("config", "", "")
+	pre.Flags().String("mcp", "", "")
+	pre.Flags().String("cors", "strict", "")
+
+	_ = pre.ParseFlags(argv)
+	configPath, _ = pre.Flags().GetString("config")
+	mcpTransport, _ = pre.Flags().GetString("mcp")
+	corsValue, _ = pre.Flags().GetString("cors")
+	return
 }

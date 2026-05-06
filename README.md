@@ -650,6 +650,7 @@ subcommand:
 |-------------------|-------|---------|-------------------------------------------------------------------------------------------|
 | `--config <path>` |       |         | Path to JSON config file. Falls back to `./api.json` if unset. See [Config discovery](#config-discovery). |
 | `--mcp <transport>` |     |         | Run the loaded config as an MCP (Model Context Protocol) server instead of a CLI. Values: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes an MCP tool. HTTP and SSE transports also expose `GET /health` → `{"status":"ok"}`. |
+| `--cors <level>`  |       | `strict` | CORS policy for the MCP HTTP/SSE server. See [CORS levels](#cors-levels). Ignored for `--mcp=stdio`. |
 | `--quiet`         | `-q`  | false   | Suppress the `N executions` line on stderr (printed when a leaf with `steps` runs more than one command). |
 | `--yes`           | `-y`  | false   | Skip `confirm` prompts. Without this, a non-tty stdin combined with a non-empty `confirm` is a hard error. |
 | `--no-format`     |       | false   | Disable output formatting. Equivalent to `--format=raw`.                                  |
@@ -662,6 +663,35 @@ Two environment variables also affect formatting (lower precedence than flags):
 |-------------------|-------------------------------------------------------------------------|
 | `NO_FORMAT`       | Any non-empty value disables formatting (NO_COLOR-style).               |
 | `API_CLI_FORMAT`  | `raw` / `auto` / `always` — same semantics as `--format`.               |
+
+## CORS levels
+
+When the MCP server runs over HTTP or SSE, `--cors <level>` controls
+which browser origins may talk to it. The flag is irrelevant for
+`--mcp=stdio` (no HTTP server, no browser). The default is `strict`.
+
+| Level         | Origin allowlist                                                 | Preflight (OPTIONS)                            | When to use                                                  |
+|---------------|------------------------------------------------------------------|------------------------------------------------|--------------------------------------------------------------|
+| `disabled`    | Any origin (`Access-Control-Allow-Origin: *`).                   | Always 204; allows the requested method/headers.| Local prototyping. No protection — do not expose publicly.   |
+| `permissive`  | `localhost`, `127.0.0.1`, `[::1]` (any port) plus same-origin.    | 204 if origin matches; 403 otherwise.          | Browser dev tools running locally hitting a remote server.   |
+| `strict`      | Only same-origin (the server's bound `host:port`). When bound to `0.0.0.0`/`::`, any host with the matching port. | 204 if origin matches; 403 otherwise. | Default. Sensible for a single-tenant server with one frontend. |
+| `enabled`     | Nothing — `Access-Control-Allow-Origin` is never sent.            | Always 403.                                    | Locked down. Only non-browser clients (curl, MCP SDKs) work. |
+
+Aliases (case-insensitive): `disabled`/`off`/`none`/`open`,
+`permissive`/`lax`/`loose`/`localhost`,
+`strict`/`same-origin`/`sameorigin`,
+`enabled`/`on`/`locked`/`lockdown`/`block`.
+
+Notes:
+
+- The wrapper only adds (or omits) response headers — it does not block
+  the underlying request. With `strict` and a foreign origin, the MCP
+  handler still runs; the browser refuses to expose the response because
+  no `Access-Control-Allow-Origin` header is present.
+- Requests with no `Origin` header (e.g. `curl`, server-to-server, AI
+  tools) always pass through. CORS only matters for browsers.
+- `Access-Control-Allow-Credentials` is not emitted at any level.
+  Cookies and HTTP auth on cross-origin requests are not supported.
 
 ## Built-in subcommands
 

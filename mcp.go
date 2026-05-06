@@ -11,26 +11,15 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// findMcpFlag walks argv looking for --mcp=<value> or --mcp <value>.
-func findMcpFlag(args []string) string {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if strings.HasPrefix(a, "--mcp=") {
-			return strings.TrimPrefix(a, "--mcp=")
-		}
-		if a == "--mcp" && i+1 < len(args) {
-			return args[i+1]
-		}
-	}
-	return ""
-}
-
 // runMCP starts an MCP server using the given transport spec.
 // transport is one of:
 //   - "stdio"              MCP over stdin/stdout
 //   - "http://host:port"   MCP over Streamable HTTP (POST /)
 //   - "sse://host:port"    MCP over HTTP+SSE (GET /sse + POST /message)
-func runMCP(transport string, cfg *Config) int {
+//
+// corsLevel controls cross-origin handling for the HTTP and SSE
+// transports; it is ignored for stdio.
+func runMCP(transport string, cfg *Config, corsLevel CorsLevel) int {
 	srv := buildMCPServer(cfg)
 	ctx := context.Background()
 	switch {
@@ -46,9 +35,10 @@ func runMCP(transport string, cfg *Config) int {
 			fmt.Fprintln(execStderr, "error: --mcp http:// requires an address, e.g. http://127.0.0.1:8080")
 			return 2
 		}
-		fmt.Fprintf(execStderr, "MCP HTTP server listening on http://%s\n", addr)
+		fmt.Fprintf(execStderr, "MCP HTTP server listening on http://%s (cors=%s)\n", addr, corsLevel)
 		mcpH := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
-		srv2 := &http.Server{Addr: addr, Handler: withHealthEndpoint(mcpH), ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
+		handler := withCORS(withHealthEndpoint(mcpH), corsLevel, addr)
+		srv2 := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 		if err := srv2.ListenAndServe(); err != nil {
 			fmt.Fprintln(execStderr, "error:", err)
 			return 1
@@ -60,9 +50,10 @@ func runMCP(transport string, cfg *Config) int {
 			fmt.Fprintln(execStderr, "error: --mcp sse:// requires an address, e.g. sse://127.0.0.1:8080")
 			return 2
 		}
-		fmt.Fprintf(execStderr, "MCP SSE server listening on http://%s\n", addr)
+		fmt.Fprintf(execStderr, "MCP SSE server listening on http://%s (cors=%s)\n", addr, corsLevel)
 		mcpH := mcp.NewSSEHandler(func(*http.Request) *mcp.Server { return srv }, nil)
-		srv2 := &http.Server{Addr: addr, Handler: withHealthEndpoint(mcpH), ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
+		handler := withCORS(withHealthEndpoint(mcpH), corsLevel, addr)
+		srv2 := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 		if err := srv2.ListenAndServe(); err != nil {
 			fmt.Fprintln(execStderr, "error:", err)
 			return 1
