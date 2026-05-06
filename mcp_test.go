@@ -513,7 +513,7 @@ func TestWithHealthEndpoint_PassesThrough(t *testing.T) {
 
 func TestRunMCP_InvalidTransport(t *testing.T) {
 	cfg := &Config{Name: "t", Command: &Cmd{Shell: true, Template: "true"}, Commands: []Command{{Name: "x"}}}
-	code := runMCP("ftp://invalid", cfg)
+	code := runMCP("ftp://invalid", cfg, CorsStrict)
 	assert.Equal(t, 2, code)
 }
 

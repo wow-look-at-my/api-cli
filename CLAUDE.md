@@ -28,7 +28,7 @@ covers most needs.
 
 | File                            | Role                                                        |
 |---------------------------------|-------------------------------------------------------------|
-| `main.go`                       | Entrypoint, root cobra command, persistent flags, config loading. Pre-cobra parsing of `--config` and `--mcp`. |
+| `main.go`                       | Entrypoint, root cobra command, persistent flags, config loading. Pre-cobra parsing of `--config`, `--mcp`, `--cors`. |
 | `config.go`                     | Schema structs (`Config`, `Command`, `Step`, `Arg`, `Flag`, `Cmd`, `Format`, `View`, `FormatRef`); `Load`; `validate`. |
 | `build.go`                      | Walks `Config.Commands` building `cobra.Command` tree. Threads inheritance for `command`/`cwd`/`stdin`/`confirm`/`format`. Implements `runLeaf`. |
 | `exec.go`                       | `doExec` (streaming), `captureExec` (steps), `captureExecCapped` (format path with 32 MiB cap), `parseResult`, `cappedTee`. |
@@ -37,6 +37,7 @@ covers most needs.
 | `align.go`                      | Width-aware aligner: `displayWidth`, `stripANSI`, `alignColumns`, `padRight`, `padLeft`. ANSI-stripping state machine + East Asian Width lookup. |
 | `mcp.go`                        | MCP (Model Context Protocol) server entrypoint: `findMcpFlag`, `runMCP` (stdio / http / sse transports), `buildMCPServer`. |
 | `mcp_exec.go`                   | MCP tool registration: turns each leaf in the config into an MCP tool, with arg/flag schema generation and execution wiring. |
+| `cors.go`                       | CORS middleware for the MCP HTTP/SSE server. `CorsLevel` (disabled/permissive/strict/enabled), `parseCorsLevel`, `findCorsFlag`, `withCORS`, origin matchers. |
 | `docs.go`                       | Built-in `docs` subcommand: embeds README, schema, and example via `go:embed`. Schema key lookup via `schemaLookup`. |
 | `api.schema.json`               | Authoritative JSON Schema for configs. Updated alongside `config.go`. |
 | `api.example.json`              | Reference config; covered by `TestExampleConfigMatchesSchema` and integration tests. |

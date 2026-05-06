@@ -45,7 +45,16 @@ func run(argv []string, errOut io.Writer) int {
 	}
 
 	if mcpTransport != "" {
-		return runMCP(mcpTransport, cfg)
+		corsValue := findCorsFlag(argv)
+		if corsValue == "" {
+			corsValue = "strict"
+		}
+		corsLevel, err := parseCorsLevel(corsValue)
+		if err != nil {
+			fmt.Fprintln(errOut, "error:", err)
+			return 2
+		}
+		return runMCP(mcpTransport, cfg, corsLevel)
 	}
 
 	root := newRoot(cfg)
@@ -78,6 +87,7 @@ func newRoot(cfg *Config) *cobra.Command {
 	// happens before the cobra tree is built (findConfigFlag / findMcpFlag).
 	root.PersistentFlags().String("config", "", "Path to JSON config file (default: ./api.json).")
 	root.PersistentFlags().String("mcp", "", `Run as MCP server. Value: "stdio", "http://<addr>", or "sse://<addr>".`)
+	root.PersistentFlags().String("cors", "strict", "CORS policy for MCP HTTP/SSE: disabled|permissive|strict|enabled.")
 	root.PersistentFlags().BoolP("quiet", "q", false, "Suppress execution count on stderr.")
 	root.PersistentFlags().BoolP("yes", "y", false, "Skip confirmation prompts.")
 	root.PersistentFlags().Bool("no-format", false, "Disable output formatting (synonym for --format=raw).")
