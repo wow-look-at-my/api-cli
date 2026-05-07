@@ -73,7 +73,11 @@ func withCORS(inner http.Handler, level CorsLevel, listenAddr string) http.Handl
 		}
 		if origin != "" && allowed {
 			setCorsAllowOrigin(w, level, origin)
-			w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
+			if level == CorsDisabled {
+				w.Header().Set("Access-Control-Expose-Headers", "*")
+			} else {
+				w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
+			}
 		}
 		inner.ServeHTTP(w, r)
 	})
@@ -109,7 +113,13 @@ func handleCorsPreflight(w http.ResponseWriter, r *http.Request, level CorsLevel
 // Vary header when the value is origin-specific.
 func setCorsAllowOrigin(w http.ResponseWriter, level CorsLevel, origin string) {
 	if level == CorsDisabled {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		} else {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Add("Vary", "Origin")
 		return
 	}
 	if origin == "" {
