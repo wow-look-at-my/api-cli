@@ -123,13 +123,15 @@ func okHandler() http.Handler {
 
 // CorsDisabled — wide open ----------------------------------------------------
 
-func TestWithCORS_Disabled_AnyOriginGetsWildcard(t *testing.T) {
+func TestWithCORS_Disabled_AnyOriginEchoed(t *testing.T) {
 	h := withCORS(okHandler(), CorsDisabled, "127.0.0.1:8080")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, newCorsRequest(http.MethodGet, "http://evil.example.com"))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "*", rec.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "http://evil.example.com", rec.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "true", rec.Header().Get("Access-Control-Allow-Credentials"))
+	assert.Equal(t, "*", rec.Header().Get("Access-Control-Expose-Headers"))
 }
 
 func TestWithCORS_Disabled_PreflightAlwaysSucceeds(t *testing.T) {
@@ -142,7 +144,8 @@ func TestWithCORS_Disabled_PreflightAlwaysSucceeds(t *testing.T) {
 
 	assert.False(t, called, "preflight should not reach inner")
 	assert.Equal(t, http.StatusNoContent, rec.Code)
-	assert.Equal(t, "*", rec.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "http://anywhere.example.com", rec.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "true", rec.Header().Get("Access-Control-Allow-Credentials"))
 	assert.Equal(t, "POST", rec.Header().Get("Access-Control-Allow-Methods"))
 	assert.Equal(t, "*", rec.Header().Get("Access-Control-Allow-Headers"))
 }
