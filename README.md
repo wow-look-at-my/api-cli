@@ -799,6 +799,30 @@ filter (overrides `vars.filter` on that one subtree) because its table view
 parses the repo name out of that field — a useful demonstration of how
 `vars` cascade.
 
+## Cloudflare Workers
+
+A TypeScript port lives in `workers/` and serves the same configs as HTTP
+endpoints on Cloudflare Workers. Instead of shelling out to `curl`, it
+parses rendered command templates and executes them via `fetch()`.
+
+```sh
+cd workers
+npm install
+npm test        # 242 tests (Workers pool + comparative)
+npm run dev     # local dev server
+```
+
+CLI invocations map to HTTP requests:
+
+| CLI                              | HTTP                          |
+|----------------------------------|-------------------------------|
+| `api-cli users get 1`            | `GET /users/get/1`            |
+| `api-cli users list --limit 3`   | `GET /users/list?limit=3`     |
+| `api-cli user-posts Bret`        | `GET /user-posts/Bret`        |
+
+See `workers/README.md` for the full API mapping, deployment, and
+architecture details.
+
 ## Development
 
 ```sh
