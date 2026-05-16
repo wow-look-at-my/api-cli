@@ -61,7 +61,6 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 	}
 
 	if node.Passthrough {
-		cmd.DisableFlagParsing = true
 		cmd.Args = cobra.ArbitraryArgs
 	} else {
 		if total := len(node.Args); total > 0 {
@@ -285,11 +284,12 @@ func gatherFlags(cmd *cobra.Command, node Command, data any) (map[string]any, er
 	return out, nil
 }
 
-// passthroughParse extracts known flags from a raw arg list without cobra's
-// help. Everything not recognized as a known flag (or its value) goes into
-// rest. Flags are matched with either one or two leading dashes (to support
-// tools like CUDA's cicc that use single-dash long flags). A flag's short
-// alias is also recognized.
+// passthroughParse extracts known flags from a raw arg list. Everything not
+// recognized as a known flag (or its value) goes into rest. Flags are matched
+// with either one or two leading dashes (to support tools like CUDA's cicc
+// that use single-dash long flags). A flag's short alias is also recognized.
+// A bare "--" in the args is forwarded into rest verbatim (along with
+// everything after it), since it may be meaningful to the wrapped command.
 func passthroughParse(rawArgs []string, flags []Flag) (flagMap map[string]any, rest []string) {
 	type flagDef struct {
 		name string

@@ -94,7 +94,7 @@
         },
         "passthrough": {
           "type": "boolean",
-          "description": "When true, cobra's flag parsing is disabled and only explicitly declared flags are extracted from the raw arg list. Everything else (unknown flags + positional args) is collected into `.rest` (a `[]string`). Use `{{spread .rest}}` to forward them. Mutually exclusive with `args`."
+          "description": "When true, the command accepts arbitrary positional args (pass them after `--` in the wrapper script). Only explicitly declared flags are extracted; everything else is collected into `.rest` (a `[]string`). Use `{{spread .rest}}` to forward them. Mutually exclusive with `args`."
         },
         "args": {
           "type": "array",

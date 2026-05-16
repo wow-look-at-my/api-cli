@@ -545,7 +545,7 @@ func TestIntegration_Passthrough_Basic(t *testing.T) {
 			Command: &Cmd{Shell: true, Template: `printf 'out=%s verbose=%s rest=%s' {{.flag.o}} {{.flag.verbose}} '{{join " " .rest}}'`},
 		}},
 	}
-	code, out := execCmd(t, cfg, "wrap", "--verbose", "--unknown-flag", "-o", "/tmp/out.ptx", "positional.ii")
+	code, out := execCmd(t, cfg, "wrap", "--", "--verbose", "--unknown-flag", "-o", "/tmp/out.ptx", "positional.ii")
 	assert.Equal(t, 0, code)
 	assert.Equal(t, "out=/tmp/out.ptx verbose=true rest=--unknown-flag positional.ii", out)
 }
@@ -562,7 +562,7 @@ func TestIntegration_Passthrough_SpreadRest(t *testing.T) {
 			Command: &Cmd{Argv: []string{"echo", "{{spread .rest}}"}},
 		}},
 	}
-	code, out := execCmd(t, cfg, "wrap", "--some-flag", "val", "-o", "/tmp/out", "input.ii")
+	code, out := execCmd(t, cfg, "wrap", "--", "--some-flag", "val", "-o", "/tmp/out", "input.ii")
 	assert.Equal(t, 0, code)
 	assert.Equal(t, "--some-flag val input.ii\n", out)
 }
@@ -579,7 +579,7 @@ func TestIntegration_Passthrough_EqualsForm(t *testing.T) {
 			Command: &Cmd{Shell: true, Template: `printf '%s' {{.flag.gen_c_file_name}}`},
 		}},
 	}
-	code, out := execCmd(t, cfg, "wrap", "--gen_c_file_name=/tmp/foo.c", "--other")
+	code, out := execCmd(t, cfg, "wrap", "--", "--gen_c_file_name=/tmp/foo.c", "--other")
 	assert.Equal(t, 0, code)
 	assert.Equal(t, "/tmp/foo.c", out)
 }
@@ -596,7 +596,7 @@ func TestIntegration_Passthrough_SingleDashLongFlag(t *testing.T) {
 			Command: &Cmd{Shell: true, Template: `printf '%s' {{.flag.arch}}`},
 		}},
 	}
-	code, out := execCmd(t, cfg, "wrap", "-arch", "compute_80", "-m64")
+	code, out := execCmd(t, cfg, "wrap", "--", "-arch", "compute_80", "-m64")
 	assert.Equal(t, 0, code)
 	assert.Equal(t, "compute_80", out)
 }
@@ -617,7 +617,7 @@ func TestIntegration_Passthrough_Steps(t *testing.T) {
 			Command: &Cmd{Shell: true, Template: `printf 'input=%s output=%s' {{.result.found}} {{.flag.o}}`},
 		}},
 	}
-	code, out := execCmd(t, cfg, "wrap", "--c++17", "-o", "/tmp/out.ptx", "/tmp/input.cpp1.ii")
+	code, out := execCmd(t, cfg, "wrap", "--", "--c++17", "-o", "/tmp/out.ptx", "/tmp/input.cpp1.ii")
 	assert.Equal(t, 0, code)
 	assert.Equal(t, "input=/tmp/input.cpp1.ii output=/tmp/out.ptx", out)
 }
@@ -634,7 +634,7 @@ func TestIntegration_Passthrough_StringSlice(t *testing.T) {
 			Command: &Cmd{Shell: true, Template: `printf '%s' '{{join "," .flag.include}}'`},
 		}},
 	}
-	code, out := execCmd(t, cfg, "wrap", "--include", "a.h", "--include", "b.h", "other")
+	code, out := execCmd(t, cfg, "wrap", "--", "--include", "a.h", "--include", "b.h", "other")
 	assert.Equal(t, 0, code)
 	assert.Equal(t, "a.h,b.h", out)
 }

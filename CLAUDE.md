@@ -77,12 +77,12 @@ covers most needs.
    `bytes.Buffer`. The TTY check (`stdoutTTY`) type-asserts to
    `*os.File` — non-files are treated as non-TTYs, which is exactly
    what the test path wants.
-7. **Passthrough mode.** When `Command.Passthrough` is true, cobra's
-   flag parsing is fully disabled (`DisableFlagParsing = true`).
-   `passthroughParse` in `build.go` does its own extraction of declared
-   flags from the raw args; everything else lands in `.rest` (a
-   `[]string`). The template data context gets `.rest` alongside the
-   usual `.flag`, `.env`, `.var`, `.result`, `.entry` namespaces.
+7. **Passthrough mode.** When `Command.Passthrough` is true, the cobra
+   command accepts arbitrary args (everything after `--` in the wrapper
+   script). `passthroughParse` in `build.go` extracts declared flags
+   from the raw args; everything else lands in `.rest` (a `[]string`).
+   The template data context gets `.rest` alongside the usual `.flag`,
+   `.env`, `.var`, `.result`, `.entry` namespaces.
 
 ## Adding a new field to the config
 

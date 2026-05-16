@@ -217,14 +217,15 @@ wrapper:
 
 ```sh
 # Wrapper script at /usr/local/cuda/nvvm/bin/cicc:
-exec api-cli --config /path/to/cicc-cache.json exec "$@"
+exec api-cli --config /path/to/cicc-cache.json exec -- "$@"
 # All unknown flags (--c++17, -arch compute_80, etc.) pass through in .rest
 ```
 
 ## Passthrough mode
 
-When a leaf sets `"passthrough": true`, api-cli disables cobra's flag parsing for
-that command and instead performs its own minimal extraction:
+When a leaf sets `"passthrough": true`, the command accepts arbitrary positional
+args (everything after `--` in the wrapper script) and performs its own minimal
+flag extraction:
 
 1. Only explicitly declared `flags` are recognized (matched with one or two leading
    dashes, e.g. both `-o` and `--o` work).
