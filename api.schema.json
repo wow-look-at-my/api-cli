@@ -92,6 +92,10 @@
           "type": "string",
           "description": "Shown in help."
         },
+        "passthrough": {
+          "type": "boolean",
+          "description": "When true, cobra's flag parsing is disabled and only explicitly declared flags are extracted from the raw arg list. Everything else (unknown flags + positional args) is collected into `.rest` (a `[]string`). Use `{{spread .rest}}` to forward them. Mutually exclusive with `args`."
+        },
         "args": {
           "type": "array",
           "description": "Positional args. Required args must precede optional ones; a variadic arg must be last.",

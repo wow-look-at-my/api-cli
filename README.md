@@ -191,6 +191,64 @@ wrapper:
 ./tar-safe extract out.tar.gz                 # --to defaults to "out"
 ```
 
+### Example: passthrough wrapper (wrapping commands with unknown flags)
+
+```jsonc
+{
+  "name": "cicc-cache",
+  "commands": [{
+    "name": "exec",
+    "passthrough": true,
+    "flags": [
+      { "name": "o", "type": "string" },
+      { "name": "gen_c_file_name", "type": "string" },
+      { "name": "gen_device_file_name", "type": "string" }
+    ],
+    "steps": [
+      {
+        "name": "hash",
+        "command": "md5sum {{.rest | filterSuffix \".cpp1.ii\" | first}} | cut -d' ' -f1"
+      }
+    ],
+    "command": "/usr/local/cuda/nvvm/bin/cicc.real {{spread .rest}}"
+  }]
+}
+```
+
+```sh
+# Wrapper script at /usr/local/cuda/nvvm/bin/cicc:
+exec api-cli --config /path/to/cicc-cache.json exec "$@"
+# All unknown flags (--c++17, -arch compute_80, etc.) pass through in .rest
+```
+
+## Passthrough mode
+
+When a leaf sets `"passthrough": true`, api-cli disables cobra's flag parsing for
+that command and instead performs its own minimal extraction:
+
+1. Only explicitly declared `flags` are recognized (matched with one or two leading
+   dashes, e.g. both `-o` and `--o` work).
+2. Everything else — unknown flags, their values, and bare positional args — is
+   collected into `.rest` (a `[]string`).
+3. Extracted flags do NOT appear in `.rest`, so `{{spread .rest}}` reconstructs the
+   original command line minus the captured flags.
+
+`.rest` is available in all template contexts: steps, entry, and the leaf command.
+Use `{{spread .rest}}` in argv-form commands or shell-form commands to forward
+the remaining arguments.
+
+**Constraints:**
+- `passthrough` is mutually exclusive with `args` (use `.rest` instead).
+- Only allowed on leaf nodes (no subcommands).
+- Flags support `=` syntax (`--flag=value`, `-flag=value`) and next-arg syntax
+  (`--flag value`, `-flag value`).
+- `bool` flags consume no value argument (unless `--flag=true` form is used).
+- `string-slice` flags accumulate across multiple occurrences.
+
+**Helpers for filtering `.rest`:**
+- `filterSuffix` — keep elements ending with a suffix: `{{.rest | filterSuffix ".ii" | first}}`
+- `filterPrefix` — keep elements starting with a prefix: `{{.rest | filterPrefix "--"}}`
+
 ## Result reuse across calls
 
 A leaf command can declare `steps` — pre-execution stages that run before the
@@ -313,7 +371,8 @@ up automatically.
 |---------------|-------------------|-------------------------------------------------------------------|
 | `name`        | string (required) | Subcommand name. Cannot be `help`, `completion`, `__complete`.    |
 | `description` | string            | Shown in help.                                                    |
-| `args`        | `[]Arg`           | Positional args.                                                  |
+| `passthrough` | bool              | Leaf-only. Disables flag parsing; only declared flags are extracted from the raw args. Everything else goes into `.rest`. See [Passthrough mode](#passthrough-mode). |
+| `args`        | `[]Arg`           | Positional args. Mutually exclusive with `passthrough`.           |
 | `flags`       | `[]Flag`          | Named flags.                                                      |
 | `vars`        | `map<string,any>` | Merged with ancestor vars (this node wins on collision).          |
 | `command`     | string or `[]string` | Overrides inherited command for this subtree.                  |
@@ -528,6 +587,8 @@ that's where `toJson`, `upper`, `lower`, `trim`, `default`, `required`,
 | `padLeft`     | `padLeft 8 s` — pad on the left to display width 8.                                       |
 | `displayWidth`| Returns the visual column count of a string (ANSI escapes contribute 0; CJK wide runes contribute 2). |
 | `stripANSI`   | Returns a string with all ANSI escape sequences removed.                                  |
+| `filterSuffix`| Filter a `[]string` to elements ending with a suffix: `{{.rest \| filterSuffix ".ii"}}`.  |
+| `filterPrefix`| Filter a `[]string` to elements starting with a prefix: `{{.rest \| filterPrefix "--"}}`. |
 
 Example:
 
