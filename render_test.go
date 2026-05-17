@@ -377,3 +377,25 @@ func TestToRows_NilAndExoticShapes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"x\t1", "y\tz"}, rows)
 }
+
+func TestFilterSuffix(t *testing.T) {
+	data := map[string]any{
+		"items": []string{"foo.cpp1.ii", "bar.o", "baz.cpp1.ii", "other"},
+	}
+	got, err := renderString(`{{.items | filterSuffix ".cpp1.ii" | join ","}}`, data)
+	require.NoError(t, err)
+	assert.Equal(t, "foo.cpp1.ii,baz.cpp1.ii", got)
+
+	got, err = renderString(`{{.items | filterSuffix ".cpp1.ii" | first}}`, data)
+	require.NoError(t, err)
+	assert.Equal(t, "foo.cpp1.ii", got)
+}
+
+func TestFilterPrefix(t *testing.T) {
+	data := map[string]any{
+		"items": []string{"--flag1", "pos", "--flag2", "-short"},
+	}
+	got, err := renderString(`{{.items | filterPrefix "--" | join ","}}`, data)
+	require.NoError(t, err)
+	assert.Equal(t, "--flag1,--flag2", got)
+}

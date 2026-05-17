@@ -53,6 +53,7 @@ type Config struct {
 type Command struct {
 	Name          string          `json:"name"`
 	Description   string          `json:"description,omitempty"`
+	Passthrough   bool            `json:"passthrough,omitempty"`
 	Args          []Arg           `json:"args,omitempty"`
 	Flags         []Flag          `json:"flags,omitempty"`
 	Vars          map[string]any  `json:"vars,omitempty"`
@@ -379,6 +380,13 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		return fmt.Errorf("%s: duplicate command name %q", where, c.Name)
 	}
 	siblings[c.Name] = true
+
+	if c.Passthrough && len(c.Args) > 0 {
+		return fmt.Errorf("%s: passthrough commands cannot declare args (use .rest instead)", where)
+	}
+	if c.Passthrough && len(c.Commands) > 0 {
+		return fmt.Errorf("%s: passthrough is only allowed on leaves", where)
+	}
 
 	argNames := map[string]bool{}
 	requiredAfterOptional := false
