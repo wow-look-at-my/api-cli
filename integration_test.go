@@ -567,6 +567,43 @@ func TestIntegration_Passthrough_SpreadRest(t *testing.T) {
 	assert.Equal(t, "--some-flag val input.ii\n", out)
 }
 
+func TestIntegration_Passthrough_SpreadRest_ShellForm(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:        "wrap",
+			Passthrough: true,
+			Flags: []Flag{
+				{Name: "o", Type: "string"},
+			},
+			Command: &Cmd{Shell: true, Template: `printf '%s\n' {{spread .rest}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "wrap", "--", "--c++17", "-arch", "compute_80", "--generate-code=arch=compute_75,code=[compute_75]", "-o", "/tmp/output.ptx", "/tmp/input.cpp1.ii")
+	assert.Equal(t, 0, code)
+	assert.Equal(t, "--c++17\n-arch\ncompute_80\n--generate-code=arch=compute_75,code=[compute_75]\n/tmp/input.cpp1.ii\n", out)
+}
+
+func TestIntegration_Passthrough_SpreadRest_ShellStep(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:        "wrap",
+			Passthrough: true,
+			Flags: []Flag{
+				{Name: "o", Type: "string"},
+			},
+			Steps: []Step{{
+				Name:    "run",
+				Command: &Cmd{Shell: true, Template: `printf '%s\n' {{spread .rest}}`},
+			}},
+			Command: &Cmd{Shell: true, Template: `echo done`},
+		}},
+	}
+	code, _ := execCmd(t, cfg, "wrap", "--", "--flag=[val]", "-o", "/tmp/out", "file.txt")
+	assert.Equal(t, 0, code)
+}
+
 func TestIntegration_Passthrough_EqualsForm(t *testing.T) {
 	cfg := &Config{
 		Name: "t",

@@ -26,11 +26,12 @@ func envMap() map[string]string {
 	return out
 }
 
-// spreadSentinel is a NUL byte used to mark and delimit the output of the
-// `spread` helper. NUL never appears in valid argv text, so it's safe to use
-// as an in-band signal that a rendered argv element should be split into
-// multiple slots.
+// spreadSentinel is a NUL byte used to mark the start and delimit elements of
+// the `spread` helper's output. spreadEndSentinel (SOH, 0x01) marks the end.
+// Neither byte appears in valid argv text, so the pair safely brackets a
+// spread region inside a rendered template string.
 const spreadSentinel = "\x00"
+const spreadEndSentinel = "\x01"
 
 // funcMap is the template function set available in every rendered template.
 // It combines sprig's text FuncMap (a broad library of string/list/math/json
@@ -129,9 +130,9 @@ func spread(v any) (string, error) {
 		return "", fmt.Errorf("spread: %w", err)
 	}
 	if len(parts) == 0 {
-		return spreadSentinel, nil
+		return spreadSentinel + spreadEndSentinel, nil
 	}
-	return spreadSentinel + strings.Join(parts, spreadSentinel), nil
+	return spreadSentinel + strings.Join(parts, spreadSentinel) + spreadEndSentinel, nil
 }
 
 func toStringSlice(v any) ([]string, error) {
