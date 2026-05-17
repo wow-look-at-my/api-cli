@@ -294,6 +294,25 @@ func TestIntegration_StepNonJSONResultIsString(t *testing.T) {
 	assert.Equal(t, "not-json\n", out)
 }
 
+func TestIntegration_StepHexHashStaysString(t *testing.T) {
+	// A step whose stdout looks like a hex hash (starts with digits, contains
+	// a-f) must be stored as a string, not partially parsed as a JSON number.
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{{
+				Name:    "hash",
+				Command: &Cmd{Shell: true, Template: `printf '3bf86b7e484a4c355f49b3e4c9d8a17c'`},
+			}},
+			Command: &Cmd{Shell: true, Template: `echo {{.result.hash}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "run")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "3bf86b7e484a4c355f49b3e4c9d8a17c\n", out)
+}
+
 func TestIntegration_StepFailurePropagatesExitCode(t *testing.T) {
 	cfg := &Config{
 		Name: "t",
