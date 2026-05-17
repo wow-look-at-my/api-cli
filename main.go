@@ -84,6 +84,8 @@ func newRoot(cfg *Config) *cobra.Command {
 	root.PersistentFlags().String("cors", "strict", "CORS policy for MCP HTTP/SSE: disabled|permissive|strict|enabled.")
 	root.PersistentFlags().BoolP("quiet", "q", false, "Suppress execution count on stderr.")
 	root.PersistentFlags().BoolP("yes", "y", false, "Skip confirmation prompts.")
+	root.PersistentFlags().Bool("verbose", false, "Show commands being executed, exit codes, and condition results on stderr.")
+	root.PersistentFlags().Bool("debug", false, "Show full execution details on stderr (implies --verbose).")
 	root.PersistentFlags().Bool("no-format", false, "Disable output formatting (synonym for --format=raw).")
 	root.PersistentFlags().String("format", "auto", "Output formatting mode: raw|auto|always.")
 	root.PersistentFlags().String("view", "", "Select a named view from the active format (overrides selectors).")

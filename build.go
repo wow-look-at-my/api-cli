@@ -430,6 +430,13 @@ func passthroughParse(rawArgs []string, flags []Flag) (flagMap map[string]any, r
 // unless the step itself sets `stdin`. The stdin template is rendered fresh
 // per execution against the current data context.
 func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, cwdTmpl, stdinTmpl, confirmTmpl string, formatRef *FormatRef, formats map[string]*Format) error {
+	verboseMode, _ = c.Root().PersistentFlags().GetBool("verbose")
+	dbg, _ := c.Root().PersistentFlags().GetBool("debug")
+	if dbg {
+		debugMode = true
+		verboseMode = true
+	}
+
 	var data map[string]any
 
 	if node.Passthrough {
@@ -486,12 +493,16 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		}
 	}
 
+	logVerbose("leaf %q: starting", node.Name)
+	logDebug("leaf %q: data context: %s", node.Name, jsonCompact(data))
+
 	for i, p := range node.Preconditions {
 		msg, perr := renderString(p, data)
 		if perr != nil {
 			return fmt.Errorf("precondition[%d]: %w", i, perr)
 		}
 		msg = strings.TrimSpace(msg)
+		logVerbose("precondition[%d]: %q => %q (pass=%v)", i, p, msg, msg == "")
 		if msg != "" {
 			fmt.Fprintln(execStderr, "error:", msg)
 			exitCode = 1
@@ -505,6 +516,7 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 			return fmt.Errorf("render confirm: %w", cerr)
 		}
 		msg = strings.TrimSpace(msg)
+		logDebug("confirm: template=%q rendered=%q", confirmTmpl, msg)
 		if msg != "" {
 			yes, _ := c.Root().PersistentFlags().GetBool("yes")
 			if !yes {
@@ -538,7 +550,9 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 			if err != nil {
 				return fmt.Errorf("step %q: render when: %w", step.Name, err)
 			}
+			logVerbose("step %q: when %q => %q (truthy=%v)", step.Name, step.When, whenOut, isTruthy(whenOut))
 			if !isTruthy(whenOut) {
+				logVerbose("step %q: skipped", step.Name)
 				continue
 			}
 		}
@@ -559,6 +573,7 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 			stepEntry = map[string]any{}
 		}
 		data["entry"] = stepEntry
+		logDebug("step %q: entry: %s", step.Name, jsonCompact(stepEntry))
 
 		stepCwdTmpl := cwdTmpl
 		if step.Cwd != "" {
@@ -578,8 +593,11 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 			return fmt.Errorf("step %q: render stdin: %w", step.Name, err)
 		}
 
+		logVerbose("step %q: executing", step.Name)
 		out, code := captureExec(stepCmd, stepCwd, stepStdin, data)
 		executions++
+		logVerbose("step %q: exit code %d", step.Name, code)
+		logDebugBlock(fmt.Sprintf("step %q: stdout", step.Name), out)
 		if code != 0 {
 			exitCode = code
 			reportExecutions(c, executions)
@@ -596,6 +614,7 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		entry = map[string]any{}
 	}
 	data["entry"] = entry
+	logDebug("leaf %q: entry: %s", node.Name, jsonCompact(entry))
 
 	if !cmdTmpl.Defined() {
 		return fmt.Errorf("no command available to run")
@@ -611,11 +630,14 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		return fmt.Errorf("render stdin: %w", err)
 	}
 
+	logVerbose("leaf %q: executing command", node.Name)
 	exitCode, err = execLeaf(c, cmdTmpl, leafCwd, leafStdin, data, formatRef, formats)
 	if err != nil {
 		return err
 	}
+	logVerbose("leaf %q: exit code %d", node.Name, exitCode)
 	executions++
+	logVerbose("leaf %q: %d executions total", node.Name, executions)
 	reportExecutions(c, executions)
 	return nil
 }
