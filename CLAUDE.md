@@ -44,6 +44,7 @@ covers most needs.
 | `api.example.json`              | Reference config; covered by `TestExampleConfigMatchesSchema` and integration tests. |
 | `github.example.json`           | Real-world example: read-only GitHub REST API wrapper with table/detail views and `jq`-based response trimming. |
 | `*_test.go`                     | Unit + integration tests (testify). `integration_test.go` has the `execCmd` / `execCmdFull` helpers used by most tests. |
+| `workers/`                      | Cloudflare Workers TypeScript port. Parses same JSON configs; serves leaves as HTTP endpoints via `fetch()`. See `workers/README.md`. |
 
 ## Key design rules
 
@@ -136,6 +137,23 @@ covers most needs.
   always `go-toolchain`.**
 - Coverage minimum is 80% (toolchain enforces).
 - CI: `.github/workflows/ci.yml` uses `wow-look-at-my/go-toolchain@v1`.
+
+## Cloudflare Workers port (`workers/`)
+
+A TypeScript reimplementation that runs on Cloudflare Workers. Parses the
+same JSON config and serves each leaf command as an HTTP endpoint via
+`fetch()` instead of shelling out to `curl`.
+
+Key differences from the Go CLI:
+- Commands are parsed as curl invocations and converted to `fetch()` calls.
+- `cwd`, `stdin`, `confirm`, `fileExists`, `dirExists` are unavailable.
+- Pipe commands (e.g. `| jq ...`) are stripped; use format views instead.
+- Go `text/template` engine reimplemented in TypeScript with sprig subset.
+
+Files: see `workers/README.md` for architecture and API mapping details.
+
+Tests: `cd workers && npm test` runs 242 tests (188 Workers pool + 54
+comparative tests against the Go example configs).
 
 ## Conventions
 
