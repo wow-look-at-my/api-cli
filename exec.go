@@ -194,6 +194,12 @@ func parseResult(s string) any {
 	if err := dec.Decode(&v); err != nil {
 		return s
 	}
+	if dec.More() {
+		return s
+	}
+	if strings.TrimSpace(s[dec.InputOffset():]) != "" {
+		return s
+	}
 	return normalizeNumbers(v)
 }
 
