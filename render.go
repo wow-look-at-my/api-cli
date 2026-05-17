@@ -49,6 +49,8 @@ func funcMap() template.FuncMap {
 	fm["padLeft"] = padLeft
 	fm["displayWidth"] = displayWidth
 	fm["stripANSI"] = stripANSI
+	fm["filterSuffix"] = filterSuffix
+	fm["filterPrefix"] = filterPrefix
 	return fm
 }
 
@@ -173,6 +175,37 @@ func dirExists(path string) bool {
 		return false
 	}
 	return info.IsDir()
+}
+
+// filterSuffix returns elements from list that end with the given suffix.
+// Used in passthrough mode to locate specific files: {{.rest | filterSuffix ".cpp1.ii" | first}}.
+func filterSuffix(suffix string, list any) ([]string, error) {
+	items, err := toStringSlice(list)
+	if err != nil {
+		return nil, fmt.Errorf("filterSuffix: %w", err)
+	}
+	var out []string
+	for _, s := range items {
+		if strings.HasSuffix(s, suffix) {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+// filterPrefix returns elements from list that start with the given prefix.
+func filterPrefix(prefix string, list any) ([]string, error) {
+	items, err := toStringSlice(list)
+	if err != nil {
+		return nil, fmt.Errorf("filterPrefix: %w", err)
+	}
+	var out []string
+	for _, s := range items {
+		if strings.HasPrefix(s, prefix) {
+			out = append(out, s)
+		}
+	}
+	return out, nil
 }
 
 // queryString renders a map (or struct) of parameters as a URL-encoded query

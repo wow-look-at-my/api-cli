@@ -30,9 +30,9 @@ covers most needs.
 |---------------------------------|-------------------------------------------------------------|
 | `main.go`                       | Entrypoint, root cobra command, persistent flags, config loading. `preparseGlobalFlags` extracts `--config` / `--mcp` / `--cors` from argv via a tolerant pflag parse before the cobra tree is built. |
 | `config.go`                     | Schema structs (`Config`, `Command`, `Step`, `Arg`, `Flag`, `Cmd`, `Format`, `View`, `FormatRef`); `Load`; `validate`. |
-| `build.go`                      | Walks `Config.Commands` building `cobra.Command` tree. Threads inheritance for `command`/`cwd`/`stdin`/`confirm`/`format`. Implements `runLeaf`. |
+| `build.go`                      | Walks `Config.Commands` building `cobra.Command` tree. Threads inheritance for `command`/`cwd`/`stdin`/`confirm`/`format`. Implements `runLeaf` and `passthroughParse`. |
 | `exec.go`                       | `doExec` (streaming), `captureExec` (steps), `captureExecCapped` (format path with 32 MiB cap), `parseResult`, `cappedTee`. |
-| `render.go`                     | `renderString`, `renderEntry`, `funcMap` with sprig + custom helpers (`querystring`, `shellquote`, `urlpath`, `spread`, `fileExists`, `dirExists`, `tabwriter`, `padRight`, `padLeft`, `displayWidth`, `stripANSI`). |
+| `render.go`                     | `renderString`, `renderEntry`, `funcMap` with sprig + custom helpers (`querystring`, `shellquote`, `urlpath`, `spread`, `fileExists`, `dirExists`, `tabwriter`, `padRight`, `padLeft`, `displayWidth`, `stripANSI`, `filterSuffix`, `filterPrefix`). |
 | `format.go`                     | Format-system runtime: `resolveFormat`, `userVerdictFromFlags`, `stdoutTTY`, `formatContext`, `renderPredicate` (cached), `parseInput`, `selectView`, `execLeaf`, `runFormatted`. |
 | `align.go`                      | Width-aware aligner: `displayWidth`, `stripANSI`, `alignColumns`, `padRight`, `padLeft`. ANSI-stripping state machine + East Asian Width lookup. |
 | `mcp.go`                        | MCP (Model Context Protocol) server entrypoint: `runMCP` (stdio / http / sse transports), `buildMCPServer`. |
@@ -77,6 +77,12 @@ covers most needs.
    `bytes.Buffer`. The TTY check (`stdoutTTY`) type-asserts to
    `*os.File` — non-files are treated as non-TTYs, which is exactly
    what the test path wants.
+7. **Passthrough mode.** When `Command.Passthrough` is true, the cobra
+   command accepts arbitrary args (everything after `--` in the wrapper
+   script). `passthroughParse` in `build.go` extracts declared flags
+   from the raw args; everything else lands in `.rest` (a `[]string`).
+   The template data context gets `.rest` alongside the usual `.flag`,
+   `.env`, `.var`, `.result`, `.entry` namespaces.
 
 ## Adding a new field to the config
 

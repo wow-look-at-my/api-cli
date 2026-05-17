@@ -60,21 +60,25 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 		SilenceUsage: true,
 	}
 
-	if total := len(node.Args); total > 0 {
-		switch {
-		case hasVariadic:
-			cmd.Args = cobra.MinimumNArgs(requiredArgs)
-		case requiredArgs == total:
-			cmd.Args = cobra.ExactArgs(total)
-		default:
-			cmd.Args = cobra.RangeArgs(requiredArgs, total)
+	if node.Passthrough {
+		cmd.Args = cobra.ArbitraryArgs
+	} else {
+		if total := len(node.Args); total > 0 {
+			switch {
+			case hasVariadic:
+				cmd.Args = cobra.MinimumNArgs(requiredArgs)
+			case requiredArgs == total:
+				cmd.Args = cobra.ExactArgs(total)
+			default:
+				cmd.Args = cobra.RangeArgs(requiredArgs, total)
+			}
 		}
-	}
 
-	for _, f := range node.Flags {
-		registerFlag(cmd, f)
+		for _, f := range node.Flags {
+			registerFlag(cmd, f)
+		}
+		registerConflicts(cmd, node.Flags)
 	}
-	registerConflicts(cmd, node.Flags)
 
 	// Resolve effective vars, command, cwd, stdin, and format for this subtree.
 	effectiveVars := mergeVars(inheritedVars, node.Vars)
@@ -280,6 +284,126 @@ func gatherFlags(cmd *cobra.Command, node Command, data any) (map[string]any, er
 	return out, nil
 }
 
+// passthroughParse extracts known flags from a raw arg list. Everything not
+// recognized as a known flag (or its value) goes into rest. Flags are matched
+// with either one or two leading dashes (to support tools like CUDA's cicc
+// that use single-dash long flags). A flag's short alias is also recognized.
+// A bare "--" in the args is forwarded into rest verbatim (along with
+// everything after it), since it may be meaningful to the wrapped command.
+func passthroughParse(rawArgs []string, flags []Flag) (flagMap map[string]any, rest []string) {
+	type flagDef struct {
+		name string
+		typ  string
+	}
+	lookup := map[string]*flagDef{}
+	for i := range flags {
+		f := &flags[i]
+		typ := f.Type
+		if typ == "" {
+			typ = "string"
+		}
+		def := &flagDef{name: f.Name, typ: typ}
+		lookup[f.Name] = def
+		if f.Short != "" {
+			lookup[f.Short] = def
+		}
+	}
+
+	flagMap = make(map[string]any, len(flags))
+	for _, f := range flags {
+		typ := f.Type
+		if typ == "" {
+			typ = "string"
+		}
+		switch typ {
+		case "string":
+			def, _ := f.Default.(string)
+			flagMap[f.Name] = def
+		case "bool":
+			def, _ := f.Default.(bool)
+			flagMap[f.Name] = def
+		case "int":
+			var def int
+			switch v := f.Default.(type) {
+			case float64:
+				def = int(v)
+			case int:
+				def = v
+			}
+			flagMap[f.Name] = def
+		case "string-slice":
+			flagMap[f.Name] = []string{}
+		}
+	}
+
+	rest = make([]string, 0, len(rawArgs))
+	for i := 0; i < len(rawArgs); i++ {
+		arg := rawArgs[i]
+
+		if arg == "--" {
+			rest = append(rest, rawArgs[i:]...)
+			break
+		}
+
+		if !strings.HasPrefix(arg, "-") {
+			rest = append(rest, arg)
+			continue
+		}
+
+		stripped := strings.TrimLeft(arg, "-")
+		name := stripped
+		value := ""
+		hasEquals := false
+		if idx := strings.IndexByte(stripped, '='); idx >= 0 {
+			name = stripped[:idx]
+			value = stripped[idx+1:]
+			hasEquals = true
+		}
+
+		def, known := lookup[name]
+		if !known {
+			rest = append(rest, arg)
+			continue
+		}
+
+		switch def.typ {
+		case "bool":
+			if hasEquals {
+				flagMap[def.name] = value == "true" || value == "1" || value == "yes"
+			} else {
+				flagMap[def.name] = true
+			}
+		case "int":
+			var raw string
+			if hasEquals {
+				raw = value
+			} else if i+1 < len(rawArgs) {
+				i++
+				raw = rawArgs[i]
+			}
+			n, _ := strconv.Atoi(raw)
+			flagMap[def.name] = n
+		case "string-slice":
+			var raw string
+			if hasEquals {
+				raw = value
+			} else if i+1 < len(rawArgs) {
+				i++
+				raw = rawArgs[i]
+			}
+			flagMap[def.name] = append(flagMap[def.name].([]string), raw)
+		default:
+			if hasEquals {
+				flagMap[def.name] = value
+			} else if i+1 < len(rawArgs) {
+				i++
+				flagMap[def.name] = rawArgs[i]
+			}
+		}
+	}
+	return flagMap, rest
+}
+
 // runLeaf is the per-invocation body for every leaf.
 //
 // Stages:
@@ -306,36 +430,60 @@ func gatherFlags(cmd *cobra.Command, node Command, data any) (map[string]any, er
 // unless the step itself sets `stdin`. The stdin template is rendered fresh
 // per execution against the current data context.
 func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, cwdTmpl, stdinTmpl, confirmTmpl string, formatRef *FormatRef, formats map[string]*Format) error {
-	argMap, err := gatherArgs(node, args)
-	if err != nil {
-		return err
-	}
+	var data map[string]any
 
-	// Templated flag defaults render against {arg, env, var} — not other
-	// flags — so build vars from that partial context first, then resolve
-	// flags, then complete the data map.
-	envM := envMap()
-	preFlagData := map[string]any{
-		"arg":  argMap,
-		"flag": map[string]any{},
-		"env":  envM,
-	}
-	renderedVars, err := renderVars(vars, preFlagData)
-	if err != nil {
-		return fmt.Errorf("render vars: %w", err)
-	}
-	preFlagData["var"] = renderedVars
+	if node.Passthrough {
+		flagMap, rest := passthroughParse(args, node.Flags)
+		envM := envMap()
+		preData := map[string]any{
+			"arg":  map[string]any{},
+			"flag": map[string]any{},
+			"env":  envM,
+			"rest": rest,
+		}
+		renderedVars, err := renderVars(vars, preData)
+		if err != nil {
+			return fmt.Errorf("render vars: %w", err)
+		}
+		data = map[string]any{
+			"arg":  map[string]any{},
+			"flag": flagMap,
+			"env":  envM,
+			"var":  renderedVars,
+			"rest": rest,
+		}
+	} else {
+		argMap, err := gatherArgs(node, args)
+		if err != nil {
+			return err
+		}
 
-	flagMap, err := gatherFlags(c, node, preFlagData)
-	if err != nil {
-		return err
-	}
+		// Templated flag defaults render against {arg, env, var} — not other
+		// flags — so build vars from that partial context first, then resolve
+		// flags, then complete the data map.
+		envM := envMap()
+		preFlagData := map[string]any{
+			"arg":  argMap,
+			"flag": map[string]any{},
+			"env":  envM,
+		}
+		renderedVars, err := renderVars(vars, preFlagData)
+		if err != nil {
+			return fmt.Errorf("render vars: %w", err)
+		}
+		preFlagData["var"] = renderedVars
 
-	data := map[string]any{
-		"arg":  argMap,
-		"flag": flagMap,
-		"env":  envM,
-		"var":  renderedVars,
+		flagMap, err := gatherFlags(c, node, preFlagData)
+		if err != nil {
+			return err
+		}
+
+		data = map[string]any{
+			"arg":  argMap,
+			"flag": flagMap,
+			"env":  envM,
+			"var":  renderedVars,
+		}
 	}
 
 	for i, p := range node.Preconditions {
