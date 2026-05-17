@@ -290,6 +290,14 @@ func TestSpread_RejectsNonSlice(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestSpread_RejectsSentinelBytes(t *testing.T) {
+	_, err := spread([]string{"ok", "bad\x00val"})
+	assert.Error(t, err)
+
+	_, err = spread([]string{"bad\x01val"})
+	assert.Error(t, err)
+}
+
 func TestSpreadViaTemplate(t *testing.T) {
 	got, err := renderString(`{{spread .x}}`, map[string]any{"x": []string{"a", "b"}})
 	require.NoError(t, err)
