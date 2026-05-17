@@ -180,4 +180,65 @@ func TestExpandSpreadForShell(t *testing.T) {
 	}
 }
 
+func TestParseResult_HexHash(t *testing.T) {
+	// MD5/SHA hashes that start with digits must stay strings, not be
+	// partially parsed as JSON numbers.
+	hashes := []string{
+		"3bf86b7e484a4c355f49b3e4c9d8a17c",
+		"d41d8cd98f00b204e9800998ecf8427e",
+		"9f86d081884c7d659a2feaa0c55ad015",
+		"0e123456789abcdef0123456789abcdef",
+	}
+	for _, h := range hashes {
+		got := parseResult(h)
+		assert.Equal(t, h, got, "hash %q must stay a string", h)
+	}
+}
+
+func TestParseResult_ValidJSON(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  any
+	}{
+		{"object", `{"a":1}`, map[string]any{"a": int64(1)}},
+		{"array", `[1,2]`, []any{int64(1), int64(2)}},
+		{"bare int", `42`, int64(42)},
+		{"bare float", `3.14`, float64(3.14)},
+		{"bare string", `"hello"`, "hello"},
+		{"bare true", `true`, true},
+		{"bare false", `false`, false},
+		{"null", `null`, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, parseResult(tc.input))
+		})
+	}
+}
+
+func TestParseResult_NonJSON(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+	}{
+		{"plain text", "hello world"},
+		{"hash starting with digit", "3bf86b7e484a4c355f49b3e4c9d8a17c"},
+		{"number followed by text", "42abc"},
+		{"scientific notation prefix", "0e123abcdef"},
+		{"number with trailing brace", "42}"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := parseResult(tc.input)
+			assert.Equal(t, tc.input, got)
+		})
+	}
+}
+
+func TestParseResult_TrailingWhitespace(t *testing.T) {
+	got := parseResult("  42  \n")
+	assert.Equal(t, int64(42), got)
+}
+
 var _ io.Reader = (*bytes.Buffer)(nil) // keep io import live if unused by coverage
