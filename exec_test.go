@@ -132,4 +132,52 @@ func TestDoExec_ArgvSpreadOnlyEmptyFails(t *testing.T) {
 	assert.Equal(t, 1, code)
 }
 
+func TestDoExec_ShellSpread(t *testing.T) {
+	out, _ := captureExecStreams(t)
+	c := &Cmd{Shell: true, Template: `printf '%s\n' {{spread .rest}}`}
+	data := map[string]any{"rest": []string{"--foo=bar,[baz]", "-x", "file.txt"}}
+	code := doExec(c, "", "", data)
+	require.Equal(t, 0, code)
+	assert.Equal(t, "--foo=bar,[baz]\n-x\nfile.txt\n", out.String())
+}
+
+func TestDoExec_ShellSpreadEmpty(t *testing.T) {
+	out, _ := captureExecStreams(t)
+	c := &Cmd{Shell: true, Template: `echo prefix{{spread .rest}} suffix`}
+	data := map[string]any{"rest": []string{}}
+	code := doExec(c, "", "", data)
+	require.Equal(t, 0, code)
+	assert.Equal(t, "prefix suffix\n", out.String())
+}
+
+func TestDoExec_ShellSpreadSingleQuotesInArg(t *testing.T) {
+	out, _ := captureExecStreams(t)
+	c := &Cmd{Shell: true, Template: `printf '%s\n' {{spread .rest}}`}
+	data := map[string]any{"rest": []string{"it's", "a 'test'"}}
+	code := doExec(c, "", "", data)
+	require.Equal(t, 0, code)
+	assert.Equal(t, "it's\na 'test'\n", out.String())
+}
+
+func TestExpandSpreadForShell(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"no spread", "echo hello", "echo hello"},
+		{"single element", "cmd \x00arg\x01 tail", "cmd 'arg' tail"},
+		{"multiple elements", "cmd \x00a\x00b\x00c\x01", "cmd 'a' 'b' 'c'"},
+		{"empty spread", "cmd \x00\x01 tail", "cmd  tail"},
+		{"metacharacters", "cmd \x00--flag=val,[baz]\x00-x\x01", "cmd '--flag=val,[baz]' '-x'"},
+		{"two spreads", "cmd \x00a\x00b\x01 mid \x00c\x01", "cmd 'a' 'b' mid 'c'"},
+		{"embedded single quote", "cmd \x00it's\x01", "cmd 'it'\\''s'"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, expandSpreadForShell(tc.input))
+		})
+	}
+}
+
 var _ io.Reader = (*bytes.Buffer)(nil) // keep io import live if unused by coverage

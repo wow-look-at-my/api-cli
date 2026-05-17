@@ -580,7 +580,7 @@ that's where `toJson`, `upper`, `lower`, `trim`, `default`, `required`,
 | `repeatkey`   | Emit repeated query params for one key over a slice: `repeatkey "tag" .arg.tags` → `tag=a&tag=b` (URL-encoded, no leading `?`). Empty elements dropped. Works with `[]string`, `[]int`, `[]any`. |
 | `shellquote`  | POSIX single-quote a value for safe interpolation into the string form of `command`.      |
 | `urlpath`     | URL-escape a single path segment.                                                         |
-| `spread`      | Argv-form only: splat a slice into multiple argv slots. The element `"{{spread .arg.files}}"` becomes N entries (zero for an empty slice). Works with `[]string`, `[]int`, `[]any`. |
+| `spread`      | Splat a slice into multiple arguments. In argv-form commands, the element `"{{spread .arg.files}}"` becomes N argv entries (zero for an empty slice). In shell-form commands, each element is automatically shell-quoted. Works with `[]string`, `[]int`, `[]any`. |
 | `fileExists`  | Returns true if the path exists and is a regular file. Useful inside `preconditions`.     |
 | `dirExists`   | Returns true if the path exists and is a directory.                                       |
 | `tabwriter`   | Format rows of tab-separated cells into aligned columns. Display-width aware (correct in the presence of ANSI escape codes and East Asian wide characters). Used by output formatters. |
