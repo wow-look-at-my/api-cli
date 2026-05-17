@@ -217,6 +217,7 @@ func buildExecCmd(c *Cmd, data any) (*exec.Cmd, error) {
 		if err != nil {
 			return nil, fmt.Errorf("render command: %w", err)
 		}
+		rendered = expandSpreadForShell(rendered)
 		return exec.Command("/bin/sh", "-c", rendered), nil
 	}
 	if len(c.Argv) == 0 {
@@ -228,10 +229,9 @@ func buildExecCmd(c *Cmd, data any) (*exec.Cmd, error) {
 		if err != nil {
 			return nil, fmt.Errorf("render argv[%d]: %w", i, err)
 		}
-		// `spread` output is recognised by a leading NUL; expand into
-		// zero or more argv slots.
 		if strings.HasPrefix(rendered, spreadSentinel) {
-			rest := strings.TrimPrefix(rendered, spreadSentinel)
+			rest := rendered[len(spreadSentinel):]
+			rest = strings.TrimSuffix(rest, spreadEndSentinel)
 			if rest == "" {
 				continue
 			}
@@ -244,4 +244,48 @@ func buildExecCmd(c *Cmd, data any) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("argv command rendered to no arguments")
 	}
 	return exec.Command(argv[0], argv[1:]...), nil
+}
+
+// expandSpreadForShell replaces spread sentinel regions in a rendered shell
+// command with shell-quoted elements. Each spread region is delimited by a
+// leading NUL (spreadSentinel) and a trailing SOH (spreadEndSentinel); elements
+// within the region are separated by NUL. Each element is individually
+// shell-quoted so metacharacters like brackets, spaces, and quotes are
+// preserved literally when passed to /bin/sh -c.
+func expandSpreadForShell(s string) string {
+	if strings.IndexByte(s, 0) < 0 {
+		return s
+	}
+	var b strings.Builder
+	for len(s) > 0 {
+		startIdx := strings.IndexByte(s, 0)
+		if startIdx < 0 {
+			b.WriteString(s)
+			break
+		}
+		b.WriteString(s[:startIdx])
+		s = s[startIdx:]
+
+		endIdx := strings.IndexByte(s, 1)
+		if endIdx < 0 {
+			b.WriteString(s)
+			break
+		}
+
+		region := s[1:endIdx]
+		s = s[endIdx+1:]
+
+		if region == "" {
+			continue
+		}
+
+		parts := strings.Split(region, spreadSentinel)
+		for i, p := range parts {
+			if i > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteString(shellQuote(p))
+		}
+	}
+	return b.String()
 }

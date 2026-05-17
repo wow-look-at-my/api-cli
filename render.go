@@ -26,11 +26,11 @@ func envMap() map[string]string {
 	return out
 }
 
-// spreadSentinel is a NUL byte used to mark and delimit the output of the
-// `spread` helper. NUL never appears in valid argv text, so it's safe to use
-// as an in-band signal that a rendered argv element should be split into
-// multiple slots.
+// spreadSentinel (NUL) delimits elements in spread output; spreadEndSentinel
+// (SOH) terminates a spread region. These are reserved internal markers —
+// spread() rejects elements containing either byte.
 const spreadSentinel = "\x00"
+const spreadEndSentinel = "\x01"
 
 // funcMap is the template function set available in every rendered template.
 // It combines sprig's text FuncMap (a broad library of string/list/math/json
@@ -114,13 +114,13 @@ func toRows(v any) ([]string, error) {
 	}
 }
 
-// spread expands a slice into multiple argv slots when used as the entire
-// content of an argv-form `command` element. It emits a NUL-prefixed,
-// NUL-separated string; the executor recognises the leading NUL and splits
-// the element into N slots (zero for an empty input).
+// spread expands a slice into multiple arguments. In argv-form commands, the
+// element "{{spread .arg.files}}" becomes N separate argv entries. In
+// shell-form commands, expandSpreadForShell (exec.go) replaces each sentinel
+// region with individually shell-quoted elements.
 //
-// Only meaningful in argv form. In shell form, NULs in the rendered command
-// would be passed through to /bin/sh — don't use spread there.
+// Output format: \x00elem1\x00elem2\x01 (NUL-delimited, SOH-terminated).
+// Elements must not contain \x00 or \x01; spread returns an error if they do.
 //
 // Accepted shapes: nil, []string, []int, []any (each element stringified).
 func spread(v any) (string, error) {
@@ -128,10 +128,15 @@ func spread(v any) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("spread: %w", err)
 	}
-	if len(parts) == 0 {
-		return spreadSentinel, nil
+	for _, p := range parts {
+		if strings.ContainsAny(p, spreadSentinel+spreadEndSentinel) {
+			return "", fmt.Errorf("spread: element contains reserved sentinel byte: %q", p)
+		}
 	}
-	return spreadSentinel + strings.Join(parts, spreadSentinel), nil
+	if len(parts) == 0 {
+		return spreadSentinel + spreadEndSentinel, nil
+	}
+	return spreadSentinel + strings.Join(parts, spreadSentinel) + spreadEndSentinel, nil
 }
 
 func toStringSlice(v any) ([]string, error) {

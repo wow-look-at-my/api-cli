@@ -113,9 +113,11 @@ covers most needs.
   `api.example.json` by `TestExampleConfigMatchesSchema`. Any new field
   needs both documentation and an example in `api.example.json` if it's
   exercised by integration tests.
-- **`spread` sentinel.** The `spread` template helper uses NUL bytes to
-  signal argv expansion; only meaningful in argv-form `command`. Don't use
-  it in shell-form templates.
+- **`spread` sentinel.** The `spread` template helper uses NUL (`\x00`)
+  bytes to delimit elements and SOH (`\x01`) as an end marker. In
+  argv-form commands, the executor splits on NUL into separate argv
+  slots. In shell-form commands, `expandSpreadForShell` (`exec.go`)
+  replaces each sentinel region with shell-quoted elements.
 - **Number normalization in step results.** `parseResult` (`exec.go`)
   normalizes JSON numbers to `int64` / `float64` so sprig arithmetic works
   without casts. The format path's `parseInput("json", ...)` reuses this.

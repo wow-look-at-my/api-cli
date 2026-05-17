@@ -260,29 +260,29 @@ func TestEnvMap(t *testing.T) {
 func TestSpread_Empty(t *testing.T) {
 	got, err := spread(nil)
 	require.NoError(t, err)
-	assert.Equal(t, spreadSentinel, got)
+	assert.Equal(t, spreadSentinel+spreadEndSentinel, got)
 
 	got, err = spread([]string{})
 	require.NoError(t, err)
-	assert.Equal(t, spreadSentinel, got)
+	assert.Equal(t, spreadSentinel+spreadEndSentinel, got)
 }
 
 func TestSpread_StringSlice(t *testing.T) {
 	got, err := spread([]string{"a", "b", "c"})
 	require.NoError(t, err)
-	assert.Equal(t, "\x00a\x00b\x00c", got)
+	assert.Equal(t, "\x00a\x00b\x00c\x01", got)
 }
 
 func TestSpread_AnySlice(t *testing.T) {
 	got, err := spread([]any{"a", 1, true})
 	require.NoError(t, err)
-	assert.Equal(t, "\x00a\x001\x00true", got)
+	assert.Equal(t, "\x00a\x001\x00true\x01", got)
 }
 
 func TestSpread_IntSlice(t *testing.T) {
 	got, err := spread([]int{1, 2, 3})
 	require.NoError(t, err)
-	assert.Equal(t, "\x001\x002\x003", got)
+	assert.Equal(t, "\x001\x002\x003\x01", got)
 }
 
 func TestSpread_RejectsNonSlice(t *testing.T) {
@@ -290,10 +290,18 @@ func TestSpread_RejectsNonSlice(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestSpread_RejectsSentinelBytes(t *testing.T) {
+	_, err := spread([]string{"ok", "bad\x00val"})
+	assert.Error(t, err)
+
+	_, err = spread([]string{"bad\x01val"})
+	assert.Error(t, err)
+}
+
 func TestSpreadViaTemplate(t *testing.T) {
 	got, err := renderString(`{{spread .x}}`, map[string]any{"x": []string{"a", "b"}})
 	require.NoError(t, err)
-	assert.Equal(t, "\x00a\x00b", got)
+	assert.Equal(t, "\x00a\x00b\x01", got)
 }
 
 func TestFileExists(t *testing.T) {
