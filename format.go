@@ -182,6 +182,7 @@ func selectView(views []View, ctx map[string]any, viewFlag string, cache map[pre
 	if viewFlag != "" {
 		for i := range views {
 			if views[i].Name == viewFlag {
+				logVerbose("format: selected view %q (explicit --view flag)", views[i].Name)
 				return &views[i], nil
 			}
 		}
@@ -195,15 +196,19 @@ func selectView(views []View, ctx map[string]any, viewFlag string, cache map[pre
 		if err != nil {
 			return nil, fmt.Errorf("view %q: %w", views[i].Name, err)
 		}
+		logDebug("format: view %q when=%q => %v", views[i].Name, views[i].When, ok)
 		if ok {
+			logVerbose("format: selected view %q (when predicate)", views[i].Name)
 			return &views[i], nil
 		}
 	}
 	for i := range views {
 		if views[i].Default {
+			logVerbose("format: selected view %q (default)", views[i].Name)
 			return &views[i], nil
 		}
 	}
+	logVerbose("format: selected view %q (first)", views[0].Name)
 	return &views[0], nil
 }
 
@@ -213,10 +218,12 @@ func selectView(views []View, ctx map[string]any, viewFlag string, cache map[pre
 func execLeaf(c *cobra.Command, cmdTmpl *Cmd, cwd, stdin string, data map[string]any, formatRef *FormatRef, formats map[string]*Format) (int, error) {
 	effFmt := resolveFormat(formatRef, formats)
 	if effFmt == nil {
+		logDebug("format: none configured, streaming raw")
 		return doExec(cmdTmpl, cwd, stdin, data), nil
 	}
 	verdict := userVerdictFromFlags(c)
 	if verdict == userNo {
+		logVerbose("format: user opted out, streaming raw")
 		return doExec(cmdTmpl, cwd, stdin, data), nil
 	}
 
@@ -233,10 +240,13 @@ func execLeaf(c *cobra.Command, cmdTmpl *Cmd, cwd, stdin string, data map[string
 	if err != nil {
 		return 1, fmt.Errorf("format when: %w", err)
 	}
+	logVerbose("format: author when=%q => %v", effFmt.When, authorOK)
 	if !authorOK {
+		logVerbose("format: author predicate false, streaming raw")
 		return doExec(cmdTmpl, cwd, stdin, data), nil
 	}
 
+	logVerbose("format: applying format with %d views", len(effFmt.Views))
 	return runFormatted(c, cmdTmpl, cwd, stdin, data, effFmt, verdict), nil
 }
 
@@ -252,8 +262,9 @@ func runFormatted(
 	verdict userVerdict,
 ) int {
 	out, overflowed, code := captureExecCapped(cmdTmpl, cwd, stdin, data, defaultFormatCap)
+	logDebug("format: captured %d bytes, overflowed=%v, code=%d", len(out), overflowed, code)
 	if overflowed {
-		// Output already streamed transparently.
+		logVerbose("format: output overflowed cap, streamed raw")
 		return code
 	}
 	if code != 0 {
@@ -262,6 +273,7 @@ func runFormatted(
 	}
 
 	parsed := parseInput(out, f.Input)
+	logDebug("format: input mode=%q parsed type=%T", f.Input, parsed)
 	isTTY, width := stdoutTTY()
 	if verdict == userAlways {
 		isTTY = true
@@ -284,6 +296,7 @@ func runFormatted(
 		fmt.Fprintln(execStderr, "error: render view:", err)
 		return 1
 	}
+	logDebug("format: rendered view %q (%d bytes)", view.Name, len(rendered))
 	fmt.Fprint(execStdout, rendered)
 	return 0
 }

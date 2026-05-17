@@ -36,6 +36,9 @@ func execCmdFull(t *testing.T, cfg *Config, argv ...string) (int, string, string
 	prevCode := exitCode
 	exitCode = 0
 	t.Cleanup(func() { exitCode = prevCode })
+	prevVerbose, prevDebug := verboseMode, debugMode
+	verboseMode, debugMode = false, false
+	t.Cleanup(func() { verboseMode = prevVerbose; debugMode = prevDebug })
 
 	root := newRoot(cfg)
 	root.SetOut(io.Discard) // suppress cobra's own output in tests
