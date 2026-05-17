@@ -335,6 +335,42 @@ A skipped step does not count toward the execution count and does not affect
 subsequent steps — they see `.result.<name>` as absent (nil), which is the
 zero value for `missingkey=zero` templates.
 
+### Debugging execution
+
+Pass `--verbose` to see what commands are being executed, their exit codes,
+and condition evaluation results. All output goes to stderr, prefixed with
+`[verbose]`:
+
+```
+$ apicli --verbose users get alice
+[verbose] leaf "get": starting
+[verbose] step "resolve": executing
+[verbose] capture: /bin/sh -c curl -fsSL https://api.example.com/users?username=alice
+[verbose] capture: exit code 0
+[verbose] step "resolve": exit code 0
+[verbose] leaf "get": executing command
+[verbose] exec: /bin/sh -c curl -fsSL https://api.example.com/users/42
+[verbose] exec: exit code 0
+[verbose] leaf "get": exit code 0
+[verbose] leaf "get": 2 executions total
+{"id":42,"name":"alice"}
+2 executions
+```
+
+Pass `--debug` for full detail (implies `--verbose`): the data context,
+step stdout captures, format decisions, and rendered entries. These lines
+are prefixed with `[debug]`:
+
+```
+$ apicli --debug users get alice
+[verbose] leaf "get": starting
+[debug]   leaf "get": data context: {"arg":{"name":"alice"},...}
+[debug]   step "resolve": entry: {}
+...
+[debug]   step "resolve": stdout: [{"id":42,"name":"alice"}]
+[debug]   format: none configured, streaming raw
+```
+
 ## Config schema
 
 A complete JSON Schema (draft-07) lives at [`api.schema.json`](./api.schema.json).
@@ -715,6 +751,8 @@ subcommand:
 | `--cors <level>`  |       | `strict` | CORS policy for the MCP HTTP/SSE server. See [CORS levels](#cors-levels). Ignored for `--mcp=stdio`. |
 | `--quiet`         | `-q`  | false   | Suppress the `N executions` line on stderr (printed when a leaf with `steps` runs more than one command). |
 | `--yes`           | `-y`  | false   | Skip `confirm` prompts. Without this, a non-tty stdin combined with a non-empty `confirm` is a hard error. |
+| `--verbose`       |       | false   | Show commands being executed, exit codes, and condition evaluation results on stderr. |
+| `--debug`         |       | false   | Show full execution details on stderr: data context, captured stdout, format decisions. Implies `--verbose`. |
 | `--no-format`     |       | false   | Disable output formatting. Equivalent to `--format=raw`.                                  |
 | `--format <mode>` |       | `auto`  | `raw` (off), `auto` (default; format only on TTY), `always` (force `.tty=true` in predicates). See [Output formatting](#output-formatting). |
 | `--view <name>`   |       |         | Pick a specific view by name, bypassing the format's predicate-based selection. Errors if the view is unknown. |

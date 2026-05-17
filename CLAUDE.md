@@ -38,6 +38,7 @@ covers most needs.
 | `mcp.go`                        | MCP (Model Context Protocol) server entrypoint: `runMCP` (stdio / http / sse transports), `buildMCPServer`. |
 | `mcp_exec.go`                   | MCP tool registration: turns each leaf in the config into an MCP tool, with arg/flag schema generation and execution wiring. |
 | `cors.go`                       | CORS middleware for the MCP HTTP/SSE server. `CorsLevel` (disabled/permissive/strict/enabled), `parseCorsLevel`, `withCORS`, origin matchers. |
+| `debug.go`                      | Debug/verbose logging infrastructure: `logVerbose`, `logDebug`, `logDebugBlock`, helpers. Package-level `verboseMode`/`debugMode` vars set from `--verbose`/`--debug` flags in `runLeaf`. |
 | `docs.go`                       | Built-in `docs` subcommand: embeds README, schema, and example via `go:embed`. Schema key lookup via `schemaLookup`. |
 | `api.schema.json`               | Authoritative JSON Schema for configs. Updated alongside `config.go`. |
 | `api.example.json`              | Reference config; covered by `TestExampleConfigMatchesSchema` and integration tests. |
