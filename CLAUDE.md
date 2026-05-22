@@ -36,7 +36,7 @@ covers most needs.
 | `format.go`                     | Format-system runtime: `resolveFormat`, `userVerdictFromFlags`, `stdoutTTY`, `formatContext`, `renderPredicate` (cached), `parseInput`, `selectView`, `execLeaf`, `runFormatted`. |
 | `align.go`                      | Width-aware aligner: `displayWidth`, `stripANSI`, `alignColumns`, `padRight`, `padLeft`. ANSI-stripping state machine + East Asian Width lookup. |
 | `mcp.go`                        | MCP (Model Context Protocol) server entrypoint: `runMCP` (stdio / http / sse transports), `buildMCPServer`. `mcpLeaf` carries inherited format context. |
-| `mcp_exec.go`                   | MCP tool execution: `mcpExecLeaf` runs a leaf and applies formatting via `mcpFormat`. Format is always applied when configured (skips the format-level `when` predicate); `.tty` is `false`, `.width` is 80. |
+| `mcp_exec.go`                   | MCP tool execution: `mcpExecLeaf` runs a leaf and applies formatting via `mcpFormat`. Behaves like `--format=always`: `.tty` is `true`, `.width` is 80. |
 | `cors.go`                       | CORS middleware for the MCP HTTP/SSE server. `CorsLevel` (disabled/permissive/strict/enabled), `parseCorsLevel`, `withCORS`, origin matchers. |
 | `debug.go`                      | Debug/verbose logging infrastructure: `logVerbose`, `logDebug`, `logDebugBlock`, helpers. Package-level `verboseMode`/`debugMode` vars set from `--verbose`/`--debug` flags in `runLeaf`. |
 | `docs.go`                       | Built-in `docs` subcommand: embeds README, schema, and example via `go:embed`. Schema key lookup via `schemaLookup`. |

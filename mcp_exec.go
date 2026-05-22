@@ -335,19 +335,24 @@ func mcpGatherFlags(node Command, arguments map[string]any, preFlagData any) (ma
 }
 
 // mcpFormat applies the format system to raw command output in MCP mode.
-// Unlike the CLI path, MCP always applies formatting when a format is
-// configured (the format-level `when` predicate is skipped). View selection
-// still runs normally so view `when` predicates can distinguish contexts.
+// Behaves like --format=always: .tty is true so the default when predicate
+// passes, but an author's explicit when: "false" is still respected.
 func mcpFormat(leaf *mcpLeaf, raw string, data map[string]any) (string, bool) {
 	effFmt := resolveFormat(leaf.formatRef, leaf.formats)
 	if effFmt == nil {
 		return "", false
 	}
 
-	parsed := parseInput(raw, effFmt.Input)
-	ctx := formatContext(parsed, data, false, 80)
-
 	cache := map[predicateKey]bool{}
+	preCtx := formatContext(nil, data, true, 80)
+	authorOK, err := renderPredicate(effFmt.When, preCtx, cache)
+	if err != nil || !authorOK {
+		return "", false
+	}
+
+	parsed := parseInput(raw, effFmt.Input)
+	ctx := formatContext(parsed, data, true, 80)
+
 	view, err := selectView(effFmt.Views, ctx, "", cache)
 	if err != nil {
 		return "", false

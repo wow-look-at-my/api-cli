@@ -612,7 +612,7 @@ func TestMcpFormat_ViewSelection(t *testing.T) {
 	assert.Equal(t, "DETAIL", out)
 }
 
-func TestMcpFormat_TTYIsFalse(t *testing.T) {
+func TestMcpFormat_TTYIsTrue(t *testing.T) {
 	leaf := &mcpLeaf{
 		formatRef: &FormatRef{Inline: &Format{
 			Input: "raw",
@@ -621,20 +621,19 @@ func TestMcpFormat_TTYIsFalse(t *testing.T) {
 	}
 	out, ok := mcpFormat(leaf, "x", map[string]any{})
 	assert.True(t, ok)
-	assert.Equal(t, "tty=false", out)
+	assert.Equal(t, "tty=true", out)
 }
 
-func TestMcpFormat_SkipsFormatLevelWhen(t *testing.T) {
+func TestMcpFormat_RespectsAuthorWhenFalse(t *testing.T) {
 	leaf := &mcpLeaf{
 		formatRef: &FormatRef{Inline: &Format{
 			Input: "raw",
-			When:  "{{.tty}}",
+			When:  "false",
 			Views: []View{{Name: "v", Template: "formatted"}},
 		}},
 	}
-	out, ok := mcpFormat(leaf, "raw", map[string]any{})
-	assert.True(t, ok)
-	assert.Equal(t, "formatted", out)
+	_, ok := mcpFormat(leaf, "raw", map[string]any{})
+	assert.False(t, ok)
 }
 
 // --- mcpExecLeaf with format ---

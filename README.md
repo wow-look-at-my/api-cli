@@ -511,11 +511,9 @@ Precedence (top wins):
 4. `API_CLI_FORMAT=raw|auto|always`
 5. Default: `auto`
 
-**MCP mode** (`--mcp`): formatting is always applied when a format is
-configured — the format-level `when` predicate is skipped entirely. This
-gives AI consumers the same structured output that interactive users see.
-View-level `when` predicates still run normally (`.tty` is `false`, `.width`
-is 80), so views can differentiate between terminal and MCP contexts.
+**MCP mode** (`--mcp`): behaves like `--format=always`. `.tty` is `true` and
+`.width` is 80, so the default `when: "{{.tty}}"` predicate passes. An
+author's explicit `when: "false"` is still respected.
 
 ### Format definition
 
@@ -772,7 +770,7 @@ subcommand:
 | Flag              | Short | Default | Notes                                                                                     |
 |-------------------|-------|---------|-------------------------------------------------------------------------------------------|
 | `--config <path>` |       |         | Path to JSON config file. Falls back to `./api.json` if unset. See [Config discovery](#config-discovery). |
-| `--mcp <transport>` |     |         | Run the loaded config as an MCP (Model Context Protocol) server instead of a CLI. Values: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes an MCP tool. HTTP and SSE transports also expose `GET /health` → `{"status":"ok"}`. Output formatting is always applied when a format is configured (the format-level `when` predicate is skipped); `.tty` is `false` and `.width` is 80 in the format context. |
+| `--mcp <transport>` |     |         | Run the loaded config as an MCP (Model Context Protocol) server instead of a CLI. Values: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes an MCP tool. HTTP and SSE transports also expose `GET /health` → `{"status":"ok"}`. Output formatting behaves like `--format=always` (`.tty` is `true`, `.width` is 80). |
 | `--cors <level>`  |       | `strict` | CORS policy for the MCP HTTP/SSE server. See [CORS levels](#cors-levels). Ignored for `--mcp=stdio`. |
 | `--quiet`         | `-q`  | false   | Suppress the `N executions` line on stderr (printed when a leaf with `steps` runs more than one command). |
 | `--yes`           | `-y`  | false   | Skip `confirm` prompts. Without this, a non-tty stdin combined with a non-empty `confirm` is a hard error. |
