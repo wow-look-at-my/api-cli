@@ -897,12 +897,6 @@ Duplicate counts are also deduplicated: when both `forks` and
 `forks_count` exist, the short name is dropped (same for `watchers`/
 `watchers_count` and `open_issues`/`open_issues_count`).
 
-To bypass all filtering and get the raw API response:
-
-```sh
-GITHUB_RAW=1 api-cli --config github.example.json repo get golang/go --no-format
-```
-
 The `search issues` command additionally exempts `repository_url` from the
 filter (overrides `vars.filter` on that one subtree) because its table view
 parses the repo name out of that field — a useful demonstration of how
