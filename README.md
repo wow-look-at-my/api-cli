@@ -371,6 +371,25 @@ $ apicli --debug users get alice
 [debug]   format: none configured, streaming raw
 ```
 
+### Setting environment variables from the command line
+
+`--var KEY=VALUE` sets a process environment variable before the config is
+evaluated, so `{{.env.KEY}}` picks it up. Repeatable.
+
+```sh
+api-cli --config github.example.json --var GITHUB_TOKEN=ghp_xxx user get octocat
+api-cli --config github.example.json --var GITHUB_API_URL=https://ghes.example.com repo get myorg/myrepo
+```
+
+This is useful in wrapper scripts where credentials or endpoints differ per
+environment:
+
+```bash
+#!/bin/bash
+set -euo pipefail
+api-cli --config ~/.config/ghr/github.example.json --var GITHUB_TOKEN="$MY_TOKEN" "$@"
+```
+
 ## Config schema
 
 A complete JSON Schema (draft-07) lives at [`api.schema.json`](./api.schema.json).
@@ -872,10 +891,11 @@ api-cli --config ~/.config/ghr/github.example.json "$@"
 ```
 
 Then `ghr repo get golang/go` works from anywhere. Override the endpoint or
-token for a single invocation by setting env vars inline:
+token for a single invocation via `--var` or env vars:
 
 ```sh
-GITHUB_API_URL=https://ghes.example.com GITHUB_TOKEN=ghp_xxx ghr user get alice
+ghr --var GITHUB_TOKEN=ghp_xxx user get alice
+GITHUB_API_URL=https://ghes.example.com ghr user get alice
 ```
 
 ### How response filtering works
