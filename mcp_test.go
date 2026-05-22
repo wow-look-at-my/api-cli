@@ -89,7 +89,7 @@ func TestCollectMCPLeaves_Flat(t *testing.T) {
 			Command:	&Cmd{Shell: true, Template: "true"},
 		},
 	}
-	leaves := collectMCPLeaves(cmds, "", nil, nil, "", "", nil, nil)
+	leaves := collectMCPLeaves(cmds, mcpInherit{})
 	require.Len(t, leaves, 2)
 	assert.Equal(t, "ping", leaves[0].name)
 	assert.Equal(t, "pong", leaves[1].name)
@@ -106,7 +106,7 @@ func TestCollectMCPLeaves_Nested(t *testing.T) {
 			},
 		},
 	}
-	leaves := collectMCPLeaves(cmds, "", nil, nil, "", "", nil, nil)
+	leaves := collectMCPLeaves(cmds, mcpInherit{})
 	require.Len(t, leaves, 2)
 	assert.Equal(t, "users_get", leaves[0].name)
 	assert.Equal(t, "users_list", leaves[1].name)
@@ -120,7 +120,7 @@ func TestCollectMCPLeaves_InheritsVarsCwdStdin(t *testing.T) {
 		},
 	}
 	rootVars := map[string]any{"base": "root"}
-	leaves := collectMCPLeaves(cmds, "", rootVars, rootCmd, "/root", "stdin-data", nil, nil)
+	leaves := collectMCPLeaves(cmds, mcpInherit{vars: rootVars, cmd: rootCmd, cwd: "/root", stdin: "stdin-data"})
 	require.Len(t, leaves, 1)
 	assert.Equal(t, rootCmd, leaves[0].cmdTmpl)
 	assert.Equal(t, "/root", leaves[0].cwdTmpl)
@@ -140,7 +140,7 @@ func TestCollectMCPLeaves_ChildOverrides(t *testing.T) {
 			Vars:		map[string]any{"key": "child-val"},
 		},
 	}
-	leaves := collectMCPLeaves(cmds, "", map[string]any{"key": "root-val"}, rootCmd, "/root", "root-stdin", nil, nil)
+	leaves := collectMCPLeaves(cmds, mcpInherit{vars: map[string]any{"key": "root-val"}, cmd: rootCmd, cwd: "/root", stdin: "root-stdin"})
 	require.Len(t, leaves, 1)
 	assert.Equal(t, childCmd, leaves[0].cmdTmpl)
 	assert.Equal(t, "/child", leaves[0].cwdTmpl)
@@ -524,7 +524,7 @@ func TestCollectMCPLeaves_InheritsFormat(t *testing.T) {
 	parentFmt := &FormatRef{Name: "table"}
 	formats := map[string]*Format{"table": {Views: []View{{Name: "t", Template: "x"}}}}
 	cmds := []Command{{Name: "leaf"}}
-	leaves := collectMCPLeaves(cmds, "", nil, cmd, "", "", parentFmt, formats)
+	leaves := collectMCPLeaves(cmds, mcpInherit{cmd: cmd, format: parentFmt, formats: formats})
 	require.Len(t, leaves, 1)
 	assert.Equal(t, parentFmt, leaves[0].formatRef)
 	assert.Equal(t, formats, leaves[0].formats)
@@ -539,7 +539,7 @@ func TestCollectMCPLeaves_ChildOverridesFormat(t *testing.T) {
 		"child":  {Views: []View{{Name: "c", Template: "y"}}},
 	}
 	cmds := []Command{{Name: "leaf", Format: childFmt}}
-	leaves := collectMCPLeaves(cmds, "", nil, cmd, "", "", parentFmt, formats)
+	leaves := collectMCPLeaves(cmds, mcpInherit{cmd: cmd, format: parentFmt, formats: formats})
 	require.Len(t, leaves, 1)
 	assert.Equal(t, childFmt, leaves[0].formatRef)
 }

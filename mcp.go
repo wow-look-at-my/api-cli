@@ -65,6 +65,19 @@ func runMCP(transport string, cfg *Config, corsLevel CorsLevel) int {
 	}
 }
 
+// mcpInherit is the inherited context threaded down the command tree during
+// MCP leaf collection. Mirrors the inherited* parameters in buildCommand.
+type mcpInherit struct {
+	prefix string
+	vars   map[string]any
+	cmd    *Cmd
+	cwd    string
+	stdin  string
+	format *FormatRef
+	// formats is the top-level registry; constant across the recursion.
+	formats map[string]*Format
+}
+
 // mcpLeaf is a leaf command with all inherited context fully resolved.
 type mcpLeaf struct {
 	name      string
@@ -80,7 +93,13 @@ type mcpLeaf struct {
 // buildMCPServer creates an MCP server with one tool per leaf command.
 func buildMCPServer(cfg *Config) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: cfg.Name, Version: "1.0.0"}, nil)
-	for _, leaf := range collectMCPLeaves(cfg.Commands, "", cfg.Vars, cfg.Command, cfg.Cwd, cfg.Stdin, nil, cfg.Formats) {
+	for _, leaf := range collectMCPLeaves(cfg.Commands, mcpInherit{
+		vars:    cfg.Vars,
+		cmd:     cfg.Command,
+		cwd:     cfg.Cwd,
+		stdin:   cfg.Stdin,
+		formats: cfg.Formats,
+	}) {
 		l := leaf // capture for closure
 		srv.AddTool(
 			&mcp.Tool{
@@ -129,43 +148,47 @@ func withHealthEndpoint(h http.Handler) http.Handler {
 	return mux
 }
 
-func collectMCPLeaves(cmds []Command, prefix string, vars map[string]any, cmd *Cmd, cwd, stdin string, inheritedFormat *FormatRef, formats map[string]*Format) []mcpLeaf {
+func collectMCPLeaves(cmds []Command, inh mcpInherit) []mcpLeaf {
 	var out []mcpLeaf
 	for _, c := range cmds {
 		name := c.Name
-		if prefix != "" {
-			name = prefix + "_" + c.Name
+		if inh.prefix != "" {
+			name = inh.prefix + "_" + c.Name
 		}
-		effVars := mergeVars(vars, c.Vars)
-		effCmd := cmd
+		child := mcpInherit{
+			prefix:  name,
+			vars:    mergeVars(inh.vars, c.Vars),
+			cmd:     inh.cmd,
+			cwd:     inh.cwd,
+			stdin:   inh.stdin,
+			format:  inh.format,
+			formats: inh.formats,
+		}
 		if c.Command.Defined() {
-			effCmd = c.Command
+			child.cmd = c.Command
 		}
-		effCwd := cwd
 		if c.Cwd != "" {
-			effCwd = c.Cwd
+			child.cwd = c.Cwd
 		}
-		effStdin := stdin
 		if c.Stdin != "" {
-			effStdin = c.Stdin
+			child.stdin = c.Stdin
 		}
-		effFormat := inheritedFormat
 		if c.Format.Defined() {
-			effFormat = c.Format
+			child.format = c.Format
 		}
 		if len(c.Commands) == 0 {
 			out = append(out, mcpLeaf{
 				name:      name,
 				node:      c,
-				vars:      effVars,
-				cmdTmpl:   effCmd,
-				cwdTmpl:   effCwd,
-				stdinTmpl: effStdin,
-				formatRef: effFormat,
-				formats:   formats,
+				vars:      child.vars,
+				cmdTmpl:   child.cmd,
+				cwdTmpl:   child.cwd,
+				stdinTmpl: child.stdin,
+				formatRef: child.format,
+				formats:   child.formats,
 			})
 		} else {
-			out = append(out, collectMCPLeaves(c.Commands, name, effVars, effCmd, effCwd, effStdin, effFormat, formats)...)
+			out = append(out, collectMCPLeaves(c.Commands, child)...)
 		}
 	}
 	return out
