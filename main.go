@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -15,7 +16,12 @@ func main() {
 // run is the process body, split out of main for testability. argv is the
 // slice of arguments (os.Args[1:] in production); errOut receives diagnostics.
 func run(argv []string, errOut io.Writer) int {
-	cfgPath, mcpTransport, corsValue := preparseGlobalFlags(argv)
+	cfgPath, mcpTransport, corsValue, envVars := preparseGlobalFlags(argv)
+
+	if err := applyEnvVars(envVars); err != nil {
+		fmt.Fprintln(errOut, "error:", err)
+		return 2
+	}
 	if cfgPath == "" {
 		if _, err := os.Stat("api.json"); err == nil {
 			cfgPath = "api.json"
@@ -82,6 +88,7 @@ func newRoot(cfg *Config) *cobra.Command {
 	root.PersistentFlags().String("config", "", "Path to JSON config file (default: ./api.json).")
 	root.PersistentFlags().String("mcp", "", `Run as MCP server. Value: "stdio", "http://<addr>", or "sse://<addr>".`)
 	root.PersistentFlags().String("cors", "strict", "CORS policy for MCP HTTP/SSE: disabled|permissive|strict|enabled.")
+	root.PersistentFlags().StringArray("var", nil, "Set an environment variable (KEY=VALUE). Repeatable.")
 	root.PersistentFlags().BoolP("quiet", "q", false, "Suppress execution count on stderr.")
 	root.PersistentFlags().BoolP("yes", "y", false, "Skip confirmation prompts.")
 	root.PersistentFlags().Bool("verbose", false, "Show commands being executed, exit codes, and condition results on stderr.")
@@ -130,7 +137,7 @@ func isHelpInvocation(argv []string) bool {
 // through harmlessly.
 //
 // The defaults registered here mirror those on the real root in newRoot.
-func preparseGlobalFlags(argv []string) (configPath, mcpTransport, corsValue string) {
+func preparseGlobalFlags(argv []string) (configPath, mcpTransport, corsValue string, envVars []string) {
 	pre := &cobra.Command{SilenceErrors: true, SilenceUsage: true}
 	pre.SetOut(io.Discard)
 	pre.SetErr(io.Discard)
@@ -139,10 +146,27 @@ func preparseGlobalFlags(argv []string) (configPath, mcpTransport, corsValue str
 	pre.Flags().String("config", "", "")
 	pre.Flags().String("mcp", "", "")
 	pre.Flags().String("cors", "strict", "")
+	pre.Flags().StringArray("var", nil, "")
 
 	_ = pre.ParseFlags(argv)
 	configPath, _ = pre.Flags().GetString("config")
 	mcpTransport, _ = pre.Flags().GetString("mcp")
 	corsValue, _ = pre.Flags().GetString("cors")
+	envVars, _ = pre.Flags().GetStringArray("var")
 	return
+}
+
+// applyEnvVars parses KEY=VALUE pairs and sets them as process environment
+// variables so they're visible via {{.env.KEY}} in templates.
+func applyEnvVars(vars []string) error {
+	for _, v := range vars {
+		i := strings.IndexByte(v, '=')
+		if i <= 0 {
+			return fmt.Errorf("--var %q: expected KEY=VALUE", v)
+		}
+		if err := os.Setenv(v[:i], v[i+1:]); err != nil {
+			return fmt.Errorf("--var %q: %w", v, err)
+		}
+	}
+	return nil
 }

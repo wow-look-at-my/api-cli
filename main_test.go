@@ -197,12 +197,65 @@ func TestPreparseGlobalFlags(t *testing.T) {
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg, mcp, cors := preparseGlobalFlags(tt.argv)
+			cfg, mcp, cors, _ := preparseGlobalFlags(tt.argv)
 			assert.Equal(t, tt.cfg, cfg, "config")
 			assert.Equal(t, tt.mcp, mcp, "mcp")
 			assert.Equal(t, tt.cors, cors, "cors")
 		})
 	}
+}
+
+func TestPreparseGlobalFlags_Var(t *testing.T) {
+	_, _, _, vars := preparseGlobalFlags([]string{"--var", "A=1", "--var", "B=hello", "sub"})
+	assert.Equal(t, []string{"A=1", "B=hello"}, vars)
+}
+
+func TestPreparseGlobalFlags_VarEquals(t *testing.T) {
+	_, _, _, vars := preparseGlobalFlags([]string{"--var=X=val=with=equals"})
+	assert.Equal(t, []string{"X=val=with=equals"}, vars)
+}
+
+func TestApplyEnvVars(t *testing.T) {
+	require.NoError(t, applyEnvVars([]string{"API_CLI_TEST_V1=hello", "API_CLI_TEST_V2=world"}))
+	assert.Equal(t, "hello", os.Getenv("API_CLI_TEST_V1"))
+	assert.Equal(t, "world", os.Getenv("API_CLI_TEST_V2"))
+	t.Cleanup(func() {
+		os.Unsetenv("API_CLI_TEST_V1")
+		os.Unsetenv("API_CLI_TEST_V2")
+	})
+}
+
+func TestApplyEnvVars_BadFormat(t *testing.T) {
+	assert.Error(t, applyEnvVars([]string{"NOEQUALS"}))
+}
+
+func TestRun_VarSetsEnv(t *testing.T) {
+	dir := t.TempDir()
+	cfg := `{
+      "name": "t",
+      "command": "printf '%s' {{.env.API_CLI_TEST_TOKEN}}",
+      "commands": [{"name":"show"}]
+    }`
+	p := filepath.Join(dir, "api.json")
+	require.NoError(t, os.WriteFile(p, []byte(cfg), 0o600))
+
+	prevOut := execStdout
+	var buf bytes.Buffer
+	execStdout = &buf
+	execStderr = io.Discard
+	t.Cleanup(func() {
+		execStdout = prevOut
+		execStderr = os.Stderr
+		os.Unsetenv("API_CLI_TEST_TOKEN")
+	})
+	prevCode := exitCode
+	exitCode = 0
+	t.Cleanup(func() { exitCode = prevCode })
+
+	var errOut bytes.Buffer
+	code := run([]string{"--config", p, "--var", "API_CLI_TEST_TOKEN=secret123", "show"}, &errOut)
+	assert.Equal(t, 0, code)
+	assert.Equal(t, "secret123", buf.String())
 }
 
 func TestStringSlice_PreservesCommas(t *testing.T) {

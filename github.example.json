@@ -1,12 +1,12 @@
 {
   "$schema": "./api.schema.json",
   "name": "github",
-  "description": "Comfortable read-only wrapper for the GitHub REST API. Strips noisy `*url` fields from every response (they bloat output for no good reason on the CLI). Honors $GITHUB_TOKEN / $GH_TOKEN for authenticated access (60 req/hr unauthenticated, 5000/hr authenticated).",
+  "description": "Comfortable read-only wrapper for the GitHub REST API. Aggressively strips noise from responses: *url fields, GraphQL node_ids, empty gravatar_ids, duplicate counts, reaction breakdowns, permission objects, and other metadata that bloats output without adding value. Set $GITHUB_TOKEN / $GH_TOKEN for authenticated access (60 req/hr unauthenticated, 5000/hr authenticated). Set $GITHUB_API_URL to target a GitHub Enterprise Server instance.",
 
   "vars": {
-    "base_url": "https://api.github.com",
+    "base_url": "{{.env.GITHUB_API_URL | default \"https://api.github.com\"}}",
     "ua": "api-cli-github-example",
-    "filter": "{{if .env.GITHUB_RAW}}.{{else}}walk(if type == \"object\" then with_entries(select(.key | endswith(\"url\") | not)) else . end){{end}}"
+    "filter": "walk(if type == \"object\" then with_entries(select((.key | endswith(\"url\") | not) and (.key | IN(\"node_id\",\"gravatar_id\",\"user_view_type\",\"site_admin\",\"performed_via_github_app\",\"active_lock_reason\",\"author_association\",\"temp_clone_token\",\"custom_properties\",\"issue_field_values\",\"permissions\",\"network_count\",\"pinned_comment\",\"reactions\",\"sub_issues_summary\",\"issue_dependencies_summary\") | not))) | if has(\"forks_count\") then del(.forks) else . end | if has(\"watchers_count\") then del(.watchers) else . end | if has(\"open_issues_count\") then del(.open_issues) else . end else . end)"
   },
 
   "command": "curl -fsSL -H {{shellquote (printf \"User-Agent: %s\" .var.ua)}} -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28'{{if .env.GITHUB_TOKEN}} -H {{shellquote (printf \"Authorization: Bearer %s\" .env.GITHUB_TOKEN)}}{{else if .env.GH_TOKEN}} -H {{shellquote (printf \"Authorization: Bearer %s\" .env.GH_TOKEN)}}{{end}} {{shellquote (printf \"%s%s%s\" .var.base_url .entry.path (querystring .entry.query))}} | jq {{shellquote .var.filter}}",
@@ -575,7 +575,7 @@
             { "name": "sort", "type": "string", "default": "", "description": "comments|reactions|created|updated." }
           ],
           "vars": {
-            "filter": "{{if .env.GITHUB_RAW}}.{{else}}walk(if type == \"object\" then with_entries(select(.key == \"repository_url\" or (.key | endswith(\"url\") | not))) else . end){{end}}"
+            "filter": "walk(if type == \"object\" then with_entries(select((.key == \"repository_url\" or (.key | endswith(\"url\") | not)) and (.key | IN(\"node_id\",\"gravatar_id\",\"user_view_type\",\"site_admin\",\"performed_via_github_app\",\"active_lock_reason\",\"author_association\",\"temp_clone_token\",\"custom_properties\",\"issue_field_values\",\"permissions\",\"network_count\",\"pinned_comment\",\"reactions\",\"sub_issues_summary\",\"issue_dependencies_summary\") | not))) | if has(\"forks_count\") then del(.forks) else . end | if has(\"watchers_count\") then del(.watchers) else . end | if has(\"open_issues_count\") then del(.open_issues) else . end else . end)"
           },
           "format": {
             "input": "json",
@@ -583,7 +583,7 @@
               {
                 "name": "table",
                 "default": true,
-                "template": "{{ $rows := list \"REPO\\t#\\tSTATE\\tTITLE\" }}{{ range .data.items }}{{ $rows = append $rows (printf \"%v\\t#%v\\t%v\\t%v\" (regexReplaceAll \"^https://api.github.com/repos/\" (default \"\" .repository_url) \"\") .number .state .title) }}{{ end }}{{ tabwriter $rows }}\n{{.data.total_count}} total"
+                "template": "{{ $base := printf \"%s/repos/\" .var.base_url }}{{ $rows := list \"REPO\\t#\\tSTATE\\tTITLE\" }}{{ range .data.items }}{{ $rows = append $rows (printf \"%v\\t#%v\\t%v\\t%v\" (default \"\" .repository_url | trimPrefix $base) .number .state .title) }}{{ end }}{{ tabwriter $rows }}\n{{.data.total_count}} total"
               }
             ]
           },
