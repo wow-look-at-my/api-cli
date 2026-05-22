@@ -847,6 +847,7 @@ jsonplaceholder demo. Highlights:
 
 - **Subcommands**: `user get|repos|orgs`, `repo get|issues|issue|prs|pr|releases|release|commits|commit|branches|tags|contents|readme|languages|topics`, `org get|members|repos`, `search repos|code|issues|users`, `rate-limit`.
 - **Token-aware**: picks up `$GITHUB_TOKEN` or `$GH_TOKEN` automatically (5000 req/hr authenticated vs. 60 req/hr without).
+- **Enterprise-ready**: set `$GITHUB_API_URL` to target a GitHub Enterprise Server instance (defaults to `https://api.github.com`).
 - **Noise stripping**: every response is piped through `jq` with a recursive `walk` that drops every key ending in `url` (the GitHub API's notorious `*_url` template links and `url`/`html_url` self-links). On a single repo response that's ~66% fewer bytes; on a user it's ~56%.
 - **Format views**: each resource gets a `table` view (for list endpoints) and a `detail` view (for single-object endpoints), selected automatically by inspecting the parsed JSON shape.
 
@@ -870,7 +871,12 @@ set -euo pipefail
 api-cli --config ~/.config/ghr/github.example.json "$@"
 ```
 
-Then `ghr repo get golang/go` works from anywhere.
+Then `ghr repo get golang/go` works from anywhere. Override the endpoint or
+token for a single invocation by setting env vars inline:
+
+```sh
+GITHUB_API_URL=https://ghes.example.com GITHUB_TOKEN=ghp_xxx ghr user get alice
+```
 
 ### How URL-stripping works
 
