@@ -122,6 +122,10 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 	if code != 0 {
 		return mcpCombine(out, errBuf.String()), true
 	}
+
+	if formatted, ok := mcpFormat(leaf, out, data); ok {
+		return formatted, false
+	}
 	return out, false
 }
 
@@ -328,4 +332,30 @@ func mcpGatherFlags(node Command, arguments map[string]any, preFlagData any) (ma
 		}
 	}
 	return out, nil
+}
+
+// mcpFormat applies the format system to raw command output in MCP mode.
+// Unlike the CLI path, MCP always applies formatting when a format is
+// configured (the format-level `when` predicate is skipped). View selection
+// still runs normally so view `when` predicates can distinguish contexts.
+func mcpFormat(leaf *mcpLeaf, raw string, data map[string]any) (string, bool) {
+	effFmt := resolveFormat(leaf.formatRef, leaf.formats)
+	if effFmt == nil {
+		return "", false
+	}
+
+	parsed := parseInput(raw, effFmt.Input)
+	ctx := formatContext(parsed, data, false, 80)
+
+	cache := map[predicateKey]bool{}
+	view, err := selectView(effFmt.Views, ctx, "", cache)
+	if err != nil {
+		return "", false
+	}
+
+	rendered, err := renderString(view.Template, ctx)
+	if err != nil {
+		return "", false
+	}
+	return rendered, true
 }

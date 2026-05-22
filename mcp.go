@@ -73,12 +73,14 @@ type mcpLeaf struct {
 	cmdTmpl   *Cmd
 	cwdTmpl   string
 	stdinTmpl string
+	formatRef *FormatRef
+	formats   map[string]*Format
 }
 
 // buildMCPServer creates an MCP server with one tool per leaf command.
 func buildMCPServer(cfg *Config) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: cfg.Name, Version: "1.0.0"}, nil)
-	for _, leaf := range collectMCPLeaves(cfg.Commands, "", cfg.Vars, cfg.Command, cfg.Cwd, cfg.Stdin) {
+	for _, leaf := range collectMCPLeaves(cfg.Commands, "", cfg.Vars, cfg.Command, cfg.Cwd, cfg.Stdin, nil, cfg.Formats) {
 		l := leaf // capture for closure
 		srv.AddTool(
 			&mcp.Tool{
@@ -127,7 +129,7 @@ func withHealthEndpoint(h http.Handler) http.Handler {
 	return mux
 }
 
-func collectMCPLeaves(cmds []Command, prefix string, vars map[string]any, cmd *Cmd, cwd, stdin string) []mcpLeaf {
+func collectMCPLeaves(cmds []Command, prefix string, vars map[string]any, cmd *Cmd, cwd, stdin string, inheritedFormat *FormatRef, formats map[string]*Format) []mcpLeaf {
 	var out []mcpLeaf
 	for _, c := range cmds {
 		name := c.Name
@@ -147,6 +149,10 @@ func collectMCPLeaves(cmds []Command, prefix string, vars map[string]any, cmd *C
 		if c.Stdin != "" {
 			effStdin = c.Stdin
 		}
+		effFormat := inheritedFormat
+		if c.Format.Defined() {
+			effFormat = c.Format
+		}
 		if len(c.Commands) == 0 {
 			out = append(out, mcpLeaf{
 				name:      name,
@@ -155,9 +161,11 @@ func collectMCPLeaves(cmds []Command, prefix string, vars map[string]any, cmd *C
 				cmdTmpl:   effCmd,
 				cwdTmpl:   effCwd,
 				stdinTmpl: effStdin,
+				formatRef: effFormat,
+				formats:   formats,
 			})
 		} else {
-			out = append(out, collectMCPLeaves(c.Commands, name, effVars, effCmd, effCwd, effStdin)...)
+			out = append(out, collectMCPLeaves(c.Commands, name, effVars, effCmd, effCwd, effStdin, effFormat, formats)...)
 		}
 	}
 	return out
