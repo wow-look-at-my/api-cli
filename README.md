@@ -848,7 +848,7 @@ jsonplaceholder demo. Highlights:
 - **Subcommands**: `user get|repos|orgs`, `repo get|issues|issue|prs|pr|releases|release|commits|commit|branches|tags|contents|readme|languages|topics`, `org get|members|repos`, `search repos|code|issues|users`, `rate-limit`.
 - **Token-aware**: picks up `$GITHUB_TOKEN` or `$GH_TOKEN` automatically (5000 req/hr authenticated vs. 60 req/hr without).
 - **Enterprise-ready**: set `$GITHUB_API_URL` to target a GitHub Enterprise Server instance (defaults to `https://api.github.com`).
-- **Noise stripping**: every response is piped through `jq` with a recursive `walk` that drops every key ending in `url` (the GitHub API's notorious `*_url` template links and `url`/`html_url` self-links). On a single repo response that's ~66% fewer bytes; on a user it's ~56%.
+- **Noise stripping**: every response is piped through `jq` with a recursive `walk` that drops `*url` template links, GraphQL `node_id`s, empty `gravatar_id`s, `reactions` breakdowns, `permissions`, duplicate counts, and other metadata. On a typical repo response that's ~80% fewer bytes.
 - **Format views**: each resource gets a `table` view (for list endpoints) and a `detail` view (for single-object endpoints), selected automatically by inspecting the parsed JSON shape.
 
 ### Quickstart
@@ -878,23 +878,26 @@ token for a single invocation by setting env vars inline:
 GITHUB_API_URL=https://ghes.example.com GITHUB_TOKEN=ghp_xxx ghr user get alice
 ```
 
-### How URL-stripping works
+### How response filtering works
 
-The shared root command appends a `jq` step to every request:
+The shared root command pipes every response through a `jq` filter that
+strips noise recursively. Three categories of keys are removed:
 
-```text
-curl ... '<url>' | jq 'walk(if type == "object" then with_entries(select(.key | endswith("url") | not)) else . end)'
-```
+1. **`*url` keys** — template links (`issues_url`, `commits_url`, ...),
+   self-links (`url`, `html_url`), and avatar URLs. URL *values* in
+   non-`url` keys (e.g. a user's `blog: "https://..."`) are preserved.
+2. **API metadata** — `node_id` (GraphQL IDs), `gravatar_id` (always
+   empty), `user_view_type`, `site_admin`, `author_association`,
+   `permissions`, `custom_properties`, `temp_clone_token`, etc.
+3. **Verbose objects** — `reactions` (8 emoji counters),
+   `sub_issues_summary`, `issue_dependencies_summary`,
+   `performed_via_github_app`.
 
-`walk` recurses through every nested object; `with_entries(...)` rebuilds each
-object excluding any key whose name ends in `url`. URL *values* in non-`url`
-keys (e.g. a user's `blog: "https://example.com"`) are preserved — only the
-key-name-based noise gets trimmed.
+Duplicate counts are also deduplicated: when both `forks` and
+`forks_count` exist, the short name is dropped (same for `watchers`/
+`watchers_count` and `open_issues`/`open_issues_count`).
 
-If you ever need the raw shape (for piping into another tool that wants the
-templated `*_url` links), set `GITHUB_RAW=1` for that invocation. The shared
-`filter` var is itself a Go template — when `GITHUB_RAW` is non-empty it
-collapses to `.`, so `jq` becomes a pretty-printer pass-through:
+To bypass all filtering and get the raw API response:
 
 ```sh
 GITHUB_RAW=1 api-cli --config github.example.json repo get golang/go --no-format
