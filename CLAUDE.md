@@ -35,8 +35,8 @@ covers most needs.
 | `render.go`                     | `renderString`, `renderEntry`, `funcMap` with sprig + custom helpers (`querystring`, `shellquote`, `urlpath`, `spread`, `fileExists`, `dirExists`, `tabwriter`, `padRight`, `padLeft`, `displayWidth`, `stripANSI`, `filterSuffix`, `filterPrefix`). |
 | `format.go`                     | Format-system runtime: `resolveFormat`, `userVerdictFromFlags`, `stdoutTTY`, `formatContext`, `renderPredicate` (cached), `parseInput`, `selectView`, `execLeaf`, `runFormatted`. |
 | `align.go`                      | Width-aware aligner: `displayWidth`, `stripANSI`, `alignColumns`, `padRight`, `padLeft`. ANSI-stripping state machine + East Asian Width lookup. |
-| `mcp.go`                        | MCP (Model Context Protocol) server entrypoint: `runMCP` (stdio / http / sse transports), `buildMCPServer`. |
-| `mcp_exec.go`                   | MCP tool registration: turns each leaf in the config into an MCP tool, with arg/flag schema generation and execution wiring. |
+| `mcp.go`                        | MCP (Model Context Protocol) server entrypoint: `runMCP` (stdio / http / sse transports), `buildMCPServer`. `mcpLeaf` carries inherited format context. |
+| `mcp_exec.go`                   | MCP tool execution: `mcpExecLeaf` runs a leaf and applies formatting via `mcpFormat`. Behaves like `--format=always`: `.tty` is `true`, `.width` is 80. |
 | `cors.go`                       | CORS middleware for the MCP HTTP/SSE server. `CorsLevel` (disabled/permissive/strict/enabled), `parseCorsLevel`, `withCORS`, origin matchers. |
 | `debug.go`                      | Debug/verbose logging infrastructure: `logVerbose`, `logDebug`, `logDebugBlock`, helpers. Package-level `verboseMode`/`debugMode` vars set from `--verbose`/`--debug` flags in `runLeaf`. |
 | `docs.go`                       | Built-in `docs` subcommand: embeds README, schema, and example via `go:embed`. Schema key lookup via `schemaLookup`. |
@@ -50,8 +50,9 @@ covers most needs.
 1. **Inheritance pattern.** `command`, `cwd`, `stdin`, `confirm`, `format`
    all inherit down the tree: closest non-empty (or `Defined()`) ancestor
    wins; a leaf overrides its ancestor for that subtree. Threading happens
-   in `buildCommand` (`build.go`) via `inherited*` parameters; new
-   inheritable fields follow the same pattern.
+   in `buildCommand` (`build.go`) via `inherited*` parameters and in
+   `collectMCPLeaves` (`mcp.go`) via the same pattern; new inheritable
+   fields must be threaded in both paths.
 2. **Streaming fast path stays intact.** `doExec` streams the child's
    stdout straight to `execStdout`. The format path captures via
    `captureExecCapped` (32 MiB buffer; on overflow, prefix flushes and
