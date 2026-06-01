@@ -896,26 +896,36 @@ jsonplaceholder demo. Highlights:
 
 ### Quickstart
 
-```sh
-./build/api-cli --config samples/github/github.json --help
-./build/api-cli --config samples/github/github.json user get octocat
-./build/api-cli --config samples/github/github.json repo get golang/go
-./build/api-cli --config samples/github/github.json repo issues cli/cli --state open -n 10
-./build/api-cli --config samples/github/github.json search repos 'language:go stars:>10000' --sort stars
-./build/api-cli --config samples/github/github.json rate-limit
-```
+Copy the config somewhere stable and create a wrapper script:
 
-To make it as ergonomic as `gh`, drop a wrapper on `$PATH`:
+```sh
+mkdir -p ~/.config/ghr
+cp samples/github/github.json ~/.config/ghr/github.json
+```
 
 ```bash
 #!/bin/bash
-# ~/.local/bin/ghr  (a tiny "gh-read" alias)
+# ~/.local/bin/ghr
 set -euo pipefail
-api-cli --config ~/.config/ghr/samples/github/github.json "$@"
+exec api-cli --config ~/.config/ghr/github.json "$@"
 ```
 
-Then `ghr repo get golang/go` works from anywhere. Override the endpoint or
-token for a single invocation via `--var` or env vars:
+```sh
+chmod +x ~/.local/bin/ghr
+```
+
+Now `ghr` works from anywhere:
+
+```sh
+ghr --help
+ghr user get octocat
+ghr repo get golang/go
+ghr repo issues cli/cli --state open -n 10
+ghr search repos 'language:go stars:>10000' --sort stars
+ghr rate-limit
+```
+
+Override the endpoint or token for a single invocation:
 
 ```sh
 ghr --var GITHUB_TOKEN=ghp_xxx user get alice
