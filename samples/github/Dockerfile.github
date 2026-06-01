@@ -8,6 +8,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /api-cli .
 FROM alpine:3.21
 RUN apk add --no-cache curl jq
 COPY --from=builder /api-cli /usr/local/bin/api-cli
-COPY github.example.json /github.example.json
-ENTRYPOINT ["api-cli", "--config", "/github.example.json", "--mcp"]
+COPY samples/github/github.json /github.json
+ENTRYPOINT ["api-cli", "--config", "/github.json", "--mcp"]
 CMD ["stdio"]

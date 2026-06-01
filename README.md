@@ -26,8 +26,9 @@ Drop the binary on your `$PATH`.
 
 ## GitHub MCP server (Docker)
 
-CI publishes a pre-built Alpine image containing `api-cli`, `curl`, `jq`, and
-`github.example.json`. The transport is configurable at runtime:
+CI publishes a pre-built Alpine image (`samples/github/Dockerfile.github`)
+containing `api-cli`, `curl`, `jq`, and `github.json`. The transport is
+specified as the container command (default `stdio`):
 
 ```sh
 # stdio (default — for MCP clients that spawn subprocesses)
