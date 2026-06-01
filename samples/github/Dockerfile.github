@@ -1,7 +1,6 @@
 FROM alpine:3.21
-ARG TARGETOS=linux
 ARG TARGETARCH=amd64
-ADD https://pazer.build/dl/api-cli?os=${TARGETOS}&arch=${TARGETARCH} /usr/local/bin/api-cli
+COPY api-cli_linux_${TARGETARCH} /usr/local/bin/api-cli
 RUN chmod +x /usr/local/bin/api-cli && apk add --no-cache curl jq
 COPY samples/github/github.json /github.json
 ENTRYPOINT ["api-cli", "--config", "/github.json", "--mcp"]

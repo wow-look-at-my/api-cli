@@ -30,14 +30,18 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: go-build
+          path: .
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Build and push
         run: |
           branch_tag="$(echo "${{ github.ref_name }}" | tr '/' '-')"
-          tags="--tag ghcr.io/${{ github.repository_owner }}/api-cli:${branch_tag}"
+          tags="--tag ghcr.io/${{ github.repository_owner }}/github:${branch_tag}"
           if [ "${{ github.ref }}" = "refs/heads/master" ]; then
-            tags="${tags} --tag ghcr.io/${{ github.repository_owner }}/api-cli:latest"
+            tags="${tags} --tag ghcr.io/${{ github.repository_owner }}/github:latest"
           fi
           docker buildx create --use
           docker buildx build \
