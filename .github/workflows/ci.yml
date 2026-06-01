@@ -6,6 +6,7 @@ on:
 permissions:
   id-token: write
   contents: write
+  packages: write
 
 jobs:
   test:
@@ -29,9 +30,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: wow-look-at-my/buildhost/.github/actions/buildhost-publish-docker@2c183bbafab5d82fc548443840196193ec40ff60
-        with:
-          server: https://oci.pazer.build
-          file: samples/github/Dockerfile.github
-          platforms: linux/amd64,linux/arm64
-          tags: latest
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Build and push
+        run: |
+          docker buildx create --use
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --file samples/github/Dockerfile.github \
+            --tag ghcr.io/${{ github.repository_owner }}/api-cli:latest \
+            --push \
+            .
