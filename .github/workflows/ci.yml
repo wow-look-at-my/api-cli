@@ -25,6 +25,7 @@ jobs:
 
   docker:
     needs: test
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +33,4 @@ jobs:
         with:
           file: samples/github/Dockerfile.github
           platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ github.sha }}
-            latest
+          tags: latest
