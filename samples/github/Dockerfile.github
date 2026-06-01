@@ -1,10 +1,8 @@
 FROM alpine:3.21
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
-RUN apk add --no-cache curl jq && \
-    curl -fsSL "https://pazer.build/dl/api-cli?os=${TARGETOS}&arch=${TARGETARCH}" \
-      -o /usr/local/bin/api-cli && \
-    chmod +x /usr/local/bin/api-cli
+ADD https://pazer.build/dl/api-cli?os=${TARGETOS}&arch=${TARGETARCH} /usr/local/bin/api-cli
+RUN chmod +x /usr/local/bin/api-cli && apk add --no-cache curl jq
 COPY samples/github/github.json /github.json
 ENTRYPOINT ["api-cli", "--config", "/github.json", "--mcp"]
 CMD ["stdio"]
