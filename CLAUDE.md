@@ -43,6 +43,7 @@ covers most needs.
 | `api.schema.json`               | Authoritative JSON Schema for configs. Updated alongside `config.go`. |
 | `api.example.json`              | Reference config; covered by `TestExampleConfigMatchesSchema` and integration tests. |
 | `github.example.json`           | Real-world example: read-only GitHub REST API wrapper with table/detail views and `jq`-based response trimming. |
+| `Dockerfile`                    | Multi-stage Alpine image: builds `api-cli`, ships with `curl`+`jq`+`github.example.json`. ENTRYPOINT runs `--mcp`; transport is CMD (default `stdio`). CI publishes to `pazer.build/api-cli`. |
 | `*_test.go`                     | Unit + integration tests (testify). `integration_test.go` has the `execCmd` / `execCmdFull` helpers used by most tests. |
 
 ## Key design rules
