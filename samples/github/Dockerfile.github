@@ -1,13 +1,8 @@
-FROM golang:1.25-alpine AS builder
-WORKDIR /src
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /api-cli .
-
 FROM alpine:3.21
-RUN apk add --no-cache curl jq
-COPY --from=builder /api-cli /usr/local/bin/api-cli
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+ADD https://pazer.build/dl/api-cli/latest/${TARGETOS}/${TARGETARCH} /usr/local/bin/api-cli
+RUN chmod +x /usr/local/bin/api-cli && apk add --no-cache curl jq
 COPY samples/github/github.json /github.json
 ENTRYPOINT ["api-cli", "--config", "/github.json", "--mcp"]
 CMD ["stdio"]
