@@ -42,9 +42,8 @@ covers most needs.
 | `docs.go`                       | Built-in `docs` subcommand: embeds README, schema, and example via `go:embed`. Schema key lookup via `schemaLookup`. |
 | `api.schema.json`               | Authoritative JSON Schema for configs. Updated alongside `config.go`. |
 | `api.example.json`              | Reference config; covered by `TestExampleConfigMatchesSchema` and integration tests. |
-| `github.example.json`           | Real-world example: read-only GitHub REST API wrapper with table/detail views and `jq`-based response trimming. |
-| `samples/github/github.json`    | Same config as `github.example.json` packaged for the Docker image (schema path adjusted to `../../api.schema.json`). |
-| `samples/github/Dockerfile.github` | Alpine image: builds `api-cli`, ships with `curl`+`jq`+`github.json`. ENTRYPOINT runs `--mcp`; transport is CMD (default `stdio`). CI publishes to `pazer.build/api-cli`. |
+| `samples/github/github.json`    | Read-only GitHub REST API wrapper: table/detail views, `jq`-based response trimming. Used by the Docker image and the CI demo step. |
+| `samples/github/Dockerfile.github` | Alpine image: builds `api-cli`, ships with `curl`+`jq`+`samples/github/github.json`. ENTRYPOINT runs `--mcp`; transport is CMD (default `stdio`). CI publishes to `pazer.build/api-cli`. |
 | `*_test.go`                     | Unit + integration tests (testify). `integration_test.go` has the `execCmd` / `execCmdFull` helpers used by most tests. |
 
 ## Key design rules

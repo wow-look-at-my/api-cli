@@ -11,7 +11,7 @@ ship in this repo:
 
 - [`api.example.json`](./api.example.json) — a minimal demo against
   `jsonplaceholder.typicode.com`.
-- [`github.example.json`](./github.example.json) — a real, useful read-only
+- [`samples/github/github.json`](./samples/github/github.json) — a real, useful read-only
   wrapper for the GitHub REST API with table/detail views and aggressive
   noise-trimming (drops every `*url` field with `jq`, cutting response size
   by 50–70%). See [GitHub example](#github-example) below.
@@ -397,8 +397,8 @@ $ apicli --debug users get alice
 evaluated, so `{{.env.KEY}}` picks it up. Repeatable.
 
 ```sh
-api-cli --config github.example.json --var GITHUB_TOKEN=ghp_xxx user get octocat
-api-cli --config github.example.json --var GITHUB_API_URL=https://ghes.example.com repo get myorg/myrepo
+api-cli --config samples/github/github.json --var GITHUB_TOKEN=ghp_xxx user get octocat
+api-cli --config samples/github/github.json --var GITHUB_API_URL=https://ghes.example.com repo get myorg/myrepo
 ```
 
 This is useful in wrapper scripts where credentials or endpoints differ per
@@ -407,7 +407,7 @@ environment:
 ```bash
 #!/bin/bash
 set -euo pipefail
-api-cli --config ~/.config/ghr/github.example.json --var GITHUB_TOKEN="$MY_TOKEN" "$@"
+api-cli --config ~/.config/ghr/samples/github/github.json --var GITHUB_TOKEN="$MY_TOKEN" "$@"
 ```
 
 ## Config schema
@@ -884,7 +884,7 @@ The CLI inherits the exit code of the executed child command. Additionally:
 
 ## GitHub example
 
-[`github.example.json`](./github.example.json) wraps the read-only slice of
+[`samples/github/github.json`](./samples/github/github.json) wraps the read-only slice of
 the GitHub REST API and is a more realistic showcase than the toy
 jsonplaceholder demo. Highlights:
 
@@ -897,12 +897,12 @@ jsonplaceholder demo. Highlights:
 ### Quickstart
 
 ```sh
-./build/api-cli --config github.example.json --help
-./build/api-cli --config github.example.json user get octocat
-./build/api-cli --config github.example.json repo get golang/go
-./build/api-cli --config github.example.json repo issues cli/cli --state open -n 10
-./build/api-cli --config github.example.json search repos 'language:go stars:>10000' --sort stars
-./build/api-cli --config github.example.json rate-limit
+./build/api-cli --config samples/github/github.json --help
+./build/api-cli --config samples/github/github.json user get octocat
+./build/api-cli --config samples/github/github.json repo get golang/go
+./build/api-cli --config samples/github/github.json repo issues cli/cli --state open -n 10
+./build/api-cli --config samples/github/github.json search repos 'language:go stars:>10000' --sort stars
+./build/api-cli --config samples/github/github.json rate-limit
 ```
 
 To make it as ergonomic as `gh`, drop a wrapper on `$PATH`:
@@ -911,7 +911,7 @@ To make it as ergonomic as `gh`, drop a wrapper on `$PATH`:
 #!/bin/bash
 # ~/.local/bin/ghr  (a tiny "gh-read" alias)
 set -euo pipefail
-api-cli --config ~/.config/ghr/github.example.json "$@"
+api-cli --config ~/.config/ghr/samples/github/github.json "$@"
 ```
 
 Then `ghr repo get golang/go` works from anywhere. Override the endpoint or
