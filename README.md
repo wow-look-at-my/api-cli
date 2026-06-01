@@ -35,10 +35,10 @@ specified as the container command (default `stdio`):
 docker run --rm -e GH_TOKEN=ghp_xxx ghcr.io/wow-look-at-my/api-cli
 
 # Streamable HTTP on port 8080
-docker run --rm -p 8080:8080 -e GH_TOKEN=ghp_xxx ghcr.io/wow-look-at-my/api-cli http://0.0.0.0:8080
+docker run --rm -p 127.0.0.1:8080:8080 -e GH_TOKEN=ghp_xxx ghcr.io/wow-look-at-my/api-cli http://0.0.0.0:8080
 
 # SSE on port 8080
-docker run --rm -p 8080:8080 -e GH_TOKEN=ghp_xxx ghcr.io/wow-look-at-my/api-cli sse://0.0.0.0:8080
+docker run --rm -p 127.0.0.1:8080:8080 -e GH_TOKEN=ghp_xxx ghcr.io/wow-look-at-my/api-cli sse://0.0.0.0:8080
 ```
 
 Pass `--cors <level>` after the transport to control CORS (see [CORS levels](#cors-levels)).
