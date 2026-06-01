@@ -23,6 +23,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./.github/scripts/demo-summary.sh
 
+  validate-json:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: wow-look-at-my/json-validator@master
+
   docker:
     needs: test
     runs-on: ubuntu-latest
