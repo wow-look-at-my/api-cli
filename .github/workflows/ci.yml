@@ -15,7 +15,7 @@ jobs:
       - uses: wow-look-at-my/go-toolchain@v1
         with:
           autorelease: 'true'
-      - name: Run samples/github/github.json demo into the step summary
+      - name: Run samples/github/github.yaml demo into the step summary
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./.github/scripts/demo-summary.sh

@@ -1,11 +1,12 @@
 # api-cli — repo orientation for Claude
 
 This is a single-binary Go CLI built on **cobra**. It's a *declarative alias
-system*: the user supplies a JSON config (`./api.json` by default, or
-`--config <path>`), and at runtime the binary builds a cobra command tree
-from that config. Each leaf renders a Go `text/template` against a data
-context and executes the result. Common use case: wrapping REST APIs with
-`curl`, but the system is general-purpose.
+system*: the user supplies a config — **tab-indented YAML** (parsed by
+`yaml-fixed`) or JSON — (`./api.json` by default, or `--config <path>`), and at
+runtime the binary builds a cobra command tree from that config. Each leaf
+renders a Go `text/template` against a data context and executes the result.
+Common use case: wrapping REST APIs with `curl`, but the system is
+general-purpose.
 
 The user-facing semantics are documented exhaustively in `README.md`. This
 file is a fast orientation for code changes.
@@ -13,13 +14,17 @@ file is a fast orientation for code changes.
 ## Module / dependencies
 
 - Module: `github.com/wow-look-at-my/api-cli`, Go 1.25.0.
-- CLI parsing: `github.com/spf13/cobra` v1.8.x.
+- CLI parsing: `github.com/spf13/cobra`.
+- Config parsing: `github.com/wow-look-at-my/yaml-fixed` (tab-indented YAML; tabs
+  only, spaces rejected). Valid JSON is detected and passed straight to
+  `encoding/json` unchanged — see `yamlsource.go`.
 - Templating: Go stdlib `text/template` + `github.com/Masterminds/sprig/v3`.
 - JSON Schema validation (test only): `github.com/santhosh-tekuri/jsonschema/v5`.
 - TTY / terminal width: `golang.org/x/term`.
 - East Asian Wide width tables: `golang.org/x/text/width`.
 - MCP server: `github.com/modelcontextprotocol/go-sdk`.
-- Test assertions: `github.com/wow-look-at-my/testify` (a fork pin).
+- Test assertions: `github.com/stretchr/testify` (go-toolchain's vet
+  canonicalizes testify imports to upstream on every run).
 
 Do not add new third-party deps without a clear reason. Stdlib + sprig
 covers most needs.
@@ -29,7 +34,8 @@ covers most needs.
 | File                            | Role                                                        |
 |---------------------------------|-------------------------------------------------------------|
 | `main.go`                       | Entrypoint, root cobra command, persistent flags, config loading. `preparseGlobalFlags` extracts `--config` / `--mcp` / `--cors` from argv via a tolerant pflag parse before the cobra tree is built. |
-| `config.go`                     | Schema structs (`Config`, `Command`, `Step`, `Arg`, `Flag`, `Cmd`, `Format`, `View`, `FormatRef`); `Load`; `validate`. |
+| `config.go`                     | Schema structs (`Config`, `Command`, `Step`, `Arg`, `Flag`, `Cmd`, `Format`, `View`, `FormatRef`); `Load` (reads bytes → `sourceToJSON` → strict `encoding/json` decode); `validate`. |
+| `yamlsource.go`                 | `sourceToJSON`: valid JSON passes straight through; otherwise the source is parsed as tab-YAML via `yaml-fixed` (`yaml.Parse`) and re-encoded to JSON, preserving the single strict decode path (unknown-field rejection, `Cmd`/`FormatRef` unmarshalers). |
 | `build.go`                      | Walks `Config.Commands` building `cobra.Command` tree. Threads inheritance for `command`/`cwd`/`stdin`/`confirm`/`format`. Implements `runLeaf` and `passthroughParse`. |
 | `exec.go`                       | `doExec` (streaming), `captureExec` (steps), `captureExecCapped` (format path with 32 MiB cap), `parseResult`, `cappedTee`. |
 | `render.go`                     | `renderString`, `renderEntry`, `funcMap` with sprig + custom helpers (`querystring`, `shellquote`, `urlpath`, `spread`, `fileExists`, `dirExists`, `tabwriter`, `padRight`, `padLeft`, `displayWidth`, `stripANSI`, `filterSuffix`, `filterPrefix`). |
@@ -42,8 +48,8 @@ covers most needs.
 | `docs.go`                       | Built-in `docs` subcommand: embeds README, schema, and example via `go:embed`. Schema key lookup via `schemaLookup`. |
 | `api.schema.json`               | Authoritative JSON Schema for configs. Updated alongside `config.go`. |
 | `api.example.json`              | Reference config; covered by `TestExampleConfigMatchesSchema` and integration tests. |
-| `samples/github/github.json`    | Read-only GitHub REST API wrapper: table/detail views, `jq`-based response trimming. Used by the Docker image and the CI demo step. |
-| `samples/github/Dockerfile.github` | Alpine image: builds `api-cli`, ships with `curl`+`jq`+`samples/github/github.json`. ENTRYPOINT runs `--mcp`; transport is CMD (default `stdio`). CI publishes to `pazer.build/api-cli`. |
+| `samples/github/github.yaml`    | Read-only GitHub REST API wrapper, in tab-indented YAML: table/detail views, `jq`-based response trimming. Used by the Docker image and the CI demo step. Schema-checked by `TestGithubSampleLoadsAndMatchesSchema`. |
+| `samples/github/Dockerfile.github` | Alpine image: builds `api-cli`, ships with `curl`+`jq`+`samples/github/github.yaml`. ENTRYPOINT runs `--mcp`; transport is CMD (default `stdio`). CI publishes to `pazer.build/api-cli`. |
 | `*_test.go`                     | Unit + integration tests (testify). `integration_test.go` has the `execCmd` / `execCmdFull` helpers used by most tests. |
 
 ## Key design rules

@@ -1,9 +1,10 @@
 # api-cli
 
-A declarative command-line alias system. You write JSON describing a tree of
-commands (subcommands, args, flags, user-defined variables); the tool renders
-a Go `text/template` for each leaf and executes the result. Help at every
-level, shell tab completion, and strong templating come for free.
+A declarative command-line alias system. You write a config — **tab-indented
+YAML** or JSON — describing a tree of commands (subcommands, args, flags,
+user-defined variables); the tool renders a Go `text/template` for each leaf
+and executes the result. Help at every level, shell tab completion, and strong
+templating come for free.
 
 It's not an HTTP client — it just runs shell or `argv` commands — but the
 canonical use case is wrapping a REST API with `curl`. Two example configs
@@ -11,7 +12,7 @@ ship in this repo:
 
 - [`api.example.json`](./api.example.json) — a minimal demo against
   `jsonplaceholder.typicode.com`.
-- [`samples/github/github.json`](./samples/github/github.json) — a real, useful read-only
+- [`samples/github/github.yaml`](./samples/github/github.yaml) — a real, useful read-only
   wrapper for the GitHub REST API with table/detail views and aggressive
   noise-trimming (drops every `*url` field with `jq`, cutting response size
   by 50–70%). See [GitHub example](#github-example) below.
@@ -377,8 +378,8 @@ $ apicli --debug users get alice
 evaluated, so `{{.env.KEY}}` picks it up. Repeatable.
 
 ```sh
-api-cli --config samples/github/github.json --var GITHUB_TOKEN=ghp_xxx user get octocat
-api-cli --config samples/github/github.json --var GITHUB_API_URL=https://ghes.example.com repo get myorg/myrepo
+api-cli --config samples/github/github.yaml --var GITHUB_TOKEN=ghp_xxx user get octocat
+api-cli --config samples/github/github.yaml --var GITHUB_API_URL=https://ghes.example.com repo get myorg/myrepo
 ```
 
 This is useful in wrapper scripts where credentials or endpoints differ per
@@ -387,8 +388,45 @@ environment:
 ```bash
 #!/bin/bash
 set -euo pipefail
-api-cli --config ~/.config/ghr/samples/github/github.json --var GITHUB_TOKEN="$MY_TOKEN" "$@"
+api-cli --config ~/.config/ghr/samples/github/github.yaml --var GITHUB_TOKEN="$MY_TOKEN" "$@"
 ```
+
+## Config format
+
+A config is **tab-indented YAML**, parsed by
+[`yaml-fixed`](https://github.com/wow-look-at-my/yaml-fixed). Indentation is
+**tabs only** — leading spaces used as indentation are a hard error (spaces are
+still fine for alignment past a `- ` marker and inside values). Compared with
+JSON this buys you:
+
+- `#` comments;
+- single-quoted scalars, so the double quotes Go templates need (`printf "%s"`,
+  `eq .x "y"`, `jq`'s `"key"`) require **no escaping**;
+- block scalars (`|`) for multi-line templates with real newlines instead of
+  `\n` soup.
+
+```yaml
+name: apicli
+vars:
+	base_url: 'https://api.example.com/v1'
+# A literal block scalar keeps the shell pipeline's quotes unescaped.
+command: |-
+	curl -fsSL -H 'Authorization: Bearer {{.env.API_TOKEN}}' {{shellquote (printf "%s%s" .var.base_url .entry.path)}}
+commands:
+	- name: users
+	  commands:
+		- name: get
+		  args:
+			- name: id
+			  type: int
+			  required: true
+		  entry:
+			path: '/users/{{.arg.id}}'
+```
+
+Plain **JSON** is also accepted: any config that is valid JSON (including
+multi-line, pretty-printed) is loaded unchanged, so existing `.json` configs
+keep working. Space-indented YAML is not supported.
 
 ## Config schema
 
@@ -769,7 +807,7 @@ subcommand:
 
 | Flag              | Short | Default | Notes                                                                                     |
 |-------------------|-------|---------|-------------------------------------------------------------------------------------------|
-| `--config <path>` |       |         | Path to JSON config file. Falls back to `./api.json` if unset. See [Config discovery](#config-discovery). |
+| `--config <path>` |       |         | Path to config file (tab-YAML or JSON). Falls back to `./api.json`, `./api.yaml`, or `./api.yml` if unset. See [Config discovery](#config-discovery). |
 | `--mcp <transport>` |     |         | Run the loaded config as an MCP (Model Context Protocol) server instead of a CLI. Values: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes an MCP tool. HTTP and SSE transports also expose `GET /health` → `{"status":"ok"}`. Output formatting behaves like `--format=always` (`.tty` is `true`, `.width` is 80). |
 | `--cors <level>`  |       | `strict` | CORS policy for the MCP HTTP/SSE server. See [CORS levels](#cors-levels). Ignored for `--mcp=stdio`. |
 | `--quiet`         | `-q`  | false   | Suppress the `N executions` line on stderr (printed when a leaf with `steps` runs more than one command). |
@@ -838,7 +876,7 @@ of available keys.
 First hit wins:
 
 1. `--config <path>` anywhere on the command line (`--config=x` or `--config x`).
-2. `./api.json` in the current working directory.
+2. `./api.json`, then `./api.yaml`, then `./api.yml` in the current working directory.
 
 ## Shell completion
 
@@ -864,7 +902,7 @@ The CLI inherits the exit code of the executed child command. Additionally:
 
 ## GitHub example
 
-[`samples/github/github.json`](./samples/github/github.json) wraps the read-only slice of
+[`samples/github/github.yaml`](./samples/github/github.yaml) wraps the read-only slice of
 the GitHub REST API and is a more realistic showcase than the toy
 jsonplaceholder demo. Highlights:
 
@@ -880,14 +918,14 @@ Copy the config somewhere stable and create a wrapper script:
 
 ```sh
 mkdir -p ~/.config/ghr
-cp samples/github/github.json ~/.config/ghr/github.json
+cp samples/github/github.yaml ~/.config/ghr/github.yaml
 ```
 
 ```bash
 #!/bin/bash
 # ~/.local/bin/ghr
 set -euo pipefail
-exec api-cli --config ~/.config/ghr/github.json "$@"
+exec api-cli --config ~/.config/ghr/github.yaml "$@"
 ```
 
 ```sh

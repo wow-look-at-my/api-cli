@@ -40,3 +40,30 @@ func TestExampleConfigMatchesSchema(t *testing.T) {
 		})
 	}
 }
+
+// TestGithubSampleLoadsAndMatchesSchema guards the tab-YAML GitHub sample: it
+// must load (parse + pass api-cli validation) and conform to the published JSON
+// Schema. This replaces the well-formedness coverage it had as a *.json file
+// (the CI json-validator only scans *.json).
+func TestGithubSampleLoadsAndMatchesSchema(t *testing.T) {
+	const path = "samples/github/github.yaml"
+
+	_, err := Load(path)
+	require.NoError(t, err)
+
+	schemaBytes, err := os.ReadFile("api.schema.json")
+	require.NoError(t, err)
+	compiler := jsonschema.NewCompiler()
+	require.NoError(t, compiler.AddResource("api.schema.json", bytes.NewReader(schemaBytes)))
+	schema, err := compiler.Compile("api.schema.json")
+	require.NoError(t, err)
+
+	src, err := os.ReadFile(path)
+	require.NoError(t, err)
+	jsonSrc, err := sourceToJSON(src)
+	require.NoError(t, err)
+
+	var doc any
+	require.NoError(t, json.Unmarshal(jsonSrc, &doc))
+	require.NoError(t, schema.Validate(doc))
+}

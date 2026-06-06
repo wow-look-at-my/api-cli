@@ -1,6 +1,6 @@
 # GitHub MCP server
 
-Pre-built Alpine image containing `api-cli`, `curl`, `jq`, and `github.json`.
+Pre-built Alpine image containing `api-cli`, `curl`, `jq`, and `github.yaml`.
 The transport is specified as the container command (default `stdio`):
 
 ```sh

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generates a markdown showcase of samples/github/github.json into
+# Generates a markdown showcase of samples/github/github.yaml into
 # $GITHUB_STEP_SUMMARY. For each public endpoint, the script captures
 # THREE outputs and emits them with byte counts so the savings are
 # obvious:
@@ -24,7 +24,11 @@
 set -euo pipefail
 
 bin=./build/api-cli
-cfg=samples/github/github.json
+# CI builds via `go-toolchain matrix`, which emits per-platform binaries
+# (api-cli_<os>_<arch>) instead of a bare build/api-cli; fall back to the
+# linux/amd64 binary the ubuntu runner uses.
+[[ -x "$bin" ]] || bin=./build/api-cli_linux_amd64
+cfg=samples/github/github.yaml
 sum="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 
 if [[ ! -x "$bin" ]]; then
@@ -116,11 +120,11 @@ demo() {
     echo
     repo="${GITHUB_REPOSITORY:-wow-look-at-my/api-cli}"
     sha="${GITHUB_SHA:-HEAD}"
-    echo "Live read-only run of [\`samples/github/github.json\`](https://github.com/${repo}/blob/${sha}/samples/github/github.json) against public GitHub endpoints. Each section shows three things, side-by-side, so the response bloat is obvious:"
+    echo "Live read-only run of [\`samples/github/github.yaml\`](https://github.com/${repo}/blob/${sha}/samples/github/github.yaml) against public GitHub endpoints. Each section shows three things, side-by-side, so the response bloat is obvious:"
     echo
-    echo "1. **Raw API response** &mdash; what \`curl\` returns straight from \`api.github.com\`. Roughly half the bytes (often more) are \`*_url\` template links you almost never want on the CLI. Reproduce with \`GITHUB_RAW=1 api-cli --config samples/github/github.json <cmd> --no-format\`."
-    echo "2. **URL-stripped JSON** &mdash; the same response after a tiny \`jq\` walk drops every key ending in \`url\`. This is the default for \`api-cli --config samples/github/github.json\`; pass \`GITHUB_RAW=1\` to opt out. Reproduce with \`api-cli --config samples/github/github.json <cmd> --no-format\`."
-    echo "3. **Formatted view** &mdash; rendered through the \`api-cli\` format/views system into a table or detail block. Reproduce with \`api-cli --config samples/github/github.json <cmd> --format=always\`."
+    echo "1. **Raw API response** &mdash; what \`curl\` returns straight from \`api.github.com\`. Roughly half the bytes (often more) are \`*_url\` template links you almost never want on the CLI. Reproduce with \`GITHUB_RAW=1 api-cli --config samples/github/github.yaml <cmd> --no-format\`."
+    echo "2. **URL-stripped JSON** &mdash; the same response after a tiny \`jq\` walk drops every key ending in \`url\`. This is the default for \`api-cli --config samples/github/github.yaml\`; pass \`GITHUB_RAW=1\` to opt out. Reproduce with \`api-cli --config samples/github/github.yaml <cmd> --no-format\`."
+    echo "3. **Formatted view** &mdash; rendered through the \`api-cli\` format/views system into a table or detail block. Reproduce with \`api-cli --config samples/github/github.yaml <cmd> --format=always\`."
     echo
     echo "The headers below show only \`<cmd>\` (the subcommand and its args); \`--config\`, \`--no-format\`, and \`--format=always\` are implicit per-section as listed above."
     echo

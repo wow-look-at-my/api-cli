@@ -23,8 +23,11 @@ func run(argv []string, errOut io.Writer) int {
 		return 2
 	}
 	if cfgPath == "" {
-		if _, err := os.Stat("api.json"); err == nil {
-			cfgPath = "api.json"
+		for _, candidate := range []string{"api.json", "api.yaml", "api.yml"} {
+			if _, err := os.Stat(candidate); err == nil {
+				cfgPath = candidate
+				break
+			}
 		}
 	}
 
@@ -43,7 +46,7 @@ func run(argv []string, errOut io.Writer) int {
 	// user sees --help output. --mcp mode always requires a config, so don't
 	// exempt help invocations when --mcp is present (that would panic).
 	if cfg == nil && ((!isHelpInvocation(argv) && !isDocsInvocation(argv)) || mcpTransport != "") {
-		fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.json in the current directory")
+		fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.json / api.yaml in the current directory")
 		return 2
 	}
 
@@ -85,7 +88,7 @@ func newRoot(cfg *Config) *cobra.Command {
 	// Declared so --help lists them. In MCP mode we extract --config /
 	// --mcp / --cors from argv before the cobra tree exists; see
 	// preparseGlobalFlags.
-	root.PersistentFlags().String("config", "", "Path to JSON config file (default: ./api.json).")
+	root.PersistentFlags().String("config", "", "Path to config file: tab-YAML or JSON (default: ./api.json, ./api.yaml, or ./api.yml).")
 	root.PersistentFlags().String("mcp", "", `Run as MCP server. Value: "stdio", "http://<addr>", or "sse://<addr>".`)
 	root.PersistentFlags().String("cors", "strict", "CORS policy for MCP HTTP/SSE: disabled|permissive|strict|enabled.")
 	root.PersistentFlags().StringArray("var", nil, "Set an environment variable (KEY=VALUE). Repeatable.")
