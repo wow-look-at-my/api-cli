@@ -7,8 +7,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDocsCommand_PrintsReadme(t *testing.T) {
@@ -146,8 +146,8 @@ func TestDocsCommand_NoConfigSchemaKey(t *testing.T) {
 
 func TestIsDocsInvocation(t *testing.T) {
 	tests := []struct {
-		argv []string
-		want bool
+		argv	[]string
+		want	bool
 	}{
 		{[]string{"docs"}, true},
 		{[]string{"docs", "schema"}, true},

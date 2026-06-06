@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -290,16 +291,22 @@ var validFormatInputs = map[string]bool{
 	"raw":   true,
 }
 
-// Load reads and parses a config file. Unknown keys are rejected to catch
-// typos early.
+// Load reads and parses a config file. Configs are YAML (a superset of JSON,
+// so pure-JSON configs still load); see sourceToJSON for how tab indentation
+// and the YAML->JSON conversion are handled. Unknown keys are rejected to
+// catch typos early.
 func Load(path string) (*Config, error) {
-	f, err := os.Open(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("open config %q: %w", path, err)
 	}
-	defer f.Close()
 
-	dec := json.NewDecoder(f)
+	jsonSrc, err := sourceToJSON(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse config %q: %w", path, err)
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(jsonSrc))
 	dec.DisallowUnknownFields()
 
 	var cfg Config
