@@ -36,9 +36,14 @@
 	      truncate="7"                first N characters            (substr 0 N)
 	      firstline="true"            first line only               (regex strip)
 	      as="urlpath|querystring"    named transform
-	      trim-prefix="var.x"         strip the rendered value at that path
-	      percent-of="@column"        AGGREGATE: share of the column total (see
-	                                  note at `languages`: a flagged boundary)
+	      expr="<text/template>"      ESCAPE HATCH for the transform/compute tail
+	                                  (sums, computed prefixes) the structural
+	                                  nodes can't express. Same Go text/template
+	                                  engine as the string format: in expr, `.`
+	                                  is the current item and `$` is the root
+	                                  context ($.data, $.var, ...). See the
+	                                  `languages` % and `search issues` REPO
+	                                  columns.
 
 	  <if test="path" [eq="x"]> ... <else-if test="..."/> ... <else/> ... </if>
 	  <for each="path" [join=", "] [empty="..."]> ... </for>
@@ -490,17 +495,16 @@
 		</command>
 		<command name="languages" description="Map of languages to byte counts.">
 			<arg name="repo" type="string" required="true"/>
-			<!-- The "%" column is an AGGREGATE: each row's share of the summed
-			     byte total. Pure placeholder nodes can't express "sum across all
-			     rows" on their own, so this needs a built-in like percent-of (a
-			     column total) or an expr escape hatch. percent-of shown here is
-			     the flagged boundary of the node model. -->
+			<!-- The "%" column is an aggregate (each row's share of the summed
+			     byte total). Structural nodes can't sum across rows, so it uses
+			     the expr escape hatch: `.` is this row's byte count and $.data is
+			     the whole language->bytes map to total up. -->
 			<format input="json">
 				<view name="table" default="true">
 					<table over="data">
 						<column header="LANGUAGE"><value name="@key"/></column>
 						<column header="BYTES"><value name="@value"/></column>
-						<column header="%"><value name="@value" percent-of="@column" format="%.1f%%"/></column>
+						<column header="%"><value expr='{{ $t := 0 }}{{ range $.data }}{{ $t = add $t . }}{{ end }}{{ printf "%.1f%%" (mulf 100.0 (divf . $t)) }}'/></column>
 					</table>
 				</view>
 			</format>
@@ -620,15 +624,14 @@
 			<flag name="page" short="p" type="int" default="1"/>
 			<flag name="sort" type="string" default="" description="comments|reactions|created|updated."/>
 			<vars>
-				<!-- repos_base feeds the trim-prefix on the REPO column below: a
-				     node-friendly way to strip a computed prefix without an
-				     expression language (the other flagged boundary). -->
-				<var name="repos_base"><value name="var.base_url"/>/repos/</var>
 				<var name="filter"><![CDATA[walk(if type == "object" then with_entries(select((.key == "repository_url" or (.key | endswith("url") | not)) and (.key | IN("node_id","gravatar_id","user_view_type","site_admin","performed_via_github_app","active_lock_reason","author_association","temp_clone_token","custom_properties","issue_field_values","permissions","_links","network_count","pinned_comment","reactions","sub_issues_summary","issue_dependencies_summary") | not))) | if has("forks_count") then del(.forks) else . end | if has("watchers_count") then del(.watchers) else . end | if has("open_issues_count") then del(.open_issues) else . end else . end)]]></var>
 			</vars>
 			<format input="json">
+				<!-- REPO strips the "{base_url}/repos/" prefix off repository_url;
+				     combining two values is beyond the structural nodes, so it
+				     uses the expr escape hatch. -->
 				<view name="table" default="true"><table over="data.items">
-						<column header="REPO"><value name="repository_url" default="" trim-prefix="var.repos_base"/></column>
+						<column header="REPO"><value expr='{{ .repository_url | default "" | trimPrefix (printf "%s/repos/" $.var.base_url) }}'/></column>
 						<column header="#">#<value name="number"/></column>
 						<column header="STATE"><value name="state"/></column>
 						<column header="TITLE"><value name="title"/></column>
