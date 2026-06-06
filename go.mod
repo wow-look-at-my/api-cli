@@ -6,11 +6,11 @@ require (
 	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
-	github.com/spf13/cobra v1.8.1
-	github.com/stretchr/testify v1.5.1
+	github.com/spf13/cobra v1.10.2
+	github.com/stretchr/testify v1.11.1
+	github.com/wow-look-at-my/yaml-fixed v0.0.0-20260606185458-326a8c67c5ee
 	golang.org/x/term v0.37.0
 	golang.org/x/text v0.31.0
-	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -29,10 +29,10 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
-	gopkg.in/yaml.v2 v2.3.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
