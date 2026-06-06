@@ -6,7 +6,7 @@
   "vars": {
     "base_url": "{{.env.GITHUB_API_URL | default \"https://api.github.com\"}}",
     "ua": "api-cli-github-example",
-    "filter": "walk(if type == \"object\" then with_entries(select((.key | endswith(\"url\") | not) and (.key | IN(\"node_id\",\"gravatar_id\",\"user_view_type\",\"site_admin\",\"performed_via_github_app\",\"active_lock_reason\",\"author_association\",\"temp_clone_token\",\"custom_properties\",\"issue_field_values\",\"permissions\",\"network_count\",\"pinned_comment\",\"reactions\",\"sub_issues_summary\",\"issue_dependencies_summary\") | not))) | if has(\"forks_count\") then del(.forks) else . end | if has(\"watchers_count\") then del(.watchers) else . end | if has(\"open_issues_count\") then del(.open_issues) else . end else . end)"
+    "filter": "walk(if type == \"object\" then with_entries(select((.key | endswith(\"url\") | not) and (.key | IN(\"node_id\",\"gravatar_id\",\"user_view_type\",\"site_admin\",\"performed_via_github_app\",\"active_lock_reason\",\"author_association\",\"temp_clone_token\",\"custom_properties\",\"issue_field_values\",\"permissions\",\"_links\",\"network_count\",\"pinned_comment\",\"reactions\",\"sub_issues_summary\",\"issue_dependencies_summary\") | not))) | if has(\"forks_count\") then del(.forks) else . end | if has(\"watchers_count\") then del(.watchers) else . end | if has(\"open_issues_count\") then del(.open_issues) else . end else . end)"
   },
 
   "command": "curl -fsSL -H {{shellquote (printf \"User-Agent: %s\" .var.ua)}} -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28'{{if .env.GITHUB_TOKEN}} -H {{shellquote (printf \"Authorization: Bearer %s\" .env.GITHUB_TOKEN)}}{{else if .env.GH_TOKEN}} -H {{shellquote (printf \"Authorization: Bearer %s\" .env.GH_TOKEN)}}{{end}} {{shellquote (printf \"%s%s%s\" .var.base_url .entry.path (querystring .entry.query))}} | jq {{shellquote .var.filter}}",
@@ -56,6 +56,28 @@
           "name": "detail",
           "default": true,
           "template": "#{{.data.number}} ({{.data.state}}): {{.data.title}}\nAuthor:  {{.data.user.login}}\nCreated: {{.data.created_at}}\nUpdated: {{.data.updated_at}}\n{{if .data.labels}}Labels:  {{range $i, $l := .data.labels}}{{if $i}}, {{end}}{{$l.name}}{{end}}\n{{end}}\n{{default \"\" .data.body}}\n"
+        }
+      ]
+    },
+
+    "pr": {
+      "input": "json",
+      "views": [
+        {
+          "name": "detail",
+          "default": true,
+          "template": "#{{.data.number}} ({{.data.state}}{{if .data.draft}}, draft{{end}}{{if .data.merged}}, merged{{end}}): {{.data.title}}\nAuthor:   {{.data.user.login}}\nBranch:   {{.data.head.ref}} -> {{.data.base.ref}}\nCreated:  {{.data.created_at}}\nUpdated:  {{.data.updated_at}}\nComments: {{default 0 .data.comments}} conversation, {{default 0 .data.review_comments}} review\nCommits:  {{default 0 .data.commits}}\nDiff:     +{{default 0 .data.additions}} -{{default 0 .data.deletions}} across {{default 0 .data.changed_files}} file(s)\n{{if .data.labels}}Labels:   {{range $i, $l := .data.labels}}{{if $i}}, {{end}}{{$l.name}}{{end}}\n{{end}}\n{{default \"\" .data.body}}\n"
+        }
+      ]
+    },
+
+    "comment": {
+      "input": "json",
+      "views": [
+        {
+          "name": "list",
+          "default": true,
+          "template": "{{if .data}}{{range .data}}@{{.user.login}}{{if .path}} on {{.path}}{{with .line}}:{{.}}{{end}}{{end}} ({{.created_at}}):\n{{.body}}\n\n{{end}}{{else}}No comments.\n{{end}}"
         }
       ]
     },
@@ -124,6 +146,13 @@
           "default": true,
           "template": "{{ $rows := list \"RESOURCE\\tLIMIT\\tREMAINING\\tRESET\" }}{{ range $k, $v := .data.resources }}{{ $rows = append $rows (printf \"%v\\t%v\\t%v\\t%v\" $k $v.limit $v.remaining $v.reset) }}{{ end }}{{ tabwriter $rows }}"
         }
+      ]
+    },
+
+    "raw": {
+      "input": "raw",
+      "views": [
+        { "name": "raw", "default": true, "template": "{{ .data }}\n" }
       ]
     }
   },
@@ -261,14 +290,45 @@
         },
         {
           "name": "pr",
-          "description": "Fetch a single pull request.",
+          "description": "Fetch a single pull request: description, comment counts, and diff size.",
           "args": [
             { "name": "repo", "type": "string", "required": true, "description": "owner/name." },
             { "name": "number", "type": "int", "required": true }
           ],
-          "format": "issue",
+          "format": "pr",
           "entry": {
             "path": "/repos/{{.arg.repo}}/pulls/{{.arg.number}}"
+          }
+        },
+        {
+          "name": "pr-diff",
+          "description": "Fetch the unified diff for a pull request.",
+          "args": [
+            { "name": "repo", "type": "string", "required": true, "description": "owner/name." },
+            { "name": "number", "type": "int", "required": true }
+          ],
+          "format": "raw",
+          "command": "curl -fsSL -H {{shellquote (printf \"User-Agent: %s\" .var.ua)}} -H 'Accept: application/vnd.github.diff'{{if .env.GITHUB_TOKEN}} -H {{shellquote (printf \"Authorization: Bearer %s\" .env.GITHUB_TOKEN)}}{{else if .env.GH_TOKEN}} -H {{shellquote (printf \"Authorization: Bearer %s\" .env.GH_TOKEN)}}{{end}} {{shellquote (printf \"%s/repos/%s/pulls/%v\" .var.base_url .arg.repo .arg.number)}}"
+        },
+        {
+          "name": "pr-comments",
+          "description": "List a pull request's comments. Defaults to the conversation (issue) comments; pass --review for inline code-review comments.",
+          "args": [
+            { "name": "repo", "type": "string", "required": true, "description": "owner/name." },
+            { "name": "number", "type": "int", "required": true }
+          ],
+          "flags": [
+            { "name": "review", "short": "r", "type": "bool", "default": false, "description": "List inline code-review comments instead of conversation comments." },
+            { "name": "limit", "short": "n", "type": "int", "default": 30, "description": "Items per page (max 100)." },
+            { "name": "page", "short": "p", "type": "int", "default": 1, "description": "Page number." }
+          ],
+          "format": "comment",
+          "entry": {
+            "path": "/repos/{{.arg.repo}}/{{if .flag.review}}pulls/{{.arg.number}}/comments{{else}}issues/{{.arg.number}}/comments{{end}}",
+            "query": {
+              "per_page": "{{.flag.limit}}",
+              "page": "{{.flag.page}}"
+            }
           }
         },
         {
@@ -385,6 +445,7 @@
           "flags": [
             { "name": "ref", "short": "r", "type": "string", "default": "", "description": "Branch / SHA / tag." }
           ],
+          "format": "raw",
           "command": "curl -fsSL -H {{shellquote (printf \"User-Agent: %s\" .var.ua)}} -H 'Accept: application/vnd.github.raw'{{if .env.GITHUB_TOKEN}} -H {{shellquote (printf \"Authorization: Bearer %s\" .env.GITHUB_TOKEN)}}{{else if .env.GH_TOKEN}} -H {{shellquote (printf \"Authorization: Bearer %s\" .env.GH_TOKEN)}}{{end}} {{if .flag.ref}}{{shellquote (printf \"%s/repos/%s/readme?ref=%s\" .var.base_url .arg.repo (urlpath .flag.ref))}}{{else}}{{shellquote (printf \"%s/repos/%s/readme\" .var.base_url .arg.repo)}}{{end}}"
         },
         {
@@ -575,7 +636,7 @@
             { "name": "sort", "type": "string", "default": "", "description": "comments|reactions|created|updated." }
           ],
           "vars": {
-            "filter": "walk(if type == \"object\" then with_entries(select((.key == \"repository_url\" or (.key | endswith(\"url\") | not)) and (.key | IN(\"node_id\",\"gravatar_id\",\"user_view_type\",\"site_admin\",\"performed_via_github_app\",\"active_lock_reason\",\"author_association\",\"temp_clone_token\",\"custom_properties\",\"issue_field_values\",\"permissions\",\"network_count\",\"pinned_comment\",\"reactions\",\"sub_issues_summary\",\"issue_dependencies_summary\") | not))) | if has(\"forks_count\") then del(.forks) else . end | if has(\"watchers_count\") then del(.watchers) else . end | if has(\"open_issues_count\") then del(.open_issues) else . end else . end)"
+            "filter": "walk(if type == \"object\" then with_entries(select((.key == \"repository_url\" or (.key | endswith(\"url\") | not)) and (.key | IN(\"node_id\",\"gravatar_id\",\"user_view_type\",\"site_admin\",\"performed_via_github_app\",\"active_lock_reason\",\"author_association\",\"temp_clone_token\",\"custom_properties\",\"issue_field_values\",\"permissions\",\"_links\",\"network_count\",\"pinned_comment\",\"reactions\",\"sub_issues_summary\",\"issue_dependencies_summary\") | not))) | if has(\"forks_count\") then del(.forks) else . end | if has(\"watchers_count\") then del(.watchers) else . end | if has(\"open_issues_count\") then del(.open_issues) else . end else . end)"
           },
           "format": {
             "input": "json",

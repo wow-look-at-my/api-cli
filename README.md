@@ -868,7 +868,7 @@ The CLI inherits the exit code of the executed child command. Additionally:
 the GitHub REST API and is a more realistic showcase than the toy
 jsonplaceholder demo. Highlights:
 
-- **Subcommands**: `user get|repos|orgs`, `repo get|issues|issue|prs|pr|releases|release|commits|commit|branches|tags|contents|readme|languages|topics`, `org get|members|repos`, `search repos|code|issues|users`, `rate-limit`.
+- **Subcommands**: `user get|repos|orgs`, `repo get|issues|issue|prs|pr|pr-diff|pr-comments|releases|release|commits|commit|branches|tags|contents|readme|languages|topics`, `org get|members|repos`, `search repos|code|issues|users`, `rate-limit`.
 - **Token-aware**: picks up `$GITHUB_TOKEN` or `$GH_TOKEN` automatically (5000 req/hr authenticated vs. 60 req/hr without).
 - **Enterprise-ready**: set `$GITHUB_API_URL` to target a GitHub Enterprise Server instance (defaults to `https://api.github.com`).
 - **Noise stripping**: every response is piped through `jq` with a recursive `walk` that drops `*url` template links, GraphQL `node_id`s, empty `gravatar_id`s, `reactions` breakdowns, `permissions`, duplicate counts, and other metadata. On a typical repo response that's ~80% fewer bytes.
