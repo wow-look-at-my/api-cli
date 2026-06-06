@@ -16,9 +16,6 @@ jobs:
         with:
           autorelease: 'true'
       - name: Run samples/github/github.json demo into the step summary
-        # Hits the live GitHub API; transient network/quota hiccups should not
-        # fail CI when the unit tests are green. The summary is best-effort.
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./.github/scripts/demo-summary.sh
