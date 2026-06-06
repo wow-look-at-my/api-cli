@@ -1,34 +1,65 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-	EXPERIMENT ONLY. Nothing loads this file. It is a hand-translation of
-	samples/github/github.yaml into XML so we can eyeball whether an XML
-	declaration format reads better than the tab-YAML. No Go code, schema,
-	or loader is wired to it.
+	EXPERIMENT ONLY. Nothing loads this file. Hand-translation of
+	samples/github/github.yaml, this time with the Go-template `{{...}}`
+	placeholders re-expressed as first-class XML nodes. No Go code, schema,
+	or loader is wired to it. The goal is to feel out whether a node-based
+	declaration reads better than embedded template strings.
 
-	Element / attribute conventions used here (one possible mapping):
-
-	  <config name= schema=>      top-level config; long prose -> <description>
-	  <var name=>...              one entry of the `vars` map (text = value)
-	  <run>...</run>             the executable `command` template (shell form).
-	                              Lives on <config> (root, inherited) or inside a
-	                              <command> to override for that subtree.
+	STRUCTURE (same as before):
+	  <config name= schema=>      top-level; long prose -> <description>
+	  <var name=>...              one `vars` entry (content = value)
+	  <run>...                    the executable `command`; on <config> (root,
+	                              inherited) or inside a <command> to override
 	  <command name= description= format=>
-	                              a node in the CLI tree. Nest <command> for
-	                              subcommands; no <commands> wrapper needed.
-	                              `format=` is a named-format reference; for an
-	                              inline format, nest a <format> instead.
-	  <arg .../> <flag .../>      positional args / named flags (attrs mirror
-	                              the struct fields: name/type/required/short/
-	                              default/description).
-	  <entry path=>               + <query><param name= value=/></query>
-	  <formats> <format name= input=> <view name= when= default=>BODY</view>
-	                              the reusable format registry and its views.
+	                              a CLI tree node; nest <command> for subcommands
+	                              (no <commands> wrapper). `format=` is a named
+	                              ref; nest <format> for an inline one.
+	  <arg/> <flag/>             positional args / named flags (attrs mirror the
+	                              struct fields)
+	  <entry><path>..</path><query><param name=>..</param></query></entry>
+	  <formats><format name= input=><view ...>BODY</view></format></formats>
 
-	Whitespace note: <run> and <view> bodies are wrapped in CDATA so the
-	quote/brace/pipe/backslash-t/<> soup needs zero escaping. Inner
-	indentation here is purely for reading; assume a block-scalar-style
-	dedent+trim (same as the YAML loader gives) would apply.
+	PLACEHOLDER NODES (the new part), replacing every `{{...}}`:
+	  <value name="dotted.path"/>     substitute a field. Paths resolve against
+	                                  the current scope. Top scope exposes
+	                                  data, arg, flag, env, var, entry. Inside a
+	                                  <table over=> / <for each=> the scope is
+	                                  rebound to each item, so paths are relative
+	                                  (login, not data.login).
+	      name="."  or  <value/>      the current item itself (scalars)
+	      name="@key" / "@value"      current map entry key / value
+	    attributes on <value>:
+	      default="-"                 fallback when empty/missing  (the `default` fn)
+	      format="%.1f"               printf verb applied to the value
+	      truncate="7"                first N characters            (substr 0 N)
+	      firstline="true"            first line only               (regex strip)
+	      as="urlpath|querystring"    named transform
+	      trim-prefix="var.x"         strip the rendered value at that path
+	      percent-of="@column"        AGGREGATE: share of the column total (see
+	                                  note at `languages`: a flagged boundary)
+
+	  <if test="path" [eq="x"]> ... <else-if test="..."/> ... <else/> ... </if>
+	  <for each="path" [join=", "] [empty="..."]> ... </for>
+	  <table over="path"> <column header="NAME"> ..nodes.. </column> ... </table>
+	      (auto-aligned; replaces printf+tabwriter)
+	  <view ... when-kind="list">    gate a view to when its data is a list
+	                                  (replaces when='{{ kindIs "slice" .data }}')
+
+	COMMANDS as nodes:
+	  <run> holds one <exec> or a <pipeline> of <exec> stages. <exec> holds
+	  <arg> tokens; each is ONE argv slot, so mixing text + <value> needs no
+	  shell quoting at all (the big payoff of nodes: shellquote disappears).
+	  <if> may wrap <arg>s. A shell-string form would still be possible as plain
+	  text in <run>, but argv is shown here because nodes make it quoting-free.
+
+	Still opaque: the jq `filter` var stays CDATA text; it is jq source, a
+	foreign language, not our placeholder system.
+
+	Whitespace: structural indentation uses TABS; assume the loader strips the
+	common leading tabs from <view> text (block-scalar dedent). The column
+	alignment inside detail views uses SPACES, which survive that strip.
 -->
 
 <config
@@ -38,161 +69,251 @@
 	<description>Comfortable read-only wrapper for the GitHub REST API. Aggressively strips noise from responses: *url fields, GraphQL node_ids, empty gravatar_ids, duplicate counts, reaction breakdowns, permission objects, and other metadata that bloats output without adding value. Set $GITHUB_TOKEN / $GH_TOKEN for authenticated access (60 req/hr unauthenticated, 5000/hr authenticated). Set $GITHUB_API_URL to target a GitHub Enterprise Server instance.</description>
 
 	<vars>
-		<var name="base_url">{{.env.GITHUB_API_URL | default "https://api.github.com"}}</var>
+		<var name="base_url"><value name="env.GITHUB_API_URL" default="https://api.github.com"/></var>
 		<var name="ua">api-cli-github-example</var>
 		<!-- jq filter shared by every command: recursively drop *url keys,
-		     GraphQL node_ids, and other noise, then drop counts that
-		     duplicate a *_count field. -->
+		     GraphQL node_ids, and other noise, then drop counts that duplicate
+		     a *_count field. Opaque jq source, left verbatim. -->
 		<var name="filter"><![CDATA[walk(if type == "object" then with_entries(select((.key | endswith("url") | not) and (.key | IN("node_id","gravatar_id","user_view_type","site_admin","performed_via_github_app","active_lock_reason","author_association","temp_clone_token","custom_properties","issue_field_values","permissions","_links","network_count","pinned_comment","reactions","sub_issues_summary","issue_dependencies_summary") | not))) | if has("forks_count") then del(.forks) else . end | if has("watchers_count") then del(.watchers) else . end | if has("open_issues_count") then del(.open_issues) else . end else . end)]]></var>
 	</vars>
 
-	<!-- Root command, inherited by every leaf. -->
-	<run><![CDATA[curl -fsSL -H {{shellquote (printf "User-Agent: %s" .var.ua)}} -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28'{{if .env.GITHUB_TOKEN}} -H {{shellquote (printf "Authorization: Bearer %s" .env.GITHUB_TOKEN)}}{{else if .env.GH_TOKEN}} -H {{shellquote (printf "Authorization: Bearer %s" .env.GH_TOKEN)}}{{end}} {{shellquote (printf "%s%s%s" .var.base_url .entry.path (querystring .entry.query))}} | jq {{shellquote .var.filter}}]]></run>
+	<!-- Root command, inherited by every leaf. As an argv pipeline: no
+	     shellquote anywhere because each <arg> is a single token. -->
+	<run>
+		<pipeline>
+			<exec>
+				<arg>curl</arg>
+				<arg>-fsSL</arg>
+				<arg>-H</arg>
+				<arg>User-Agent: <value name="var.ua"/></arg>
+				<arg>-H</arg>
+				<arg>Accept: application/vnd.github+json</arg>
+				<arg>-H</arg>
+				<arg>X-GitHub-Api-Version: 2022-11-28</arg>
+				<if test="env.GITHUB_TOKEN">
+					<arg>-H</arg>
+					<arg>Authorization: Bearer <value name="env.GITHUB_TOKEN"/></arg>
+				<else-if test="env.GH_TOKEN"/>
+					<arg>-H</arg>
+					<arg>Authorization: Bearer <value name="env.GH_TOKEN"/></arg>
+				</if>
+				<arg><value name="var.base_url"/><value name="entry.path"/><value name="entry.query" as="querystring"/></arg>
+			</exec>
+			<exec>
+				<arg>jq</arg>
+				<arg><value name="var.filter"/></arg>
+			</exec>
+		</pipeline>
+	</run>
 
 	<formats>
 		<format name="user" input="json">
-			<view name="table" when='{{ kindIs "slice" .data }}'><![CDATA[{{ $rows := list "LOGIN\tID\tTYPE" }}{{ range .data }}{{ $rows = append $rows (printf "%v\t%v\t%v" .login .id .type) }}{{ end }}{{ tabwriter $rows }}]]></view>
-			<view name="detail" default="true"><![CDATA[
-Login:     {{.data.login}}
-ID:        {{.data.id}}
-Name:      {{default "-" .data.name}}
-Company:   {{default "-" .data.company}}
-Location:  {{default "-" .data.location}}
-Bio:       {{default "-" .data.bio}}
-Followers: {{.data.followers}}    Following: {{.data.following}}    Repos: {{.data.public_repos}}
-Created:   {{.data.created_at}}
-]]></view>
+			<view name="table" when-kind="list">
+				<table over="data">
+					<column header="LOGIN"><value name="login"/></column>
+					<column header="ID"><value name="id"/></column>
+					<column header="TYPE"><value name="type"/></column>
+				</table>
+			</view>
+			<view name="detail" default="true">
+				Login:     <value name="data.login"/>
+				ID:        <value name="data.id"/>
+				Name:      <value name="data.name" default="-"/>
+				Company:   <value name="data.company" default="-"/>
+				Location:  <value name="data.location" default="-"/>
+				Bio:       <value name="data.bio" default="-"/>
+				Followers: <value name="data.followers"/>    Following: <value name="data.following"/>    Repos: <value name="data.public_repos"/>
+				Created:   <value name="data.created_at"/>
+			</view>
 		</format>
 
 		<format name="repo" input="json">
-			<view name="table" when='{{ kindIs "slice" .data }}'><![CDATA[{{ $rows := list "NAME\tSTARS\tFORKS\tLANG\tDESCRIPTION" }}{{ range .data }}{{ $rows = append $rows (printf "%v\t%v\t%v\t%v\t%v" .full_name .stargazers_count .forks_count (default "-" .language) (default "" .description)) }}{{ end }}{{ tabwriter $rows }}]]></view>
-			<view name="detail" default="true"><![CDATA[
-Repo:        {{.data.full_name}}
-Description: {{default "-" .data.description}}
-Language:    {{default "-" .data.language}}
-Stars:       {{.data.stargazers_count}}
-Forks:       {{.data.forks_count}}
-Issues:      {{.data.open_issues_count}}
-Default:     {{.data.default_branch}}
-License:     {{if .data.license}}{{.data.license.spdx_id}}{{else}}-{{end}}
-Created:     {{.data.created_at}}
-Updated:     {{.data.updated_at}}
-Pushed:      {{.data.pushed_at}}
-Archived:    {{.data.archived}}    Fork: {{.data.fork}}    Private: {{.data.private}}
-]]></view>
+			<view name="table" when-kind="list">
+				<table over="data">
+					<column header="NAME"><value name="full_name"/></column>
+					<column header="STARS"><value name="stargazers_count"/></column>
+					<column header="FORKS"><value name="forks_count"/></column>
+					<column header="LANG"><value name="language" default="-"/></column>
+					<column header="DESCRIPTION"><value name="description" default=""/></column>
+				</table>
+			</view>
+			<view name="detail" default="true">
+				Repo:        <value name="data.full_name"/>
+				Description: <value name="data.description" default="-"/>
+				Language:    <value name="data.language" default="-"/>
+				Stars:       <value name="data.stargazers_count"/>
+				Forks:       <value name="data.forks_count"/>
+				Issues:      <value name="data.open_issues_count"/>
+				Default:     <value name="data.default_branch"/>
+				License:     <if test="data.license"><value name="data.license.spdx_id"/><else/>-</if>
+				Created:     <value name="data.created_at"/>
+				Updated:     <value name="data.updated_at"/>
+				Pushed:      <value name="data.pushed_at"/>
+				Archived:    <value name="data.archived"/>    Fork: <value name="data.fork"/>    Private: <value name="data.private"/>
+			</view>
 		</format>
 
 		<format name="issue" input="json">
-			<view name="table" when='{{ kindIs "slice" .data }}'><![CDATA[{{ $rows := list "#\tSTATE\tAUTHOR\tTITLE" }}{{ range .data }}{{ $rows = append $rows (printf "#%v\t%v\t%v\t%v" .number .state .user.login .title) }}{{ end }}{{ tabwriter $rows }}]]></view>
-			<view name="detail" default="true"><![CDATA[
-#{{.data.number}} ({{.data.state}}): {{.data.title}}
-Author:  {{.data.user.login}}
-Created: {{.data.created_at}}
-Updated: {{.data.updated_at}}
-{{if .data.labels}}Labels:  {{range $i, $l := .data.labels}}{{if $i}}, {{end}}{{$l.name}}{{end}}
-{{end}}
-{{default "" .data.body}}
-]]></view>
+			<view name="table" when-kind="list">
+				<table over="data">
+					<column header="#">#<value name="number"/></column>
+					<column header="STATE"><value name="state"/></column>
+					<column header="AUTHOR"><value name="user.login"/></column>
+					<column header="TITLE"><value name="title"/></column>
+				</table>
+			</view>
+			<view name="detail" default="true">
+				#<value name="data.number"/> (<value name="data.state"/>): <value name="data.title"/>
+				Author:  <value name="data.user.login"/>
+				Created: <value name="data.created_at"/>
+				Updated: <value name="data.updated_at"/>
+				<if test="data.labels">Labels:  <for each="data.labels" join=", "><value name="name"/></for></if>
+				<value name="data.body" default=""/>
+			</view>
 		</format>
 
 		<format name="pr" input="json">
-			<view name="detail" default="true"><![CDATA[
-#{{.data.number}} ({{.data.state}}{{if .data.draft}}, draft{{end}}{{if .data.merged}}, merged{{end}}): {{.data.title}}
-Author:   {{.data.user.login}}
-Branch:   {{.data.head.ref}} -> {{.data.base.ref}}
-Created:  {{.data.created_at}}
-Updated:  {{.data.updated_at}}
-Comments: {{default 0 .data.comments}} conversation, {{default 0 .data.review_comments}} review
-Commits:  {{default 0 .data.commits}}
-Diff:     +{{default 0 .data.additions}} -{{default 0 .data.deletions}} across {{default 0 .data.changed_files}} file(s)
-{{if .data.labels}}Labels:   {{range $i, $l := .data.labels}}{{if $i}}, {{end}}{{$l.name}}{{end}}
-{{end}}
-{{default "" .data.body}}
-]]></view>
+			<view name="detail" default="true">
+				#<value name="data.number"/> (<value name="data.state"/><if test="data.draft">, draft</if><if test="data.merged">, merged</if>): <value name="data.title"/>
+				Author:   <value name="data.user.login"/>
+				Branch:   <value name="data.head.ref"/> -> <value name="data.base.ref"/>
+				Created:  <value name="data.created_at"/>
+				Updated:  <value name="data.updated_at"/>
+				Comments: <value name="data.comments" default="0"/> conversation, <value name="data.review_comments" default="0"/> review
+				Commits:  <value name="data.commits" default="0"/>
+				Diff:     +<value name="data.additions" default="0"/> -<value name="data.deletions" default="0"/> across <value name="data.changed_files" default="0"/> file(s)
+				<if test="data.labels">Labels:   <for each="data.labels" join=", "><value name="name"/></for></if>
+				<value name="data.body" default=""/>
+			</view>
 		</format>
 
 		<format name="comment" input="json">
-			<view name="list" default="true"><![CDATA[{{if .data}}{{range .data}}@{{.user.login}}{{if .path}} on {{.path}}{{with .line}}:{{.}}{{end}}{{end}} ({{.created_at}}):
-{{.body}}
+			<view name="list" default="true">
+				<for each="data" empty="No comments.">@<value name="user.login"/><if test="path"> on <value name="path"/><if test="line">:<value name="line"/></if></if> (<value name="created_at"/>):
+<value name="body"/>
 
-{{end}}{{else}}No comments.
-{{end}}]]></view>
+</for>
+			</view>
 		</format>
 
 		<format name="release" input="json">
-			<view name="table" when='{{ kindIs "slice" .data }}'><![CDATA[{{ $rows := list "TAG\tNAME\tPUBLISHED\tDRAFT\tPRERELEASE" }}{{ range .data }}{{ $rows = append $rows (printf "%v\t%v\t%v\t%v\t%v" .tag_name (default "-" .name) .published_at .draft .prerelease) }}{{ end }}{{ tabwriter $rows }}]]></view>
-			<view name="detail" default="true"><![CDATA[
-Tag:       {{.data.tag_name}}
-Name:      {{default "-" .data.name}}
-Published: {{.data.published_at}}
-Author:    {{.data.author.login}}
-Draft:     {{.data.draft}}    Prerelease: {{.data.prerelease}}
+			<view name="table" when-kind="list">
+				<table over="data">
+					<column header="TAG"><value name="tag_name"/></column>
+					<column header="NAME"><value name="name" default="-"/></column>
+					<column header="PUBLISHED"><value name="published_at"/></column>
+					<column header="DRAFT"><value name="draft"/></column>
+					<column header="PRERELEASE"><value name="prerelease"/></column>
+				</table>
+			</view>
+			<view name="detail" default="true">
+				Tag:       <value name="data.tag_name"/>
+				Name:      <value name="data.name" default="-"/>
+				Published: <value name="data.published_at"/>
+				Author:    <value name="data.author.login"/>
+				Draft:     <value name="data.draft"/>    Prerelease: <value name="data.prerelease"/>
 
-{{default "" .data.body}}
-]]></view>
+				<value name="data.body" default=""/>
+			</view>
 		</format>
 
 		<format name="commit" input="json">
-			<view name="table" when='{{ kindIs "slice" .data }}'><![CDATA[{{ $rows := list "SHA\tAUTHOR\tDATE\tMESSAGE" }}{{ range .data }}{{ $rows = append $rows (printf "%v\t%v\t%v\t%v" (substr 0 7 .sha) .commit.author.name .commit.author.date (regexReplaceAll "\n.*" .commit.message "")) }}{{ end }}{{ tabwriter $rows }}]]></view>
-			<view name="detail" default="true"><![CDATA[
-SHA:     {{.data.sha}}
-Author:  {{.data.commit.author.name}} <{{.data.commit.author.email}}>
-Date:    {{.data.commit.author.date}}
+			<view name="table" when-kind="list">
+				<table over="data">
+					<column header="SHA"><value name="sha" truncate="7"/></column>
+					<column header="AUTHOR"><value name="commit.author.name"/></column>
+					<column header="DATE"><value name="commit.author.date"/></column>
+					<column header="MESSAGE"><value name="commit.message" firstline="true"/></column>
+				</table>
+			</view>
+			<view name="detail" default="true">
+				SHA:     <value name="data.sha"/>
+				Author:  <value name="data.commit.author.name"/> &lt;<value name="data.commit.author.email"/>&gt;
+				Date:    <value name="data.commit.author.date"/>
 
-{{.data.commit.message}}
-]]></view>
+				<value name="data.commit.message"/>
+			</view>
 		</format>
 
 		<format name="branch" input="json">
-			<view name="table" default="true" when='{{ kindIs "slice" .data }}'><![CDATA[{{ $rows := list "NAME\tSHA\tPROTECTED" }}{{ range .data }}{{ $rows = append $rows (printf "%v\t%v\t%v" .name (substr 0 7 .commit.sha) .protected) }}{{ end }}{{ tabwriter $rows }}]]></view>
+			<view name="table" default="true" when-kind="list">
+				<table over="data">
+					<column header="NAME"><value name="name"/></column>
+					<column header="SHA"><value name="commit.sha" truncate="7"/></column>
+					<column header="PROTECTED"><value name="protected"/></column>
+				</table>
+			</view>
 		</format>
 
 		<format name="tag" input="json">
-			<view name="table" default="true" when='{{ kindIs "slice" .data }}'><![CDATA[{{ $rows := list "NAME\tSHA" }}{{ range .data }}{{ $rows = append $rows (printf "%v\t%v" .name (substr 0 7 .commit.sha)) }}{{ end }}{{ tabwriter $rows }}]]></view>
+			<view name="table" default="true" when-kind="list">
+				<table over="data">
+					<column header="NAME"><value name="name"/></column>
+					<column header="SHA"><value name="commit.sha" truncate="7"/></column>
+				</table>
+			</view>
 		</format>
 
 		<format name="rate" input="json">
-			<view name="table" default="true"><![CDATA[{{ $rows := list "RESOURCE\tLIMIT\tREMAINING\tRESET" }}{{ range $k, $v := .data.resources }}{{ $rows = append $rows (printf "%v\t%v\t%v\t%v" $k $v.limit $v.remaining $v.reset) }}{{ end }}{{ tabwriter $rows }}]]></view>
+			<view name="table" default="true">
+				<table over="data.resources">
+					<column header="RESOURCE"><value name="@key"/></column>
+					<column header="LIMIT"><value name="limit"/></column>
+					<column header="REMAINING"><value name="remaining"/></column>
+					<column header="RESET"><value name="reset"/></column>
+				</table>
+			</view>
 		</format>
 
 		<format name="raw" input="raw">
-			<view name="raw" default="true"><![CDATA[
-{{ .data }}
-]]></view>
+			<view name="raw" default="true"><value name="data"/></view>
 		</format>
 	</formats>
 
 	<command name="user" description="Read user info." format="user">
 		<command name="get" description="Fetch a user. Omit USERNAME to use /user (the authenticated viewer; requires a token).">
 			<arg name="username" type="string" description="GitHub username."/>
-			<entry path="{{if .arg.username}}/users/{{urlpath .arg.username}}{{else}}/user{{end}}"/>
+			<entry>
+				<path><if test="arg.username">/users/<value name="arg.username" as="urlpath"/><else/>/user</if></path>
+			</entry>
 		</command>
 		<command name="repos" description="List a user's public repositories." format="repo">
 			<arg name="username" type="string" required="true"/>
 			<flag name="limit" short="n" type="int" default="30" description="Items per page (max 100)."/>
 			<flag name="page" short="p" type="int" default="1" description="Page number."/>
 			<flag name="sort" type="string" default="updated" description="created|updated|pushed|full_name."/>
-			<entry path="/users/{{urlpath .arg.username}}/repos">
+			<entry>
+				<path>/users/<value name="arg.username" as="urlpath"/>/repos</path>
 				<query>
-					<param name="per_page" value="{{.flag.limit}}"/>
-					<param name="page" value="{{.flag.page}}"/>
-					<param name="sort" value="{{.flag.sort}}"/>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+					<param name="sort"><value name="flag.sort"/></param>
 				</query>
 			</entry>
 		</command>
 		<command name="orgs" description="List a user's public organization memberships.">
 			<arg name="username" type="string" required="true"/>
 			<format input="json">
-				<view name="table" default="true"><![CDATA[{{ $rows := list "LOGIN\tID\tDESCRIPTION" }}{{ range .data }}{{ $rows = append $rows (printf "%v\t%v\t%v" .login .id (default "" .description)) }}{{ end }}{{ tabwriter $rows }}]]></view>
+				<view name="table" default="true">
+					<table over="data">
+						<column header="LOGIN"><value name="login"/></column>
+						<column header="ID"><value name="id"/></column>
+						<column header="DESCRIPTION"><value name="description" default=""/></column>
+					</table>
+				</view>
 			</format>
-			<entry path="/users/{{urlpath .arg.username}}/orgs"/>
+			<entry>
+				<path>/users/<value name="arg.username" as="urlpath"/>/orgs</path>
+			</entry>
 		</command>
 	</command>
 
 	<command name="repo" description="Read repository info." format="repo">
 		<command name="get" description="Fetch a repository.">
 			<arg name="repo" type="string" required="true" description="owner/name."/>
-			<entry path="/repos/{{.arg.repo}}"/>
+			<entry>
+				<path>/repos/<value name="arg.repo"/></path>
+			</entry>
 		</command>
 		<command name="issues" description="List issues for a repository." format="issue">
 			<arg name="repo" type="string" required="true" description="owner/name."/>
@@ -200,42 +321,65 @@ Date:    {{.data.commit.author.date}}
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
 			<flag name="labels" type="string" default="" description="Comma-separated label names."/>
-			<entry path="/repos/{{.arg.repo}}/issues">
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/issues</path>
 				<query>
-					<param name="state" value="{{.flag.state}}"/>
-					<param name="per_page" value="{{.flag.limit}}"/>
-					<param name="page" value="{{.flag.page}}"/>
-					<param name="labels" value="{{.flag.labels}}"/>
+					<param name="state"><value name="flag.state"/></param>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+					<param name="labels"><value name="flag.labels"/></param>
 				</query>
 			</entry>
 		</command>
 		<command name="issue" description="Fetch a single issue." format="issue">
 			<arg name="repo" type="string" required="true" description="owner/name."/>
 			<arg name="number" type="int" required="true"/>
-			<entry path="/repos/{{.arg.repo}}/issues/{{.arg.number}}"/>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/issues/<value name="arg.number"/></path>
+			</entry>
 		</command>
 		<command name="prs" description="List pull requests for a repository." format="issue">
 			<arg name="repo" type="string" required="true" description="owner/name."/>
 			<flag name="state" type="string" default="open" description="open|closed|all."/>
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
-			<entry path="/repos/{{.arg.repo}}/pulls">
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/pulls</path>
 				<query>
-					<param name="state" value="{{.flag.state}}"/>
-					<param name="per_page" value="{{.flag.limit}}"/>
-					<param name="page" value="{{.flag.page}}"/>
+					<param name="state"><value name="flag.state"/></param>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
 				</query>
 			</entry>
 		</command>
 		<command name="pr" description="Fetch a single pull request: description, comment counts, and diff size." format="pr">
 			<arg name="repo" type="string" required="true" description="owner/name."/>
 			<arg name="number" type="int" required="true"/>
-			<entry path="/repos/{{.arg.repo}}/pulls/{{.arg.number}}"/>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/pulls/<value name="arg.number"/></path>
+			</entry>
 		</command>
 		<command name="pr-diff" description="Fetch the unified diff for a pull request." format="raw">
 			<arg name="repo" type="string" required="true" description="owner/name."/>
 			<arg name="number" type="int" required="true"/>
-			<run><![CDATA[curl -fsSL -H {{shellquote (printf "User-Agent: %s" .var.ua)}} -H 'Accept: application/vnd.github.diff'{{if .env.GITHUB_TOKEN}} -H {{shellquote (printf "Authorization: Bearer %s" .env.GITHUB_TOKEN)}}{{else if .env.GH_TOKEN}} -H {{shellquote (printf "Authorization: Bearer %s" .env.GH_TOKEN)}}{{end}} {{shellquote (printf "%s/repos/%s/pulls/%v" .var.base_url .arg.repo .arg.number)}}]]></run>
+			<run>
+				<exec>
+					<arg>curl</arg>
+					<arg>-fsSL</arg>
+					<arg>-H</arg>
+					<arg>User-Agent: <value name="var.ua"/></arg>
+					<arg>-H</arg>
+					<arg>Accept: application/vnd.github.diff</arg>
+					<if test="env.GITHUB_TOKEN">
+						<arg>-H</arg>
+						<arg>Authorization: Bearer <value name="env.GITHUB_TOKEN"/></arg>
+					<else-if test="env.GH_TOKEN"/>
+						<arg>-H</arg>
+						<arg>Authorization: Bearer <value name="env.GH_TOKEN"/></arg>
+					</if>
+					<arg><value name="var.base_url"/>/repos/<value name="arg.repo"/>/pulls/<value name="arg.number"/></arg>
+				</exec>
+			</run>
 		</command>
 		<command name="pr-comments" description="List a pull request's comments. Defaults to the conversation (issue) comments; pass --review for inline code-review comments." format="comment">
 			<arg name="repo" type="string" required="true" description="owner/name."/>
@@ -243,10 +387,11 @@ Date:    {{.data.commit.author.date}}
 			<flag name="review" short="r" type="bool" default="false" description="List inline code-review comments instead of conversation comments."/>
 			<flag name="limit" short="n" type="int" default="30" description="Items per page (max 100)."/>
 			<flag name="page" short="p" type="int" default="1" description="Page number."/>
-			<entry path="/repos/{{.arg.repo}}/{{if .flag.review}}pulls/{{.arg.number}}/comments{{else}}issues/{{.arg.number}}/comments{{end}}">
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/<if test="flag.review">pulls/<value name="arg.number"/>/comments<else/>issues/<value name="arg.number"/>/comments</if></path>
 				<query>
-					<param name="per_page" value="{{.flag.limit}}"/>
-					<param name="page" value="{{.flag.page}}"/>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
 				</query>
 			</entry>
 		</command>
@@ -254,17 +399,20 @@ Date:    {{.data.commit.author.date}}
 			<arg name="repo" type="string" required="true"/>
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
-			<entry path="/repos/{{.arg.repo}}/releases">
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/releases</path>
 				<query>
-					<param name="per_page" value="{{.flag.limit}}"/>
-					<param name="page" value="{{.flag.page}}"/>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
 				</query>
 			</entry>
 		</command>
 		<command name="release" description="Fetch a release by tag, or `latest`." format="release">
 			<arg name="repo" type="string" required="true"/>
 			<arg name="tag" type="string" required="true" description="Tag name, or `latest`."/>
-			<entry path='/repos/{{.arg.repo}}/releases/{{if eq .arg.tag "latest"}}latest{{else}}tags/{{urlpath .arg.tag}}{{end}}'/>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/releases/<if test="arg.tag" eq="latest">latest<else/>tags/<value name="arg.tag" as="urlpath"/></if></path>
+			</entry>
 		</command>
 		<command name="commits" description="List recent commits." format="commit">
 			<arg name="repo" type="string" required="true"/>
@@ -272,33 +420,38 @@ Date:    {{.data.commit.author.date}}
 			<flag name="page" short="p" type="int" default="1"/>
 			<flag name="branch" type="string" default="" description="Branch / SHA / tag to start from."/>
 			<flag name="path" type="string" default="" description="Restrict to commits touching this path."/>
-			<entry path="/repos/{{.arg.repo}}/commits">
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/commits</path>
 				<query>
-					<param name="per_page" value="{{.flag.limit}}"/>
-					<param name="page" value="{{.flag.page}}"/>
-					<param name="sha" value="{{.flag.branch}}"/>
-					<param name="path" value="{{.flag.path}}"/>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+					<param name="sha"><value name="flag.branch"/></param>
+					<param name="path"><value name="flag.path"/></param>
 				</query>
 			</entry>
 		</command>
 		<command name="commit" description="Fetch a single commit." format="commit">
 			<arg name="repo" type="string" required="true"/>
 			<arg name="sha" type="string" required="true" description="Commit SHA, branch, or tag."/>
-			<entry path="/repos/{{.arg.repo}}/commits/{{urlpath .arg.sha}}"/>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/commits/<value name="arg.sha" as="urlpath"/></path>
+			</entry>
 		</command>
 		<command name="branches" description="List branches." format="branch">
 			<arg name="repo" type="string" required="true"/>
-			<entry path="/repos/{{.arg.repo}}/branches">
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/branches</path>
 				<query>
-					<param name="per_page" value="100"/>
+					<param name="per_page">100</param>
 				</query>
 			</entry>
 		</command>
 		<command name="tags" description="List tags." format="tag">
 			<arg name="repo" type="string" required="true"/>
-			<entry path="/repos/{{.arg.repo}}/tags">
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/tags</path>
 				<query>
-					<param name="per_page" value="100"/>
+					<param name="per_page">100</param>
 				</query>
 			</entry>
 		</command>
@@ -306,31 +459,64 @@ Date:    {{.data.commit.author.date}}
 			<arg name="repo" type="string" required="true"/>
 			<arg name="path" type="string" description="File or directory path within the repo. Omit for the root listing."/>
 			<flag name="ref" short="r" type="string" default="" description="Branch / SHA / tag."/>
-			<entry path="/repos/{{.arg.repo}}/contents{{if .arg.path}}/{{.arg.path}}{{end}}">
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/contents<if test="arg.path">/<value name="arg.path"/></if></path>
 				<query>
-					<param name="ref" value="{{.flag.ref}}"/>
+					<param name="ref"><value name="flag.ref"/></param>
 				</query>
 			</entry>
 		</command>
 		<command name="readme" description="Fetch the rendered raw README." format="raw">
 			<arg name="repo" type="string" required="true"/>
 			<flag name="ref" short="r" type="string" default="" description="Branch / SHA / tag."/>
-			<run><![CDATA[curl -fsSL -H {{shellquote (printf "User-Agent: %s" .var.ua)}} -H 'Accept: application/vnd.github.raw'{{if .env.GITHUB_TOKEN}} -H {{shellquote (printf "Authorization: Bearer %s" .env.GITHUB_TOKEN)}}{{else if .env.GH_TOKEN}} -H {{shellquote (printf "Authorization: Bearer %s" .env.GH_TOKEN)}}{{end}} {{if .flag.ref}}{{shellquote (printf "%s/repos/%s/readme?ref=%s" .var.base_url .arg.repo (urlpath .flag.ref))}}{{else}}{{shellquote (printf "%s/repos/%s/readme" .var.base_url .arg.repo)}}{{end}}]]></run>
+			<run>
+				<exec>
+					<arg>curl</arg>
+					<arg>-fsSL</arg>
+					<arg>-H</arg>
+					<arg>User-Agent: <value name="var.ua"/></arg>
+					<arg>-H</arg>
+					<arg>Accept: application/vnd.github.raw</arg>
+					<if test="env.GITHUB_TOKEN">
+						<arg>-H</arg>
+						<arg>Authorization: Bearer <value name="env.GITHUB_TOKEN"/></arg>
+					<else-if test="env.GH_TOKEN"/>
+						<arg>-H</arg>
+						<arg>Authorization: Bearer <value name="env.GH_TOKEN"/></arg>
+					</if>
+					<arg><value name="var.base_url"/>/repos/<value name="arg.repo"/>/readme<if test="flag.ref">?ref=<value name="flag.ref" as="urlpath"/></if></arg>
+				</exec>
+			</run>
 		</command>
 		<command name="languages" description="Map of languages to byte counts.">
 			<arg name="repo" type="string" required="true"/>
+			<!-- The "%" column is an AGGREGATE: each row's share of the summed
+			     byte total. Pure placeholder nodes can't express "sum across all
+			     rows" on their own, so this needs a built-in like percent-of (a
+			     column total) or an expr escape hatch. percent-of shown here is
+			     the flagged boundary of the node model. -->
 			<format input="json">
-				<view name="table" default="true"><![CDATA[{{ $total := 0 }}{{ range $_, $b := .data }}{{ $total = add $total $b }}{{ end }}{{ $rows := list "LANGUAGE\tBYTES\t%" }}{{ range $lang, $bytes := .data }}{{ $rows = append $rows (printf "%v\t%v\t%.1f%%" $lang $bytes (mulf 100.0 (divf $bytes $total))) }}{{ end }}{{ tabwriter $rows }}]]></view>
+				<view name="table" default="true">
+					<table over="data">
+						<column header="LANGUAGE"><value name="@key"/></column>
+						<column header="BYTES"><value name="@value"/></column>
+						<column header="%"><value name="@value" percent-of="@column" format="%.1f%%"/></column>
+					</table>
+				</view>
 			</format>
-			<entry path="/repos/{{.arg.repo}}/languages"/>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/languages</path>
+			</entry>
 		</command>
 		<command name="topics" description="List repository topics.">
 			<arg name="repo" type="string" required="true"/>
 			<format input="json">
-				<view name="list" default="true"><![CDATA[{{ range .data.names }}{{ . }}
-{{ end }}]]></view>
+				<view name="list" default="true"><for each="data.names"><value/>
+</for></view>
 			</format>
-			<entry path="/repos/{{.arg.repo}}/topics"/>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/topics</path>
+			</entry>
 		</command>
 	</command>
 
@@ -338,27 +524,30 @@ Date:    {{.data.commit.author.date}}
 		<command name="get" description="Fetch an org.">
 			<arg name="org" type="string" required="true"/>
 			<format input="json">
-				<view name="detail" default="true"><![CDATA[
-Login:       {{.data.login}}
-ID:          {{.data.id}}
-Name:        {{default "-" .data.name}}
-Description: {{default "-" .data.description}}
-Location:    {{default "-" .data.location}}
-Blog:        {{default "-" .data.blog}}
-Members:     {{default 0 .data.followers}}    Repos: {{.data.public_repos}}
-Created:     {{.data.created_at}}
-]]></view>
+				<view name="detail" default="true">
+					Login:       <value name="data.login"/>
+					ID:          <value name="data.id"/>
+					Name:        <value name="data.name" default="-"/>
+					Description: <value name="data.description" default="-"/>
+					Location:    <value name="data.location" default="-"/>
+					Blog:        <value name="data.blog" default="-"/>
+					Members:     <value name="data.followers" default="0"/>    Repos: <value name="data.public_repos"/>
+					Created:     <value name="data.created_at"/>
+				</view>
 			</format>
-			<entry path="/orgs/{{urlpath .arg.org}}"/>
+			<entry>
+				<path>/orgs/<value name="arg.org" as="urlpath"/></path>
+			</entry>
 		</command>
 		<command name="members" description="List public members." format="user">
 			<arg name="org" type="string" required="true"/>
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
-			<entry path="/orgs/{{urlpath .arg.org}}/public_members">
+			<entry>
+				<path>/orgs/<value name="arg.org" as="urlpath"/>/public_members</path>
 				<query>
-					<param name="per_page" value="{{.flag.limit}}"/>
-					<param name="page" value="{{.flag.page}}"/>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
 				</query>
 			</entry>
 		</command>
@@ -367,11 +556,12 @@ Created:     {{.data.created_at}}
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
 			<flag name="type" type="string" default="all" description="all|public|private|forks|sources|member."/>
-			<entry path="/orgs/{{urlpath .arg.org}}/repos">
+			<entry>
+				<path>/orgs/<value name="arg.org" as="urlpath"/>/repos</path>
 				<query>
-					<param name="per_page" value="{{.flag.limit}}"/>
-					<param name="page" value="{{.flag.page}}"/>
-					<param name="type" value="{{.flag.type}}"/>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+					<param name="type"><value name="flag.type"/></param>
 				</query>
 			</entry>
 		</command>
@@ -385,16 +575,22 @@ Created:     {{.data.created_at}}
 			<flag name="sort" type="string" default="" description="stars|forks|updated|help-wanted-issues."/>
 			<flag name="order" type="string" default="desc" description="asc|desc."/>
 			<format input="json">
-				<view name="table" default="true"><![CDATA[{{ $rows := list "NAME\tSTARS\tLANG\tDESCRIPTION" }}{{ range .data.items }}{{ $rows = append $rows (printf "%v\t%v\t%v\t%v" .full_name .stargazers_count (default "-" .language) (default "" .description)) }}{{ end }}{{ tabwriter $rows }}
-{{.data.total_count}} total]]></view>
+				<view name="table" default="true"><table over="data.items">
+						<column header="NAME"><value name="full_name"/></column>
+						<column header="STARS"><value name="stargazers_count"/></column>
+						<column header="LANG"><value name="language" default="-"/></column>
+						<column header="DESCRIPTION"><value name="description" default=""/></column>
+					</table>
+<value name="data.total_count"/> total</view>
 			</format>
-			<entry path="/search/repositories">
+			<entry>
+				<path>/search/repositories</path>
 				<query>
-					<param name="q" value="{{.arg.query}}"/>
-					<param name="per_page" value="{{.flag.limit}}"/>
-					<param name="page" value="{{.flag.page}}"/>
-					<param name="sort" value="{{.flag.sort}}"/>
-					<param name="order" value="{{.flag.order}}"/>
+					<param name="q"><value name="arg.query"/></param>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+					<param name="sort"><value name="flag.sort"/></param>
+					<param name="order"><value name="flag.order"/></param>
 				</query>
 			</entry>
 		</command>
@@ -403,14 +599,18 @@ Created:     {{.data.created_at}}
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
 			<format input="json">
-				<view name="table" default="true"><![CDATA[{{ $rows := list "REPO\tPATH" }}{{ range .data.items }}{{ $rows = append $rows (printf "%v\t%v" .repository.full_name .path) }}{{ end }}{{ tabwriter $rows }}
-{{.data.total_count}} total]]></view>
+				<view name="table" default="true"><table over="data.items">
+						<column header="REPO"><value name="repository.full_name"/></column>
+						<column header="PATH"><value name="path"/></column>
+					</table>
+<value name="data.total_count"/> total</view>
 			</format>
-			<entry path="/search/code">
+			<entry>
+				<path>/search/code</path>
 				<query>
-					<param name="q" value="{{.arg.query}}"/>
-					<param name="per_page" value="{{.flag.limit}}"/>
-					<param name="page" value="{{.flag.page}}"/>
+					<param name="q"><value name="arg.query"/></param>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
 				</query>
 			</entry>
 		</command>
@@ -420,18 +620,28 @@ Created:     {{.data.created_at}}
 			<flag name="page" short="p" type="int" default="1"/>
 			<flag name="sort" type="string" default="" description="comments|reactions|created|updated."/>
 			<vars>
+				<!-- repos_base feeds the trim-prefix on the REPO column below: a
+				     node-friendly way to strip a computed prefix without an
+				     expression language (the other flagged boundary). -->
+				<var name="repos_base"><value name="var.base_url"/>/repos/</var>
 				<var name="filter"><![CDATA[walk(if type == "object" then with_entries(select((.key == "repository_url" or (.key | endswith("url") | not)) and (.key | IN("node_id","gravatar_id","user_view_type","site_admin","performed_via_github_app","active_lock_reason","author_association","temp_clone_token","custom_properties","issue_field_values","permissions","_links","network_count","pinned_comment","reactions","sub_issues_summary","issue_dependencies_summary") | not))) | if has("forks_count") then del(.forks) else . end | if has("watchers_count") then del(.watchers) else . end | if has("open_issues_count") then del(.open_issues) else . end else . end)]]></var>
 			</vars>
 			<format input="json">
-				<view name="table" default="true"><![CDATA[{{ $base := printf "%s/repos/" .var.base_url }}{{ $rows := list "REPO\t#\tSTATE\tTITLE" }}{{ range .data.items }}{{ $rows = append $rows (printf "%v\t#%v\t%v\t%v" (default "" .repository_url | trimPrefix $base) .number .state .title) }}{{ end }}{{ tabwriter $rows }}
-{{.data.total_count}} total]]></view>
+				<view name="table" default="true"><table over="data.items">
+						<column header="REPO"><value name="repository_url" default="" trim-prefix="var.repos_base"/></column>
+						<column header="#">#<value name="number"/></column>
+						<column header="STATE"><value name="state"/></column>
+						<column header="TITLE"><value name="title"/></column>
+					</table>
+<value name="data.total_count"/> total</view>
 			</format>
-			<entry path="/search/issues">
+			<entry>
+				<path>/search/issues</path>
 				<query>
-					<param name="q" value="{{.arg.query}}"/>
-					<param name="per_page" value="{{.flag.limit}}"/>
-					<param name="page" value="{{.flag.page}}"/>
-					<param name="sort" value="{{.flag.sort}}"/>
+					<param name="q"><value name="arg.query"/></param>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+					<param name="sort"><value name="flag.sort"/></param>
 				</query>
 			</entry>
 		</command>
@@ -440,21 +650,28 @@ Created:     {{.data.created_at}}
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
 			<format input="json">
-				<view name="table" default="true"><![CDATA[{{ $rows := list "LOGIN\tID\tTYPE" }}{{ range .data.items }}{{ $rows = append $rows (printf "%v\t%v\t%v" .login .id .type) }}{{ end }}{{ tabwriter $rows }}
-{{.data.total_count}} total]]></view>
+				<view name="table" default="true"><table over="data.items">
+						<column header="LOGIN"><value name="login"/></column>
+						<column header="ID"><value name="id"/></column>
+						<column header="TYPE"><value name="type"/></column>
+					</table>
+<value name="data.total_count"/> total</view>
 			</format>
-			<entry path="/search/users">
+			<entry>
+				<path>/search/users</path>
 				<query>
-					<param name="q" value="{{.arg.query}}"/>
-					<param name="per_page" value="{{.flag.limit}}"/>
-					<param name="page" value="{{.flag.page}}"/>
+					<param name="q"><value name="arg.query"/></param>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
 				</query>
 			</entry>
 		</command>
 	</command>
 
 	<command name="rate-limit" description="Show the current rate-limit status. (RESET column is unix epoch seconds.)" format="rate">
-		<entry path="/rate_limit"/>
+		<entry>
+			<path>/rate_limit</path>
+		</entry>
 	</command>
 
 </config>
