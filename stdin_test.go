@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Tests for the per-command/step stdin field. Stdin inherits down the tree like
@@ -64,11 +64,11 @@ func TestStdin_ArgvFormWithStdin(t *testing.T) {
 
 func TestIntegration_LeafStdinLiteral(t *testing.T) {
 	cfg := &Config{
-		Name: "t",
+		Name:	"t",
 		Commands: []Command{{
-			Name:    "echo",
-			Stdin:   "hello\n",
-			Command: &Cmd{Argv: []string{"cat"}},
+			Name:		"echo",
+			Stdin:		"hello\n",
+			Command:	&Cmd{Argv: []string{"cat"}},
 		}},
 	}
 	code, out := execCmd(t, cfg, "echo")
@@ -78,12 +78,12 @@ func TestIntegration_LeafStdinLiteral(t *testing.T) {
 
 func TestIntegration_LeafStdinTemplated(t *testing.T) {
 	cfg := &Config{
-		Name: "t",
+		Name:	"t",
 		Commands: []Command{{
-			Name:  "echo",
-			Args:  []Arg{{Name: "msg", Required: true}},
-			Stdin: "{{.arg.msg}}",
-			Command: &Cmd{Argv: []string{"cat"}},
+			Name:		"echo",
+			Args:		[]Arg{{Name: "msg", Required: true}},
+			Stdin:		"{{.arg.msg}}",
+			Command:	&Cmd{Argv: []string{"cat"}},
 		}},
 	}
 	code, out := execCmd(t, cfg, "echo", "templated-value")
@@ -93,10 +93,10 @@ func TestIntegration_LeafStdinTemplated(t *testing.T) {
 
 func TestIntegration_StdinInheritsFromConfig(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Stdin:   "from-root\n",
-		Command: &Cmd{Argv: []string{"cat"}},
-		Commands: []Command{{Name: "show"}},
+		Name:		"t",
+		Stdin:		"from-root\n",
+		Command:	&Cmd{Argv: []string{"cat"}},
+		Commands:	[]Command{{Name: "show"}},
 	}
 	code, out := execCmd(t, cfg, "show")
 	require.Equal(t, 0, code)
@@ -105,11 +105,11 @@ func TestIntegration_StdinInheritsFromConfig(t *testing.T) {
 
 func TestIntegration_StdinInheritsThroughGroup(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Argv: []string{"cat"}},
+		Name:		"t",
+		Command:	&Cmd{Argv: []string{"cat"}},
 		Commands: []Command{{
-			Name:  "outer",
-			Stdin: "from-group\n",
+			Name:	"outer",
+			Stdin:	"from-group\n",
 			Commands: []Command{
 				{Name: "leaf"},
 			},
@@ -122,9 +122,9 @@ func TestIntegration_StdinInheritsThroughGroup(t *testing.T) {
 
 func TestIntegration_LeafStdinOverridesAncestor(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Stdin:   "parent\n",
-		Command: &Cmd{Argv: []string{"cat"}},
+		Name:		"t",
+		Stdin:		"parent\n",
+		Command:	&Cmd{Argv: []string{"cat"}},
 		Commands: []Command{
 			{Name: "from-parent"},
 			{Name: "from-leaf", Stdin: "leaf\n"},
@@ -141,15 +141,15 @@ func TestIntegration_LeafStdinOverridesAncestor(t *testing.T) {
 
 func TestIntegration_StepInheritsLeafStdin(t *testing.T) {
 	cfg := &Config{
-		Name: "t",
+		Name:	"t",
 		Commands: []Command{{
-			Name:  "run",
-			Stdin: "step-input",
+			Name:	"run",
+			Stdin:	"step-input",
 			Steps: []Step{{
-				Name:    "load",
-				Command: &Cmd{Argv: []string{"cat"}},
+				Name:		"load",
+				Command:	&Cmd{Argv: []string{"cat"}},
 			}},
-			Command: &Cmd{Shell: true, Template: `printf '%s' {{.result.load}}`},
+			Command:	&Cmd{Shell: true, Template: `printf '%s' {{.result.load}}`},
 		}},
 	}
 	code, out := execCmd(t, cfg, "run")
@@ -159,16 +159,16 @@ func TestIntegration_StepInheritsLeafStdin(t *testing.T) {
 
 func TestIntegration_StepStdinOverridesLeaf(t *testing.T) {
 	cfg := &Config{
-		Name: "t",
+		Name:	"t",
 		Commands: []Command{{
-			Name:  "run",
-			Stdin: "leaf-stdin\n",
+			Name:	"run",
+			Stdin:	"leaf-stdin\n",
 			Steps: []Step{{
-				Name:    "s",
-				Stdin:   "step-stdin",
-				Command: &Cmd{Argv: []string{"cat"}},
+				Name:		"s",
+				Stdin:		"step-stdin",
+				Command:	&Cmd{Argv: []string{"cat"}},
 			}},
-			Command: &Cmd{Shell: true, Template: `printf '%s|' {{.result.s}} && cat`},
+			Command:	&Cmd{Shell: true, Template: `printf '%s|' {{.result.s}} && cat`},
 		}},
 	}
 	code, out := execCmd(t, cfg, "run")
@@ -178,12 +178,12 @@ func TestIntegration_StepStdinOverridesLeaf(t *testing.T) {
 
 func TestIntegration_StdinRenderedWithArgs(t *testing.T) {
 	cfg := &Config{
-		Name: "t",
+		Name:	"t",
 		Commands: []Command{{
-			Name:    "run",
-			Args:    []Arg{{Name: "body", Required: true}},
-			Stdin:   "{{.arg.body}}",
-			Command: &Cmd{Argv: []string{"cat"}},
+			Name:		"run",
+			Args:		[]Arg{{Name: "body", Required: true}},
+			Stdin:		"{{.arg.body}}",
+			Command:	&Cmd{Argv: []string{"cat"}},
 		}},
 	}
 	code, out := execCmd(t, cfg, "run", "dynamic-body")
@@ -193,11 +193,11 @@ func TestIntegration_StdinRenderedWithArgs(t *testing.T) {
 
 func TestIntegration_StdinRenderErrorFails(t *testing.T) {
 	cfg := &Config{
-		Name: "t",
+		Name:	"t",
 		Commands: []Command{{
-			Name:    "x",
-			Stdin:   `{{.broken`,
-			Command: &Cmd{Shell: true, Template: `true`},
+			Name:		"x",
+			Stdin:		`{{.broken`,
+			Command:	&Cmd{Shell: true, Template: `true`},
 		}},
 	}
 	code, _, _ := execCmdFull(t, cfg, "x")
@@ -210,9 +210,9 @@ func TestIntegration_StdinEmptyPassesThrough(t *testing.T) {
 	t.Cleanup(func() { execStdin = prev })
 
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `cat`},
-		Commands: []Command{{Name: "echo"}},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: `cat`},
+		Commands:	[]Command{{Name: "echo"}},
 	}
 	code, out := execCmd(t, cfg, "echo")
 	require.Equal(t, 0, code)
@@ -221,12 +221,12 @@ func TestIntegration_StdinEmptyPassesThrough(t *testing.T) {
 
 func TestIntegration_StdinWithJsonTemplate(t *testing.T) {
 	cfg := &Config{
-		Name: "t",
+		Name:	"t",
 		Commands: []Command{{
-			Name:  "run",
-			Flags: []Flag{{Name: "body", Required: true}},
-			Stdin: `{{.flag.body | toJson}}`,
-			Command: &Cmd{Argv: []string{"cat"}},
+			Name:		"run",
+			Flags:		[]Flag{{Name: "body", Required: true}},
+			Stdin:		`{{.flag.body | toJson}}`,
+			Command:	&Cmd{Argv: []string{"cat"}},
 		}},
 	}
 	code, out := execCmd(t, cfg, "run", "--body", `hello "world"`)
@@ -236,21 +236,21 @@ func TestIntegration_StdinWithJsonTemplate(t *testing.T) {
 
 func TestIntegration_StepStdinTemplatedWithResult(t *testing.T) {
 	cfg := &Config{
-		Name: "t",
+		Name:	"t",
 		Commands: []Command{{
-			Name: "run",
+			Name:	"run",
 			Steps: []Step{
 				{
-					Name:    "first",
-					Command: &Cmd{Shell: true, Template: `printf '{"key":"val"}'`},
+					Name:		"first",
+					Command:	&Cmd{Shell: true, Template: `printf '{"key":"val"}'`},
 				},
 				{
-					Name:    "second",
-					Stdin:   "{{.result.first.key}}",
-					Command: &Cmd{Argv: []string{"cat"}},
+					Name:		"second",
+					Stdin:		"{{.result.first.key}}",
+					Command:	&Cmd{Argv: []string{"cat"}},
 				},
 			},
-			Command: &Cmd{Shell: true, Template: `printf '%s' {{.result.second}}`},
+			Command:	&Cmd{Shell: true, Template: `printf '%s' {{.result.second}}`},
 		}},
 	}
 	code, out := execCmd(t, cfg, "run")

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const miniConfig = `{
@@ -86,9 +86,9 @@ func TestCmd_UnmarshalBothForms(t *testing.T) {
 
 func TestValidate_RejectsReservedName(t *testing.T) {
 	cfg := &Config{
-		Name:     "t",
-		Command:  &Cmd{Shell: true, Template: "true"},
-		Commands: []Command{{Name: "help"}},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: "true"},
+		Commands:	[]Command{{Name: "help"}},
 	}
 	err := validate(cfg)
 	assert.Error(t, err)
@@ -96,12 +96,12 @@ func TestValidate_RejectsReservedName(t *testing.T) {
 
 func TestValidate_RejectsEntryOnGroup(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: "true"},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name:     "x",
-			Entry:    json.RawMessage(`{"path": "/"}`),
-			Commands: []Command{{Name: "y"}},
+			Name:		"x",
+			Entry:		json.RawMessage(`{"path": "/"}`),
+			Commands:	[]Command{{Name: "y"}},
 		}},
 	}
 	err := validate(cfg)
@@ -111,8 +111,8 @@ func TestValidate_RejectsEntryOnGroup(t *testing.T) {
 func TestValidate_LeafWithoutCommandFailsWithoutAncestor(t *testing.T) {
 	// No root command, no leaf command → fail.
 	cfg := &Config{
-		Name:     "t",
-		Commands: []Command{{Name: "x"}},
+		Name:		"t",
+		Commands:	[]Command{{Name: "x"}},
 	}
 	err := validate(cfg)
 	assert.Error(t, err)
@@ -121,9 +121,9 @@ func TestValidate_LeafWithoutCommandFailsWithoutAncestor(t *testing.T) {
 func TestValidate_LeafInheritsAncestorCommand(t *testing.T) {
 	// Root has command, leaf doesn't → passes.
 	cfg := &Config{
-		Name:     "t",
-		Command:  &Cmd{Shell: true, Template: "true"},
-		Commands: []Command{{Name: "x"}},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: "true"},
+		Commands:	[]Command{{Name: "x"}},
 	}
 	err := validate(cfg)
 	assert.NoError(t, err)
@@ -131,8 +131,8 @@ func TestValidate_LeafInheritsAncestorCommand(t *testing.T) {
 
 func TestValidate_DuplicateSiblingNames(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: "true"},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: "true"},
 		Commands: []Command{
 			{Name: "x"},
 			{Name: "x"},
@@ -144,10 +144,10 @@ func TestValidate_DuplicateSiblingNames(t *testing.T) {
 
 func TestValidate_DuplicateArgName(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: "true"},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name: "x",
+			Name:	"x",
 			Args: []Arg{
 				{Name: "a", Required: true},
 				{Name: "a"},
@@ -160,10 +160,10 @@ func TestValidate_DuplicateArgName(t *testing.T) {
 
 func TestValidate_DuplicateFlagShort(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: "true"},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name: "x",
+			Name:	"x",
 			Flags: []Flag{
 				{Name: "a", Short: "x"},
 				{Name: "b", Short: "x"},
@@ -176,10 +176,10 @@ func TestValidate_DuplicateFlagShort(t *testing.T) {
 
 func TestValidate_VariadicMustBeLast(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: "true"},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name: "x",
+			Name:	"x",
 			Args: []Arg{
 				{Name: "rest", Variadic: true, Required: true},
 				{Name: "extra", Required: true},
@@ -192,10 +192,10 @@ func TestValidate_VariadicMustBeLast(t *testing.T) {
 
 func TestValidate_ConflictsMustReferenceRealFlag(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: "true"},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name: "x",
+			Name:	"x",
 			Flags: []Flag{
 				{Name: "a", Conflicts: []string{"ghost"}},
 			},
@@ -207,10 +207,10 @@ func TestValidate_ConflictsMustReferenceRealFlag(t *testing.T) {
 
 func TestValidate_ConflictsCannotReferenceSelf(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: "true"},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name: "x",
+			Name:	"x",
 			Flags: []Flag{
 				{Name: "a", Conflicts: []string{"a"}},
 			},
@@ -222,10 +222,10 @@ func TestValidate_ConflictsCannotReferenceSelf(t *testing.T) {
 
 func TestValidate_FlagNameNoNoPrefix(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: "true"},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name: "x",
+			Name:	"x",
 			Flags: []Flag{
 				{Name: "no-cache", Type: "bool"},
 			},
@@ -237,12 +237,12 @@ func TestValidate_FlagNameNoNoPrefix(t *testing.T) {
 
 func TestValidate_PreconditionsLeafOnly(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: "true"},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name:          "x",
-			Preconditions: []string{"oops"},
-			Commands:      []Command{{Name: "y"}},
+			Name:		"x",
+			Preconditions:	[]string{"oops"},
+			Commands:	[]Command{{Name: "y"}},
 		}},
 	}
 	err := validate(cfg)
@@ -251,12 +251,12 @@ func TestValidate_PreconditionsLeafOnly(t *testing.T) {
 
 func TestValidate_ConfirmAllowedOnGroup(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: "true"},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name:     "x",
-			Confirm:  "are you sure?",
-			Commands: []Command{{Name: "y"}},
+			Name:		"x",
+			Confirm:	"are you sure?",
+			Commands:	[]Command{{Name: "y"}},
 		}},
 	}
 	err := validate(cfg)
@@ -265,10 +265,10 @@ func TestValidate_ConfirmAllowedOnGroup(t *testing.T) {
 
 func TestVariadicArgUsesString(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: "true"},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name: "x",
+			Name:	"x",
 			Args: []Arg{
 				{Name: "files", Variadic: true},
 			},

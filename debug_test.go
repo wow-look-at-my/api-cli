@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestVerbose_ShowsCommandAndExitCode(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `echo hello`},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: `echo hello`},
 		Commands: []Command{{
 			Name: "greet",
 		}},
@@ -25,8 +25,8 @@ func TestVerbose_ShowsCommandAndExitCode(t *testing.T) {
 
 func TestDebug_ImpliesVerbose(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `echo hi`},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: `echo hi`},
 		Commands: []Command{{
 			Name: "say",
 		}},
@@ -39,18 +39,18 @@ func TestDebug_ImpliesVerbose(t *testing.T) {
 
 func TestVerbose_ShowsStepWhenPredicate(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `echo done`},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: `echo done`},
 		Commands: []Command{{
-			Name: "run",
+			Name:	"run",
 			Steps: []Step{
 				{
-					Name:    "maybe",
-					When:    "{{if .arg.skip}}false{{else}}true{{end}}",
-					Command: &Cmd{Shell: true, Template: `echo step-ran`},
+					Name:		"maybe",
+					When:		"{{if .arg.skip}}false{{else}}true{{end}}",
+					Command:	&Cmd{Shell: true, Template: `echo step-ran`},
 				},
 			},
-			Args: []Arg{{Name: "skip", Type: "string"}},
+			Args:	[]Arg{{Name: "skip", Type: "string"}},
 		}},
 	}
 
@@ -62,13 +62,13 @@ func TestVerbose_ShowsStepWhenPredicate(t *testing.T) {
 
 func TestVerbose_ShowsStepExecution(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `echo final`},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: `echo final`},
 		Commands: []Command{{
-			Name: "run",
+			Name:	"run",
 			Steps: []Step{{
-				Name:    "lookup",
-				Command: &Cmd{Shell: true, Template: `echo step-output`},
+				Name:		"lookup",
+				Command:	&Cmd{Shell: true, Template: `echo step-output`},
 			}},
 		}},
 	}
@@ -82,13 +82,13 @@ func TestVerbose_ShowsStepExecution(t *testing.T) {
 
 func TestDebug_ShowsStepStdout(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `echo final`},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: `echo final`},
 		Commands: []Command{{
-			Name: "run",
+			Name:	"run",
 			Steps: []Step{{
-				Name:    "lookup",
-				Command: &Cmd{Shell: true, Template: `echo captured-value`},
+				Name:		"lookup",
+				Command:	&Cmd{Shell: true, Template: `echo captured-value`},
 			}},
 		}},
 	}
@@ -101,11 +101,11 @@ func TestDebug_ShowsStepStdout(t *testing.T) {
 
 func TestDebug_ShowsDataContext(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `echo {{.arg.name}}`},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: `echo {{.arg.name}}`},
 		Commands: []Command{{
-			Name: "greet",
-			Args: []Arg{{Name: "name", Type: "string", Required: true}},
+			Name:	"greet",
+			Args:	[]Arg{{Name: "name", Type: "string", Required: true}},
 		}},
 	}
 
@@ -118,8 +118,8 @@ func TestDebug_ShowsDataContext(t *testing.T) {
 
 func TestNoFlags_NoDebugOutput(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `echo quiet`},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: `echo quiet`},
 		Commands: []Command{{
 			Name: "run",
 		}},
@@ -134,8 +134,8 @@ func TestNoFlags_NoDebugOutput(t *testing.T) {
 
 func TestVerbose_OutputGoesToStderr(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `echo stdout-only`},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: `echo stdout-only`},
 		Commands: []Command{{
 			Name: "run",
 		}},
@@ -149,8 +149,8 @@ func TestVerbose_OutputGoesToStderr(t *testing.T) {
 
 func TestVerbose_ShowsNonZeroExitCode(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `exit 42`},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: `exit 42`},
 		Commands: []Command{{
 			Name: "fail",
 		}},
@@ -163,12 +163,12 @@ func TestVerbose_ShowsNonZeroExitCode(t *testing.T) {
 
 func TestVerbose_ShowsPreconditionEval(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `echo ok`},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: `echo ok`},
 		Commands: []Command{{
-			Name:          "check",
-			Preconditions: []string{`{{if .arg.bad}}nope{{end}}`},
-			Args:          []Arg{{Name: "bad", Type: "string"}},
+			Name:		"check",
+			Preconditions:	[]string{`{{if .arg.bad}}nope{{end}}`},
+			Args:		[]Arg{{Name: "bad", Type: "string"}},
 		}},
 	}
 
@@ -179,20 +179,20 @@ func TestVerbose_ShowsPreconditionEval(t *testing.T) {
 
 func TestVerbose_FormatDecision(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `echo '{"x":1}'`},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: `echo '{"x":1}'`},
 		Formats: map[string]*Format{
 			"f": {
-				When: "true",
+				When:	"true",
 				Views: []View{{
-					Name:     "v",
-					Template: "formatted: {{.data.x}}",
+					Name:		"v",
+					Template:	"formatted: {{.data.x}}",
 				}},
 			},
 		},
 		Commands: []Command{{
-			Name:   "show",
-			Format: &FormatRef{Name: "f"},
+			Name:	"show",
+			Format:	&FormatRef{Name: "f"},
 		}},
 	}
 
@@ -203,8 +203,8 @@ func TestVerbose_FormatDecision(t *testing.T) {
 
 func TestDebug_NoVerboseLines(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `echo x`},
+		Name:		"t",
+		Command:	&Cmd{Shell: true, Template: `echo x`},
 		Commands: []Command{{
 			Name: "run",
 		}},
