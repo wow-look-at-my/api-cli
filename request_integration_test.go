@@ -120,6 +120,24 @@ func TestIntegration_RequestAsJSON(t *testing.T) {
 	assert.NotContains(t, out, "drop") // projected to declared fields
 }
 
+func TestIntegration_AsForcesFieldsWithoutDeclaration(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"id":1,"name":"x"}`))
+	}))
+	defer srv.Close()
+	swapHTTPClient(t, srv)
+
+	cfg := &Config{
+		Name:     "t",
+		Commands: []Command{{Name: "get", Request: &Request{Method: "GET", URL: srv.URL + "/x"}}},
+	}
+	// No <fields>, but --as=json still formats (all keys derived).
+	code, out := execCmd(t, cfg, "get", "--as", "json")
+	require.Equal(t, 0, code)
+	assert.Contains(t, out, `"id": 1`)
+	assert.Contains(t, out, `"name": "x"`)
+}
+
 func TestIntegration_RequestErrorStatusExitCode(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

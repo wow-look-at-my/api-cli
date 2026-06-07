@@ -234,6 +234,14 @@ func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin strin
 		return streamRaw(), nil
 	}
 
+	// --as forces a representation even when the leaf declared no <fields>:
+	// project nothing and let the data shape (or the chosen sink) decide.
+	if fields == nil {
+		if sink, _ := c.Root().PersistentFlags().GetString("as"); strings.TrimSpace(sink) != "" {
+			fields = &Fields{}
+		}
+	}
+
 	if fields != nil {
 		logVerbose("format: applying <fields> auto-formatter")
 		return runFieldsFormatted(c, cmdTmpl, request, cwd, stdin, data, fields, verdict), nil
