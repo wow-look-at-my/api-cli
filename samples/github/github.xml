@@ -58,8 +58,10 @@
 	    <query from="entry.query"/> turn a map into the query string, OR list
 	                                <param name="..">..</param> (wrap in <if> to
 	                                make a param conditional)
-	    <header name="..">..</header>   one per header; <if>/<else-if> may gate
-	                                    them (used for the auth header)
+	    <header name="..">..</header>   one per header; <if> may gate them. The
+	                                    auth header checks var.token, resolved
+	                                    once in <vars> (GITHUB_TOKEN or GH_TOKEN)
+	                                    instead of branching per request
 	    <response jq="var.filter"/> shape the JSON response with the jq program
 	                                at that var; omit it for a raw body
 	  For arbitrary non-HTTP commands the format still has <exec><arg>..</arg>
@@ -82,6 +84,9 @@
 	<vars>
 		<var name="base_url"><value name="env.GITHUB_API_URL" default="https://api.github.com"/></var>
 		<var name="ua">api-cli-github-example</var>
+		<!-- Resolve the token once: whichever of GITHUB_TOKEN / GH_TOKEN is set.
+		     Every request then just checks var.token, no per-request if/else. -->
+		<var name="token"><value expr='{{ or .env.GITHUB_TOKEN .env.GH_TOKEN }}'/></var>
 		<!-- jq filter shared by every command: recursively drop *url keys,
 		     GraphQL node_ids, and other noise, then drop counts that duplicate
 		     a *_count field. Opaque jq source, left verbatim. -->
@@ -99,10 +104,8 @@
 			<header name="User-Agent"><value name="var.ua"/></header>
 			<header name="Accept">application/vnd.github+json</header>
 			<header name="X-GitHub-Api-Version">2022-11-28</header>
-			<if test="env.GITHUB_TOKEN">
-				<header name="Authorization">Bearer <value name="env.GITHUB_TOKEN"/></header>
-			<else-if test="env.GH_TOKEN"/>
-				<header name="Authorization">Bearer <value name="env.GH_TOKEN"/></header>
+			<if test="var.token">
+				<header name="Authorization">Bearer <value name="var.token"/></header>
 			</if>
 			<response jq="var.filter"/>
 		</request>
@@ -369,10 +372,8 @@
 					<url><value name="var.base_url"/>/repos/<value name="arg.repo"/>/pulls/<value name="arg.number"/></url>
 					<header name="User-Agent"><value name="var.ua"/></header>
 					<header name="Accept">application/vnd.github.diff</header>
-					<if test="env.GITHUB_TOKEN">
-						<header name="Authorization">Bearer <value name="env.GITHUB_TOKEN"/></header>
-					<else-if test="env.GH_TOKEN"/>
-						<header name="Authorization">Bearer <value name="env.GH_TOKEN"/></header>
+					<if test="var.token">
+						<header name="Authorization">Bearer <value name="var.token"/></header>
 					</if>
 				</request>
 			</run>
@@ -473,10 +474,8 @@
 					</query>
 					<header name="User-Agent"><value name="var.ua"/></header>
 					<header name="Accept">application/vnd.github.raw</header>
-					<if test="env.GITHUB_TOKEN">
-						<header name="Authorization">Bearer <value name="env.GITHUB_TOKEN"/></header>
-					<else-if test="env.GH_TOKEN"/>
-						<header name="Authorization">Bearer <value name="env.GH_TOKEN"/></header>
+					<if test="var.token">
+						<header name="Authorization">Bearer <value name="var.token"/></header>
 					</if>
 				</request>
 			</run>
