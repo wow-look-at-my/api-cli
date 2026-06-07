@@ -4,42 +4,40 @@
 	EXPERIMENT ONLY. Nothing loads this file. Exploring a declaration format
 	for api-cli. No Go code, schema, or loader is wired to it.
 
-	FORMATTING MODEL (this revision): there is NO <formats> registry, no named
-	formats, no per-view <when>/<default>/<input>. Output is shaped
-	AUTOMATICALLY from the response (PowerShell-style), and a command attaches a
-	FOCUSED override only when the automatic choice isn't good enough.
+	FORMATTING MODEL: a command declares ONE thing: the shape of its output
+	records (which fields, with optional rename / default / compute / transform).
+	That single declaration is then represented automatically in whatever form
+	is asked for: a table, a "Label: value" list, JSON, Markdown, CSV, ... You
+	never write "table" or "list" anywhere; the renderer picks one from the
+	data's shape, and a runtime flag (or a pipe) can force any representation.
 
-	  Automatic (no config at all):
-	    JSON array of objects  -> table   (columns = the objects' keys)
-	    JSON object            -> list    (one "Label: value" line per field)
-	    JSON array of scalars  -> lines   (one per line)
-	    non-JSON / scalar      -> raw
+	  Output shape, via <fields>:
+	    <fields [over="data.items"] [footer="..."]>
+	      <field name="stars">stargazers_count</field>     rename a field
+	      <field name="lang" default="-">language</field>  fallback for empty
+	      <field name="sha" truncate="7">sha</field>        transform
+	      <field name="branch" expr='{{.head.ref}} -> {{.base.ref}}'/>  computed
+	      <field name="resource">@key</field>              @key/@value for a map
+	    With NO <fields> at all, every (filtered) field of the response is output.
+	    over=    the records live at this path (search -> data.items; rate /
+	             languages -> a map; topics -> data.names) rather than the root.
+	    footer=  a trailing summary line (search's "N total").
+
+	  Automatic representation of that one shape, by data shape and chosen sink:
+	    array of records  -> table   (or JSON array,  or Markdown table, ...)
+	    single record     -> list    (Label: value)  (or JSON object, ...)
+	    array of scalars  -> lines   (or JSON array)
+	    non-JSON / scalar -> raw
 	  So pr-diff (diff), readme (raw), and contents (dir array OR file object)
-	  need NOTHING; the shape decides.
+	  declare nothing. A runtime layer (not in this file) would mirror
+	  PowerShell's verbs (table / list / json | markdown | csv flags) to force a
+	  representation, the way you'd pipe to Format-Table / ConvertTo-Json / etc.
 
-	  Focused overrides (attached to a command; inherit down the tree):
-	    <table [over="data.items"] [footer="..."]>   like Format-Table
-	      <column header="STARS">stargazers_count</column>
-	      <column header="LANG" default="-">language</column>
-	      <column header="SHA" truncate="7">sha</column>
-	      <column header="%" expr='...'/>             computed column
-	    <list>                                        like Format-List
-	      <field label="Repo">full_name</field>
-	      <field label="License" expr='...'/>         computed field
-	    <template> ...nodes... </template>            escape hatch: a fully
-	                                                  custom layout (headers,
-	                                                  bodies, joins) for output a
-	                                                  flat table/list can't do.
-	  A runtime layer (not in this file) would mirror the PowerShell verbs:
-	  `table` / `list` / `json` | `raw` flags to override per-invocation, the way
-	  you'd pipe to Format-Table / Format-List / ConvertTo-Json / Out-String.
-
-	  SCOPES: <column> bodies are relative to each row item (login, not
-	  data.login); @key/@value are the entry when <table over=> walks a map
-	  (rate, languages). <field> bodies are relative to the object. <template>
-	  and footer= and expr= see the whole context (.data, .arg, .var, ...).
-	  Placeholders (<value>/<if>/<for>) and the text/template expr= escape hatch
-	  work as before.
+	  SCOPES: a <field> body/expr is relative to each record (login, not
+	  data.login); @key/@value is the entry when <fields over=> walks a map;
+	  expr= also sees the whole context via $ ($.data, $.var, ...). Placeholders
+	  (<value>/<if>/<for>) and the text/template expr= escape hatch work as
+	  before.
 
 	WEB REQUESTS are first-class (no curl/wget/shell). <run> holds a
 	<request method="GET"> with <url>, <query from="entry.query"/> (or <param>s),
@@ -48,8 +46,7 @@
 	raw body. The jq `filter` var stays CDATA (jq source, a foreign language).
 
 	Whitespace: structural indentation is TABS; assume the loader strips the
-	common leading tabs from <template> text. Column alignment in lists/templates
-	uses SPACES, which survive that strip.
+	common leading tabs from any text content.
 -->
 
 <config
@@ -88,18 +85,18 @@
 	<command name="user" description="Read user info.">
 		<command name="get" description="Fetch a user. Omit USERNAME to use /user (the authenticated viewer; requires a token).">
 			<arg name="username" type="string" description="GitHub username."/>
-			<list>
-				<field label="Login">login</field>
-				<field label="ID">id</field>
-				<field label="Name" default="-">name</field>
-				<field label="Company" default="-">company</field>
-				<field label="Location" default="-">location</field>
-				<field label="Bio" default="-">bio</field>
-				<field label="Followers">followers</field>
-				<field label="Following">following</field>
-				<field label="Repos">public_repos</field>
-				<field label="Created">created_at</field>
-			</list>
+			<fields>
+				<field name="login">login</field>
+				<field name="id">id</field>
+				<field name="name" default="-">name</field>
+				<field name="company" default="-">company</field>
+				<field name="location" default="-">location</field>
+				<field name="bio" default="-">bio</field>
+				<field name="followers">followers</field>
+				<field name="following">following</field>
+				<field name="repos">public_repos</field>
+				<field name="created">created_at</field>
+			</fields>
 			<entry>
 				<path><if test="arg.username">/users/<value name="arg.username" as="urlpath"/><else/>/user</if></path>
 			</entry>
@@ -109,13 +106,13 @@
 			<flag name="limit" short="n" type="int" default="30" description="Items per page (max 100)."/>
 			<flag name="page" short="p" type="int" default="1" description="Page number."/>
 			<flag name="sort" type="string" default="updated" description="created|updated|pushed|full_name."/>
-			<table>
-				<column header="NAME">full_name</column>
-				<column header="STARS">stargazers_count</column>
-				<column header="FORKS">forks_count</column>
-				<column header="LANG" default="-">language</column>
-				<column header="DESCRIPTION" default="-">description</column>
-			</table>
+			<fields>
+				<field name="name">full_name</field>
+				<field name="stars">stargazers_count</field>
+				<field name="forks">forks_count</field>
+				<field name="lang" default="-">language</field>
+				<field name="description" default="-">description</field>
+			</fields>
 			<entry>
 				<path>/users/<value name="arg.username" as="urlpath"/>/repos</path>
 				<query>
@@ -127,11 +124,11 @@
 		</command>
 		<command name="orgs" description="List a user's public organization memberships.">
 			<arg name="username" type="string" required="true"/>
-			<table>
-				<column header="LOGIN">login</column>
-				<column header="ID">id</column>
-				<column header="DESCRIPTION" default="-">description</column>
-			</table>
+			<fields>
+				<field name="login">login</field>
+				<field name="id">id</field>
+				<field name="description" default="-">description</field>
+			</fields>
 			<entry>
 				<path>/users/<value name="arg.username" as="urlpath"/>/orgs</path>
 			</entry>
@@ -141,22 +138,22 @@
 	<command name="repo" description="Read repository info.">
 		<command name="get" description="Fetch a repository.">
 			<arg name="repo" type="string" required="true" description="owner/name."/>
-			<list>
-				<field label="Repo">full_name</field>
-				<field label="Description" default="-">description</field>
-				<field label="Language" default="-">language</field>
-				<field label="Stars">stargazers_count</field>
-				<field label="Forks">forks_count</field>
-				<field label="Issues">open_issues_count</field>
-				<field label="Default">default_branch</field>
-				<field label="License" default="-" expr='{{ with .license }}{{ .spdx_id }}{{ end }}'/>
-				<field label="Created">created_at</field>
-				<field label="Updated">updated_at</field>
-				<field label="Pushed">pushed_at</field>
-				<field label="Archived">archived</field>
-				<field label="Fork">fork</field>
-				<field label="Private">private</field>
-			</list>
+			<fields>
+				<field name="repo">full_name</field>
+				<field name="description" default="-">description</field>
+				<field name="language" default="-">language</field>
+				<field name="stars">stargazers_count</field>
+				<field name="forks">forks_count</field>
+				<field name="issues">open_issues_count</field>
+				<field name="default">default_branch</field>
+				<field name="license" default="-" expr='{{ with .license }}{{ .spdx_id }}{{ end }}'/>
+				<field name="created">created_at</field>
+				<field name="updated">updated_at</field>
+				<field name="pushed">pushed_at</field>
+				<field name="archived">archived</field>
+				<field name="fork">fork</field>
+				<field name="private">private</field>
+			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/></path>
 			</entry>
@@ -167,12 +164,12 @@
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
 			<flag name="labels" type="string" default="" description="Comma-separated label names."/>
-			<table>
-				<column header="#">#<value name="number"/></column>
-				<column header="STATE">state</column>
-				<column header="AUTHOR">user.login</column>
-				<column header="TITLE">title</column>
-			</table>
+			<fields>
+				<field name="number">number</field>
+				<field name="state">state</field>
+				<field name="author">user.login</field>
+				<field name="title">title</field>
+			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/issues</path>
 				<query>
@@ -186,14 +183,16 @@
 		<command name="issue" description="Fetch a single issue.">
 			<arg name="repo" type="string" required="true" description="owner/name."/>
 			<arg name="number" type="int" required="true"/>
-			<template>
-#<value name="data.number"/> (<value name="data.state"/>): <value name="data.title"/>
-Author:  <value name="data.user.login"/>
-Created: <value name="data.created_at"/>
-Updated: <value name="data.updated_at"/>
-<if test="data.labels">Labels:  <for each="data.labels" join=", "><value name="name"/></for></if>
-<value name="data.body" default=""/>
-			</template>
+			<fields>
+				<field name="number">number</field>
+				<field name="state">state</field>
+				<field name="title">title</field>
+				<field name="author">user.login</field>
+				<field name="created">created_at</field>
+				<field name="updated">updated_at</field>
+				<field name="labels" expr='{{ range $i, $l := .labels }}{{ if $i }}, {{ end }}{{ $l.name }}{{ end }}'/>
+				<field name="body" default="">body</field>
+			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/issues/<value name="arg.number"/></path>
 			</entry>
@@ -203,12 +202,12 @@ Updated: <value name="data.updated_at"/>
 			<flag name="state" type="string" default="open" description="open|closed|all."/>
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
-			<table>
-				<column header="#">#<value name="number"/></column>
-				<column header="STATE">state</column>
-				<column header="AUTHOR">user.login</column>
-				<column header="TITLE">title</column>
-			</table>
+			<fields>
+				<field name="number">number</field>
+				<field name="state">state</field>
+				<field name="author">user.login</field>
+				<field name="title">title</field>
+			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/pulls</path>
 				<query>
@@ -221,18 +220,21 @@ Updated: <value name="data.updated_at"/>
 		<command name="pr" description="Fetch a single pull request: description, comment counts, and diff size.">
 			<arg name="repo" type="string" required="true" description="owner/name."/>
 			<arg name="number" type="int" required="true"/>
-			<template>
-#<value name="data.number"/> (<value name="data.state"/><if test="data.draft">, draft</if><if test="data.merged">, merged</if>): <value name="data.title"/>
-Author:   <value name="data.user.login"/>
-Branch:   <value name="data.head.ref"/> -> <value name="data.base.ref"/>
-Created:  <value name="data.created_at"/>
-Updated:  <value name="data.updated_at"/>
-Comments: <value name="data.comments" default="0"/> conversation, <value name="data.review_comments" default="0"/> review
-Commits:  <value name="data.commits" default="0"/>
-Diff:     +<value name="data.additions" default="0"/> -<value name="data.deletions" default="0"/> across <value name="data.changed_files" default="0"/> file(s)
-<if test="data.labels">Labels:   <for each="data.labels" join=", "><value name="name"/></for></if>
-<value name="data.body" default=""/>
-			</template>
+			<fields>
+				<field name="number">number</field>
+				<field name="state" expr='{{ .state }}{{ if .draft }}, draft{{ end }}{{ if .merged }}, merged{{ end }}'/>
+				<field name="title">title</field>
+				<field name="author">user.login</field>
+				<field name="branch" expr='{{ .head.ref }} -> {{ .base.ref }}'/>
+				<field name="created">created_at</field>
+				<field name="updated">updated_at</field>
+				<field name="comments" default="0">comments</field>
+				<field name="review_comments" default="0">review_comments</field>
+				<field name="commits" default="0">commits</field>
+				<field name="diff" expr='+{{ .additions }} -{{ .deletions }} across {{ .changed_files }} file(s)'/>
+				<field name="labels" expr='{{ range $i, $l := .labels }}{{ if $i }}, {{ end }}{{ $l.name }}{{ end }}'/>
+				<field name="body" default="">body</field>
+			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/pulls/<value name="arg.number"/></path>
 			</entry>
@@ -257,10 +259,12 @@ Diff:     +<value name="data.additions" default="0"/> -<value name="data.deletio
 			<flag name="review" short="r" type="bool" default="false" description="List inline code-review comments instead of conversation comments."/>
 			<flag name="limit" short="n" type="int" default="30" description="Items per page (max 100)."/>
 			<flag name="page" short="p" type="int" default="1" description="Page number."/>
-			<template><for each="data" empty="No comments.">@<value name="user.login"/><if test="path"> on <value name="path"/><if test="line">:<value name="line"/></if></if> (<value name="created_at"/>):
-<value name="body"/>
-
-</for></template>
+			<fields>
+				<field name="author">user.login</field>
+				<field name="on" default="-" expr='{{ .path }}{{ with .line }}:{{ . }}{{ end }}'/>
+				<field name="created">created_at</field>
+				<field name="body">body</field>
+			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/<if test="flag.review">pulls/<value name="arg.number"/>/comments<else/>issues/<value name="arg.number"/>/comments</if></path>
 				<query>
@@ -273,13 +277,13 @@ Diff:     +<value name="data.additions" default="0"/> -<value name="data.deletio
 			<arg name="repo" type="string" required="true"/>
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
-			<table>
-				<column header="TAG">tag_name</column>
-				<column header="NAME" default="-">name</column>
-				<column header="PUBLISHED">published_at</column>
-				<column header="DRAFT">draft</column>
-				<column header="PRERELEASE">prerelease</column>
-			</table>
+			<fields>
+				<field name="tag">tag_name</field>
+				<field name="name" default="-">name</field>
+				<field name="published">published_at</field>
+				<field name="draft">draft</field>
+				<field name="prerelease">prerelease</field>
+			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/releases</path>
 				<query>
@@ -291,15 +295,15 @@ Diff:     +<value name="data.additions" default="0"/> -<value name="data.deletio
 		<command name="release" description="Fetch a release by tag, or `latest`.">
 			<arg name="repo" type="string" required="true"/>
 			<arg name="tag" type="string" required="true" description="Tag name, or `latest`."/>
-			<template>
-Tag:       <value name="data.tag_name"/>
-Name:      <value name="data.name" default="-"/>
-Published: <value name="data.published_at"/>
-Author:    <value name="data.author.login"/>
-Draft:     <value name="data.draft"/>    Prerelease: <value name="data.prerelease"/>
-
-<value name="data.body" default=""/>
-			</template>
+			<fields>
+				<field name="tag">tag_name</field>
+				<field name="name" default="-">name</field>
+				<field name="published">published_at</field>
+				<field name="author">author.login</field>
+				<field name="draft">draft</field>
+				<field name="prerelease">prerelease</field>
+				<field name="body" default="">body</field>
+			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/releases/<if test="arg.tag" eq="latest">latest<else/>tags/<value name="arg.tag" as="urlpath"/></if></path>
 			</entry>
@@ -310,12 +314,12 @@ Draft:     <value name="data.draft"/>    Prerelease: <value name="data.prereleas
 			<flag name="page" short="p" type="int" default="1"/>
 			<flag name="branch" type="string" default="" description="Branch / SHA / tag to start from."/>
 			<flag name="path" type="string" default="" description="Restrict to commits touching this path."/>
-			<table>
-				<column header="SHA" truncate="7">sha</column>
-				<column header="AUTHOR">commit.author.name</column>
-				<column header="DATE">commit.author.date</column>
-				<column header="MESSAGE" firstline="true">commit.message</column>
-			</table>
+			<fields>
+				<field name="sha" truncate="7">sha</field>
+				<field name="author">commit.author.name</field>
+				<field name="date">commit.author.date</field>
+				<field name="message" firstline="true">commit.message</field>
+			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/commits</path>
 				<query>
@@ -329,24 +333,23 @@ Draft:     <value name="data.draft"/>    Prerelease: <value name="data.prereleas
 		<command name="commit" description="Fetch a single commit.">
 			<arg name="repo" type="string" required="true"/>
 			<arg name="sha" type="string" required="true" description="Commit SHA, branch, or tag."/>
-			<template>
-SHA:     <value name="data.sha"/>
-Author:  <value name="data.commit.author.name"/> &lt;<value name="data.commit.author.email"/>&gt;
-Date:    <value name="data.commit.author.date"/>
-
-<value name="data.commit.message"/>
-			</template>
+			<fields>
+				<field name="sha">sha</field>
+				<field name="author" expr='{{ .commit.author.name }} &lt;{{ .commit.author.email }}&gt;'/>
+				<field name="date">commit.author.date</field>
+				<field name="message">commit.message</field>
+			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/commits/<value name="arg.sha" as="urlpath"/></path>
 			</entry>
 		</command>
 		<command name="branches" description="List branches.">
 			<arg name="repo" type="string" required="true"/>
-			<table>
-				<column header="NAME">name</column>
-				<column header="SHA" truncate="7">commit.sha</column>
-				<column header="PROTECTED">protected</column>
-			</table>
+			<fields>
+				<field name="name">name</field>
+				<field name="sha" truncate="7">commit.sha</field>
+				<field name="protected">protected</field>
+			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/branches</path>
 				<query>
@@ -356,10 +359,10 @@ Date:    <value name="data.commit.author.date"/>
 		</command>
 		<command name="tags" description="List tags.">
 			<arg name="repo" type="string" required="true"/>
-			<table>
-				<column header="NAME">name</column>
-				<column header="SHA" truncate="7">commit.sha</column>
-			</table>
+			<fields>
+				<field name="name">name</field>
+				<field name="sha" truncate="7">commit.sha</field>
+			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/tags</path>
 				<query>
@@ -367,7 +370,7 @@ Date:    <value name="data.commit.author.date"/>
 				</query>
 			</entry>
 		</command>
-		<command name="contents" description="Fetch a file or directory listing. Omit PATH to list the repo root; otherwise a slash-delimited path (not URL-encoded). Auto-formats: a directory listing is an array (table), a single file is an object (list).">
+		<command name="contents" description="Fetch a file or directory listing. Omit PATH to list the repo root; otherwise a slash-delimited path (not URL-encoded). With no field projection, a directory listing is an array (table) and a single file is an object (list); the shape decides.">
 			<arg name="repo" type="string" required="true"/>
 			<arg name="path" type="string" description="File or directory path within the repo. Omit for the root listing."/>
 			<flag name="ref" short="r" type="string" default="" description="Branch / SHA / tag."/>
@@ -397,25 +400,22 @@ Date:    <value name="data.commit.author.date"/>
 		</command>
 		<command name="languages" description="Map of languages to byte counts.">
 			<arg name="repo" type="string" required="true"/>
-			<!-- A map (language -> bytes). <table over="data"> walks it with
-			     @key/@value; the "%" column is an aggregate (each row's share of
-			     the summed total), so it uses the expr escape hatch: `.` is this
-			     row's byte count, $.data is the whole map to total up. -->
-			<table over="data">
-				<column header="LANGUAGE">@key</column>
-				<column header="BYTES">@value</column>
-				<column header="%" expr='{{ $t := 0 }}{{ range $.data }}{{ $t = add $t . }}{{ end }}{{ printf "%.1f%%" (mulf 100.0 (divf . $t)) }}'/>
-			</table>
+			<!-- A map (language -> bytes). over="data" walks it with @key/@value;
+			     the percent is an aggregate, so it uses the expr escape hatch:
+			     `.` is this row's byte count, $.data is the whole map to total. -->
+			<fields over="data">
+				<field name="language">@key</field>
+				<field name="bytes">@value</field>
+				<field name="percent" expr='{{ $t := 0 }}{{ range $.data }}{{ $t = add $t . }}{{ end }}{{ printf "%.1f%%" (mulf 100.0 (divf . $t)) }}'/>
+			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/languages</path>
 			</entry>
 		</command>
 		<command name="topics" description="List repository topics.">
 			<arg name="repo" type="string" required="true"/>
-			<!-- The response wraps the array in {names:[...]}, so drill into it
-			     with a tiny template; a bare array would auto-format as lines. -->
-			<template><for each="data.names"><value/>
-</for></template>
+			<!-- The records are the scalar strings at data.names. -->
+			<fields over="data.names"/>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/topics</path>
 			</entry>
@@ -425,17 +425,17 @@ Date:    <value name="data.commit.author.date"/>
 	<command name="org" description="Read organization info.">
 		<command name="get" description="Fetch an org.">
 			<arg name="org" type="string" required="true"/>
-			<list>
-				<field label="Login">login</field>
-				<field label="ID">id</field>
-				<field label="Name" default="-">name</field>
-				<field label="Description" default="-">description</field>
-				<field label="Location" default="-">location</field>
-				<field label="Blog" default="-">blog</field>
-				<field label="Members">followers</field>
-				<field label="Repos">public_repos</field>
-				<field label="Created">created_at</field>
-			</list>
+			<fields>
+				<field name="login">login</field>
+				<field name="id">id</field>
+				<field name="name" default="-">name</field>
+				<field name="description" default="-">description</field>
+				<field name="location" default="-">location</field>
+				<field name="blog" default="-">blog</field>
+				<field name="members">followers</field>
+				<field name="repos">public_repos</field>
+				<field name="created">created_at</field>
+			</fields>
 			<entry>
 				<path>/orgs/<value name="arg.org" as="urlpath"/></path>
 			</entry>
@@ -444,11 +444,11 @@ Date:    <value name="data.commit.author.date"/>
 			<arg name="org" type="string" required="true"/>
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
-			<table>
-				<column header="LOGIN">login</column>
-				<column header="ID">id</column>
-				<column header="TYPE">type</column>
-			</table>
+			<fields>
+				<field name="login">login</field>
+				<field name="id">id</field>
+				<field name="type">type</field>
+			</fields>
 			<entry>
 				<path>/orgs/<value name="arg.org" as="urlpath"/>/public_members</path>
 				<query>
@@ -462,13 +462,13 @@ Date:    <value name="data.commit.author.date"/>
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
 			<flag name="type" type="string" default="all" description="all|public|private|forks|sources|member."/>
-			<table>
-				<column header="NAME">full_name</column>
-				<column header="STARS">stargazers_count</column>
-				<column header="FORKS">forks_count</column>
-				<column header="LANG" default="-">language</column>
-				<column header="DESCRIPTION" default="-">description</column>
-			</table>
+			<fields>
+				<field name="name">full_name</field>
+				<field name="stars">stargazers_count</field>
+				<field name="forks">forks_count</field>
+				<field name="lang" default="-">language</field>
+				<field name="description" default="-">description</field>
+			</fields>
 			<entry>
 				<path>/orgs/<value name="arg.org" as="urlpath"/>/repos</path>
 				<query>
@@ -487,12 +487,12 @@ Date:    <value name="data.commit.author.date"/>
 			<flag name="page" short="p" type="int" default="1"/>
 			<flag name="sort" type="string" default="" description="stars|forks|updated|help-wanted-issues."/>
 			<flag name="order" type="string" default="desc" description="asc|desc."/>
-			<table over="data.items" footer="{{.data.total_count}} total">
-				<column header="NAME">full_name</column>
-				<column header="STARS">stargazers_count</column>
-				<column header="LANG" default="-">language</column>
-				<column header="DESCRIPTION" default="-">description</column>
-			</table>
+			<fields over="data.items" footer="{{.data.total_count}} total">
+				<field name="name">full_name</field>
+				<field name="stars">stargazers_count</field>
+				<field name="lang" default="-">language</field>
+				<field name="description" default="-">description</field>
+			</fields>
 			<entry>
 				<path>/search/repositories</path>
 				<query>
@@ -508,10 +508,10 @@ Date:    <value name="data.commit.author.date"/>
 			<arg name="query" type="string" required="true"/>
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
-			<table over="data.items" footer="{{.data.total_count}} total">
-				<column header="REPO">repository.full_name</column>
-				<column header="PATH">path</column>
-			</table>
+			<fields over="data.items" footer="{{.data.total_count}} total">
+				<field name="repo">repository.full_name</field>
+				<field name="path">path</field>
+			</fields>
 			<entry>
 				<path>/search/code</path>
 				<query>
@@ -529,12 +529,12 @@ Date:    <value name="data.commit.author.date"/>
 			<vars>
 				<var name="filter"><![CDATA[walk(if type == "object" then with_entries(select((.key == "repository_url" or (.key | endswith("url") | not)) and (.key | IN("node_id","gravatar_id","user_view_type","site_admin","performed_via_github_app","active_lock_reason","author_association","temp_clone_token","custom_properties","issue_field_values","permissions","_links","network_count","pinned_comment","reactions","sub_issues_summary","issue_dependencies_summary") | not))) | if has("forks_count") then del(.forks) else . end | if has("watchers_count") then del(.watchers) else . end | if has("open_issues_count") then del(.open_issues) else . end else . end)]]></var>
 			</vars>
-			<table over="data.items" footer="{{.data.total_count}} total">
-				<column header="REPO" expr='{{ .repository_url | default "" | trimPrefix (printf "%s/repos/" $.var.base_url) }}'/>
-				<column header="#">#<value name="number"/></column>
-				<column header="STATE">state</column>
-				<column header="TITLE">title</column>
-			</table>
+			<fields over="data.items" footer="{{.data.total_count}} total">
+				<field name="repo" expr='{{ .repository_url | default "" | trimPrefix (printf "%s/repos/" $.var.base_url) }}'/>
+				<field name="number">number</field>
+				<field name="state">state</field>
+				<field name="title">title</field>
+			</fields>
 			<entry>
 				<path>/search/issues</path>
 				<query>
@@ -549,11 +549,11 @@ Date:    <value name="data.commit.author.date"/>
 			<arg name="query" type="string" required="true"/>
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
-			<table over="data.items" footer="{{.data.total_count}} total">
-				<column header="LOGIN">login</column>
-				<column header="ID">id</column>
-				<column header="TYPE">type</column>
-			</table>
+			<fields over="data.items" footer="{{.data.total_count}} total">
+				<field name="login">login</field>
+				<field name="id">id</field>
+				<field name="type">type</field>
+			</fields>
 			<entry>
 				<path>/search/users</path>
 				<query>
@@ -566,12 +566,12 @@ Date:    <value name="data.commit.author.date"/>
 	</command>
 
 	<command name="rate-limit" description="Show the current rate-limit status. (RESET column is unix epoch seconds.)">
-		<table over="data.resources">
-			<column header="RESOURCE">@key</column>
-			<column header="LIMIT">limit</column>
-			<column header="REMAINING">remaining</column>
-			<column header="RESET">reset</column>
-		</table>
+		<fields over="data.resources">
+			<field name="resource">@key</field>
+			<field name="limit">limit</field>
+			<field name="remaining">remaining</field>
+			<field name="reset">reset</field>
+		</fields>
 		<entry>
 			<path>/rate_limit</path>
 		</entry>
