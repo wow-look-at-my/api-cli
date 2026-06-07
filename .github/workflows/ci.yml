@@ -15,19 +15,25 @@ jobs:
       - uses: wow-look-at-my/go-toolchain@v1
         with:
           autorelease: 'true'
-      - name: Run samples/github/github.json demo into the step summary
-        # Hits the live GitHub API; transient network/quota hiccups should not
-        # fail CI when the unit tests are green. The summary is best-effort.
-        continue-on-error: true
+      - name: Run samples/github/github.xml demo into the step summary
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./.github/scripts/demo-summary.sh
 
-  validate-json:
+  validate-xml:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: wow-look-at-my/json-validator@master
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Validate XML configs and schema (well-formedness, XML 1.1)
+        run: |
+          go install github.com/wow-look-at-my/xml-validator@latest
+          xv="$(go env GOPATH)/bin/xml-validator"
+          "$xv" api.example.xml
+          "$xv" api.schema.xsd
+          "$xv" samples/github/github.xml
 
   docker:
     needs: test

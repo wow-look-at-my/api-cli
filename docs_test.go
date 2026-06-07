@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"testing"
@@ -26,7 +25,7 @@ func TestDocsCommand_PrintsReadme(t *testing.T) {
 	assert.Equal(t, readmeDoc, out.String())
 }
 
-func TestDocsCommand_SchemaFull(t *testing.T) {
+func TestDocsCommand_Schema(t *testing.T) {
 	var out bytes.Buffer
 	prev := execStdout
 	execStdout = &out
@@ -38,57 +37,9 @@ func TestDocsCommand_SchemaFull(t *testing.T) {
 	cmd.SetArgs([]string{"schema"})
 	require.NoError(t, cmd.Execute())
 
-	assert.Contains(t, out.String(), `"$schema"`)
+	assert.Contains(t, out.String(), "xs:schema")
+	assert.Contains(t, out.String(), `name="config"`)
 	assert.Equal(t, schemaDoc, out.String())
-}
-
-func TestDocsCommand_SchemaKey(t *testing.T) {
-	var out bytes.Buffer
-	prev := execStdout
-	execStdout = &out
-	t.Cleanup(func() { execStdout = prev })
-
-	cmd := docsCommand()
-	cmd.SetOut(io.Discard)
-	cmd.SetErr(io.Discard)
-	cmd.SetArgs([]string{"schema", "flag"})
-	require.NoError(t, cmd.Execute())
-
-	result := out.String()
-	assert.NotContains(t, result, `"$schema"`)
-
-	var parsed map[string]any
-	require.NoError(t, json.Unmarshal([]byte(result), &parsed))
-	assert.Contains(t, parsed, "properties")
-}
-
-func TestDocsCommand_SchemaKeyFromProperties(t *testing.T) {
-	var out bytes.Buffer
-	prev := execStdout
-	execStdout = &out
-	t.Cleanup(func() { execStdout = prev })
-
-	cmd := docsCommand()
-	cmd.SetOut(io.Discard)
-	cmd.SetErr(io.Discard)
-	cmd.SetArgs([]string{"schema", "name"})
-	require.NoError(t, cmd.Execute())
-
-	var parsed map[string]any
-	require.NoError(t, json.Unmarshal([]byte(out.String()), &parsed))
-	assert.Equal(t, "string", parsed["type"])
-}
-
-func TestDocsCommand_SchemaKeyNotFound(t *testing.T) {
-	cmd := docsCommand()
-	cmd.SetOut(io.Discard)
-	cmd.SetErr(io.Discard)
-	cmd.SetArgs([]string{"schema", "nonexistent"})
-	err := cmd.Execute()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown schema key")
-	assert.Contains(t, err.Error(), "commandNode")
-	assert.Contains(t, err.Error(), "flag")
 }
 
 func TestDocsCommand_Example(t *testing.T) {
@@ -104,10 +55,12 @@ func TestDocsCommand_Example(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 
 	assert.Equal(t, exampleDoc, out.String())
+	assert.Contains(t, out.String(), "<config")
 
-	var parsed map[string]any
-	require.NoError(t, json.Unmarshal([]byte(out.String()), &parsed))
-	assert.Contains(t, parsed, "name")
+	// The example must load and validate.
+	cfg, err := parseConfigXML([]byte(out.String()))
+	require.NoError(t, err)
+	assert.Equal(t, "apicli", cfg.Name)
 }
 
 func TestDocsCommand_NoConfigRequired(t *testing.T) {
@@ -126,7 +79,7 @@ func TestDocsCommand_NoConfigRequired(t *testing.T) {
 	assert.NotContains(t, errBuf.String(), "no config found")
 }
 
-func TestDocsCommand_NoConfigSchemaKey(t *testing.T) {
+func TestDocsCommand_NoConfigSchema(t *testing.T) {
 	chdir(t, t.TempDir())
 
 	var out bytes.Buffer
@@ -135,23 +88,20 @@ func TestDocsCommand_NoConfigSchemaKey(t *testing.T) {
 	t.Cleanup(func() { execStdout = prev })
 
 	var errBuf bytes.Buffer
-	code := run([]string{"docs", "schema", "commandNode"}, &errBuf)
+	code := run([]string{"docs", "schema"}, &errBuf)
 
 	assert.Equal(t, 0, code)
-
-	var parsed map[string]any
-	require.NoError(t, json.Unmarshal([]byte(out.String()), &parsed))
-	assert.Contains(t, parsed, "properties")
+	assert.Contains(t, out.String(), "xs:schema")
 }
 
 func TestIsDocsInvocation(t *testing.T) {
 	tests := []struct {
-		argv	[]string
-		want	bool
+		argv []string
+		want bool
 	}{
 		{[]string{"docs"}, true},
 		{[]string{"docs", "schema"}, true},
-		{[]string{"docs", "schema", "flag"}, true},
+		{[]string{"docs", "example"}, true},
 		{[]string{"--config", "x", "docs"}, true},
 		{[]string{"other"}, false},
 		{[]string{"documentation"}, false},
