@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.1" encoding="UTF-8"?>
 <!--
   XSD reference for api-cli XML configs. This documents the grammar for editor
   tooling and `api-cli docs schema`. The authoritative parser is xmlsource.go;
@@ -197,10 +197,19 @@
     </xs:sequence>
   </xs:complexType>
 
-  <!-- entry is an arbitrary structure (path, query, or user-defined keys). -->
+  <!-- entry carries request shape (path + query). The loader also accepts
+       arbitrary user-defined child elements for non-HTTP commands; those are
+       not enumerated here. -->
   <xs:complexType name="entry">
+    <xs:all>
+      <xs:element name="path" type="content" minOccurs="0"/>
+      <xs:element name="query" type="entryQuery" minOccurs="0"/>
+    </xs:all>
+  </xs:complexType>
+
+  <xs:complexType name="entryQuery">
     <xs:sequence>
-      <xs:any processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="param" type="header" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
   </xs:complexType>
 
