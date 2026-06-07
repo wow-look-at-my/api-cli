@@ -84,7 +84,7 @@
 		<!-- Shared response filter, written once: drop *url keys and the noise
 		     list (unless var.keep rescues a key), then drop a bare count when its
 		     *_count twin exists. Commands tweak it via var.keep, not by copying. -->
-		<var name="filter"><![CDATA[walk(
+		<var name="filter"><if test="env.GITHUB_RAW">.<else/><![CDATA[walk(
   if type == "object" then
     with_entries(select(
       ((.key | endswith("url") | not) and (.key | IN({{.var.noise}}) | not))
@@ -94,7 +94,7 @@
     | if has("watchers_count")    then del(.watchers)    else . end
     | if has("open_issues_count") then del(.open_issues) else . end
   else . end
-)]]></var>
+)]]></if></var>
 	</vars>
 
 	<!-- Root request, inherited by every leaf. -->

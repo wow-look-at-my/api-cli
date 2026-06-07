@@ -1,7 +1,7 @@
 FROM alpine:3.21
 ARG TARGETARCH=amd64
 COPY api-cli_linux_${TARGETARCH} /usr/local/bin/api-cli
-RUN chmod +x /usr/local/bin/api-cli && apk add --no-cache curl jq
-COPY samples/github/github.yaml /github.yaml
-ENTRYPOINT ["api-cli", "--config", "/github.yaml", "--mcp"]
+RUN chmod +x /usr/local/bin/api-cli
+COPY samples/github/github.xml /github.xml
+ENTRYPOINT ["api-cli", "--config", "/github.xml", "--mcp"]
 CMD ["stdio"]
