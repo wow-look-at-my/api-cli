@@ -69,7 +69,7 @@ func run(argv []string, errOut io.Writer) int {
 // cobra's usage screen with the --config flag visible.
 func newRoot(cfg *Config) *cobra.Command {
 	name := "api-cli"
-	short := "Declarative CLI. Provide a config via --config <path> or ./api.json."
+	short := "Declarative CLI. Provide a config via --config <path> or ./api.xml."
 	if cfg != nil {
 		name = cfg.Name
 		if cfg.Description != "" {
