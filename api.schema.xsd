@@ -27,7 +27,6 @@
   <xs:complexType name="forType" mixed="true">
     <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
     <xs:attribute name="each" type="xs:string" use="required"/>
-    <xs:attribute name="as" type="xs:string"/>
   </xs:complexType>
 
   <xs:group name="placeholders">

@@ -64,7 +64,7 @@ func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width 
 		return "", err
 	}
 
-	if f.Footer != "" && humanSink(sink) {
+	if f.Footer != "" && humanSink(sink) && strings.TrimSpace(out) != "" {
 		foot, ferr := renderString(f.Footer, ctx)
 		if ferr != nil {
 			return "", fmt.Errorf("render footer: %w", ferr)
@@ -76,9 +76,11 @@ func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width 
 	return out, nil
 }
 
+// humanSink reports whether a footer line should follow the body. Markdown and
+// csv are structured outputs, so a trailing prose footer would corrupt them.
 func humanSink(sink string) bool {
 	switch sink {
-	case "table", "list", "lines", "markdown":
+	case "table", "list", "lines":
 		return true
 	}
 	return false
@@ -93,10 +95,10 @@ func resolveRecords(f *Fields, parsed any, ctx map[string]any) ([]record, string
 	}
 	switch v := src.(type) {
 	case []any:
-		scalars := false
+		hasMap := false
 		for _, el := range v {
-			if _, ok := el.(map[string]any); !ok {
-				scalars = true
+			if _, ok := el.(map[string]any); ok {
+				hasMap = true
 				break
 			}
 		}
@@ -104,7 +106,10 @@ func resolveRecords(f *Fields, parsed any, ctx map[string]any) ([]record, string
 		for _, el := range v {
 			recs = append(recs, record{obj: el})
 		}
-		if scalars || (len(v) == 0 && len(f.List) == 0) {
+		// Scalars (lines) only when no element is an object and no fields are
+		// declared. A declared field list, or any object element (e.g. a null
+		// row among objects), keeps the table shape; missing values render empty.
+		if !hasMap && len(f.List) == 0 {
 			return recs, "array-scalars"
 		}
 		return recs, "array-objects"
@@ -208,7 +213,7 @@ func cellValue(fld Field, rec record, ctx map[string]any) (string, error) {
 		s = fld.Default
 	}
 	if fld.FirstLine {
-		if i := strings.IndexByte(s, '\n'); i >= 0 {
+		if i := strings.IndexAny(s, "\r\n"); i >= 0 {
 			s = s[:i]
 		}
 	}
@@ -253,11 +258,6 @@ func exprData(rec record, ctx map[string]any) map[string]any {
 		}
 	}
 	if rec.isEntry {
-		if m, ok := rec.obj.(map[string]any); ok {
-			for k, v := range m {
-				d[k] = v
-			}
-		}
 		d["key"] = rec.key
 		d["value"] = rec.obj
 	}
@@ -306,7 +306,9 @@ func renderLinesSink(recs []record, fields []Field, ctx map[string]any) (string,
 	inc := includedFields(fields, "lines")
 	var b strings.Builder
 	for _, r := range recs {
-		if len(inc) == 0 {
+		// Scalar records print their value directly; only object records use the
+		// first declared field as the line.
+		if _, isMap := r.obj.(map[string]any); len(inc) == 0 || !isMap {
 			b.WriteString(displayValue(r.obj))
 		} else {
 			v, err := cellValue(inc[0], r, ctx)
@@ -451,7 +453,9 @@ func renderJSONSink(f *Fields, recs []record, fields []Field, shape string, pars
 			if err != nil {
 				return nil, err
 			}
-			if raw == nil && fld.Default != "" {
+			// Match the human sinks: a blank value (nil or empty string) falls
+			// back to the declared default.
+			if fld.Default != "" && (raw == nil || raw == "") {
 				raw = fld.Default
 			}
 			m[fld.Name] = raw

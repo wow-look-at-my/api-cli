@@ -175,6 +175,23 @@ func TestMCP_RequestLeafWithFields(t *testing.T) {
 	assert.Contains(t, out, "id:    1")
 }
 
+func TestMCP_StepWhenSkips(t *testing.T) {
+	// A falsy step.When must skip the step under MCP, mirroring the CLI.
+	leaf := &mcpLeaf{
+		name: "x",
+		node: Command{
+			Name:    "x",
+			Steps:   []Step{{Name: "s", When: "false", Command: &Cmd{Shell: true, Template: "exit 7"}}},
+			Command: &Cmd{Shell: true, Template: `echo done`},
+		},
+		cmdTmpl: &Cmd{Shell: true, Template: `echo done`},
+		vars:    map[string]any{},
+	}
+	out, isErr := mcpExecLeaf(leaf, map[string]any{})
+	require.False(t, isErr) // step skipped, so the `exit 7` never runs
+	assert.Equal(t, "done\n", out)
+}
+
 func TestMCP_RequestLeafError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	swapHTTPClient(t, srv)

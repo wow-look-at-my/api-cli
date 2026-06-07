@@ -43,15 +43,46 @@ func TestParseXML_Placeholders(t *testing.T) {
 	cfg := mustParse(t, `<config name="x"><vars>
 		<var name="a"><value name="env.X" default="def" as="urlpath"/></var>
 		<var name="b"><if test="env.Y" eq="1">yes<else/>no</if></var>
-		<var name="c"><for each="items" as="i"><value name="i"/></for></var>
+		<var name="c"><for each="items"><value name="name"/></for></var>
 		<var name="d"><value expr="{{ upper .env.Z }}"/></var>
 		<var name="e"><if test="env.W">on</if></var>
 	</vars><command name="c"><run>x</run></command></config>`)
 	assert.Equal(t, `{{ urlpath (.env.X | default "def") }}`, cfg.Vars["a"])
 	assert.Equal(t, `{{ if eq (printf "%v" .env.Y) "1" }}yes{{ else }}no{{ end }}`, cfg.Vars["b"])
-	assert.Equal(t, `{{ range $i := .items }}{{ .i }}{{ end }}`, cfg.Vars["c"])
+	assert.Equal(t, `{{ range .items }}{{ .name }}{{ end }}`, cfg.Vars["c"])
 	assert.Equal(t, `{{ upper .env.Z }}`, cfg.Vars["d"])
 	assert.Equal(t, `{{ if truthy .env.W }}on{{ end }}`, cfg.Vars["e"])
+}
+
+func TestParseXML_DashedPathAndIfEq(t *testing.T) {
+	cfg := mustParse(t, `<config name="x"><vars>
+		<var name="dash"><value name="flag.dry-run"/></var>
+		<var name="ifeq"><if test="flag.s" eq="">empty<else/>set</if></var>
+	</vars><command name="c"><run>x</run></command></config>`)
+	// A non-identifier segment compiles to an index expression.
+	assert.Equal(t, `{{ (index . "flag" "dry-run") }}`, cfg.Vars["dash"])
+	// eq="" is a real equality test, not a truthiness test.
+	assert.Contains(t, cfg.Vars["ifeq"].(string), `eq (printf "%v" .flag.s) ""`)
+
+	out, err := renderString(cfg.Vars["dash"].(string), map[string]any{"flag": map[string]any{"dry-run": "yes"}})
+	require.NoError(t, err)
+	assert.Equal(t, "yes", out)
+}
+
+func TestParseXML_ForRenders(t *testing.T) {
+	cfg := mustParse(t, `<config name="x"><vars><var name="t"><for each="items"><value name="name"/>,</for></var></vars><command name="c"><run>x</run></command></config>`)
+	out, err := renderString(cfg.Vars["t"].(string), map[string]any{
+		"items": []any{map[string]any{"name": "a"}, map[string]any{"name": "b"}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "a,b,", out)
+}
+
+func TestParseXML_BOMAndDeclaration(t *testing.T) {
+	src := "\xef\xbb\xbf<?xml version=\"1.1\" encoding=\"UTF-8\"?>\n<config name=\"x\"><command name=\"c\"><run>echo hi</run></command></config>"
+	cfg, err := parseConfigXML([]byte(src))
+	require.NoError(t, err)
+	assert.Equal(t, "x", cfg.Name)
 }
 
 func TestParseXML_Request(t *testing.T) {
@@ -188,6 +219,9 @@ func TestParseXML_ParseErrors(t *testing.T) {
 		"unknown root attr":  `<config name="x" bogus="y"/>`,
 		"unknown child":      `<config name="x"><bogus/></config>`,
 		"malformed xml":      `<config name="x"><command></config>`,
+		"multiple roots":     `<config name="a"><command name="c"><run>x</run></command></config><config name="b"/>`,
+		"url unknown attr":    `<config name="x"><run><request><url bad="1">u</url></request></run><command name="c"/></config>`,
+		"cwd unknown attr":    `<config name="x"><cwd bad="1">/tmp</cwd><command name="c"><run>x</run></command></config>`,
 		"value name+expr":    `<config name="x"><vars><var name="v"><value name="a" expr="b"/></var></vars><command name="c"><run>x</run></command></config>`,
 		"value neither":      `<config name="x"><vars><var name="v"><value/></var></vars><command name="c"><run>x</run></command></config>`,
 		"if no test":         `<config name="x"><vars><var name="v"><if>x</if></var></vars><command name="c"><run>x</run></command></config>`,

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // placeholderNames are the element names treated as inline template
@@ -95,10 +96,51 @@ func dedentTabs(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// dotPath turns a context path ("var.base_url") into a template accessor
-// (".var.base_url").
+// dotPath turns a context path ("var.base_url") into a template expression that
+// reads it. All-identifier paths use the readable field form (".var.base_url",
+// graceful on missing keys under missingkey=zero). A path with a non-identifier
+// segment (e.g. a kebab-case flag "flag.dry-run") falls back to a parenthesized
+// index expression, which accepts arbitrary keys and works on map[string]any as
+// well as map[string]string (e.g. .env). Either form is safe used bare after a
+// function name or inside parentheses.
 func dotPath(path string) string {
-	return "." + strings.TrimSpace(path)
+	path = strings.TrimSpace(path)
+	segs := strings.Split(path, ".")
+	allIdent := true
+	for _, s := range segs {
+		if !isTemplateIdent(s) {
+			allIdent = false
+			break
+		}
+	}
+	if allIdent {
+		return "." + path
+	}
+	var b strings.Builder
+	b.WriteString("(index .")
+	for _, s := range segs {
+		b.WriteByte(' ')
+		b.WriteString(strconv.Quote(s))
+	}
+	b.WriteString(")")
+	return b.String()
+}
+
+// isTemplateIdent reports whether s is a valid Go template field identifier.
+func isTemplateIdent(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		if r == '_' || unicode.IsLetter(r) {
+			continue
+		}
+		if i > 0 && unicode.IsDigit(r) {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func compileValue(n *xnode) (string, error) {
@@ -160,8 +202,8 @@ func compileIf(n *xnode) (string, error) {
 		return "", err
 	}
 	var cond string
-	if eq := n.attr("eq"); eq != "" {
-		cond = fmt.Sprintf("eq (printf \"%%v\" %s) %s", dotPath(test), strconv.Quote(eq))
+	if n.hasAttr("eq") {
+		cond = fmt.Sprintf("eq (printf \"%%v\" %s) %s", dotPath(test), strconv.Quote(n.attr("eq")))
 	} else {
 		cond = "truthy " + dotPath(test)
 	}
@@ -171,8 +213,11 @@ func compileIf(n *xnode) (string, error) {
 	return fmt.Sprintf("{{ if %s }}%s{{ end }}", cond, thenStr), nil
 }
 
+// compileFor compiles <for each="path">...</for> to a range that rebinds "."
+// to each element, so a nested <value name="field"/> reads the element's field
+// and <value expr="{{ . }}"/> reads a scalar element.
 func compileFor(n *xnode) (string, error) {
-	if err := checkAttrs(n, "each", "as"); err != nil {
+	if err := checkAttrs(n, "each"); err != nil {
 		return "", err
 	}
 	each := n.attr("each")
@@ -183,10 +228,17 @@ func compileFor(n *xnode) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if as := n.attr("as"); as != "" {
-		return fmt.Sprintf("{{ range $%s := %s }}%s{{ end }}", as, dotPath(each), body), nil
-	}
 	return fmt.Sprintf("{{ range %s }}%s{{ end }}", dotPath(each), body), nil
+}
+
+// compileTextElem rejects attributes on a content-only element, then compiles
+// its mixed content. Used for <url>/<body>/<cwd>/<stdin>/<confirm>/<argv>/
+// <precondition>, none of which take attributes.
+func compileTextElem(n *xnode) (string, error) {
+	if err := checkAttrs(n); err != nil {
+		return "", err
+	}
+	return compileContent(n)
 }
 
 // textOf returns the concatenated plain text of an element, rejecting child

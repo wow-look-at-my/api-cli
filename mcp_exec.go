@@ -56,6 +56,15 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 	data["result"] = resultMap
 
 	for _, step := range leaf.node.Steps {
+		if step.When != "" {
+			whenOut, err := renderString(step.When, data)
+			if err != nil {
+				return fmt.Sprintf("step %q: render when: %v", step.Name, err), true
+			}
+			if !isTruthy(whenOut) {
+				continue
+			}
+		}
 		stepCmd := leaf.cmdTmpl
 		if step.Command.Defined() {
 			stepCmd = step.Command

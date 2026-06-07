@@ -100,7 +100,7 @@ func runRequest(req *Request, data map[string]any, errOut io.Writer) (string, in
 	}
 	out, err := applyJQ(req.Response.JQ, raw, data)
 	if err != nil {
-		fmt.Fprintln(execStderr, "error:", err)
+		fmt.Fprintln(errOut, "error:", err)
 		return "", 1
 	}
 	return out, 0

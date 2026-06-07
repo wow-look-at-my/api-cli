@@ -80,6 +80,9 @@ func parseDOM(src []byte) (*xnode, error) {
 			top := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
 			if len(stack) == 0 {
+				if root != nil {
+					return nil, fmt.Errorf("multiple top-level elements; expected a single <config> root")
+				}
 				root = top
 			}
 		case xml.CharData:
@@ -100,6 +103,7 @@ func parseDOM(src []byte) (*xnode, error) {
 // but the shipped configs declare 1.1 for the stricter xml-validator. The
 // declaration carries nothing the loader needs, so we drop it before decoding.
 func stripXMLDecl(src []byte) []byte {
+	src = bytes.TrimPrefix(src, []byte("\xef\xbb\xbf")) // UTF-8 BOM
 	trimmed := bytes.TrimLeft(src, " \t\r\n")
 	if !bytes.HasPrefix(trimmed, []byte("<?xml")) {
 		return src

@@ -34,6 +34,9 @@ func buildConfig(root *xnode) (*Config, error) {
 	for _, child := range root.children() {
 		switch child.name {
 		case "description":
+			if err := checkAttrs(child); err != nil {
+				return nil, err
+			}
 			d, err := textOf(child)
 			if err != nil {
 				return nil, err
@@ -52,13 +55,13 @@ func buildConfig(root *xnode) (*Config, error) {
 			}
 			cfg.Command, cfg.Request = cmd, req
 		case "cwd":
-			s, err := compileContent(child)
+			s, err := compileTextElem(child)
 			if err != nil {
 				return nil, err
 			}
 			cfg.Cwd = s
 		case "stdin":
-			s, err := compileContent(child)
+			s, err := compileTextElem(child)
 			if err != nil {
 				return nil, err
 			}
@@ -133,7 +136,7 @@ func buildRun(n *xnode) (*Cmd, *Request, error) {
 			if e.name != "argv" {
 				return nil, nil, fmt.Errorf("<run>: cannot mix <argv> with <%s>", e.name)
 			}
-			s, err := compileContent(e)
+			s, err := compileTextElem(e)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -159,7 +162,7 @@ func buildRequest(n *xnode) (*Request, error) {
 	for _, child := range n.children() {
 		switch child.name {
 		case "url":
-			s, err := compileContent(child)
+			s, err := compileTextElem(child)
 			if err != nil {
 				return nil, err
 			}
@@ -190,7 +193,7 @@ func buildRequest(n *xnode) (*Request, error) {
 				req.Headers = append(req.Headers, h)
 			}
 		case "body":
-			s, err := compileContent(child)
+			s, err := compileTextElem(child)
 			if err != nil {
 				return nil, err
 			}
@@ -424,19 +427,19 @@ func addCommandChild(c *Command, child *xnode) error {
 		}
 		c.Command, c.Request = cmd, req
 	case "cwd":
-		s, err := compileContent(child)
+		s, err := compileTextElem(child)
 		if err != nil {
 			return err
 		}
 		c.Cwd = s
 	case "stdin":
-		s, err := compileContent(child)
+		s, err := compileTextElem(child)
 		if err != nil {
 			return err
 		}
 		c.Stdin = s
 	case "confirm":
-		s, err := compileContent(child)
+		s, err := compileTextElem(child)
 		if err != nil {
 			return err
 		}
@@ -446,7 +449,7 @@ func addCommandChild(c *Command, child *xnode) error {
 			if p.name != "precondition" {
 				return fmt.Errorf("<preconditions>: unexpected child element <%s>", p.name)
 			}
-			s, err := compileContent(p)
+			s, err := compileTextElem(p)
 			if err != nil {
 				return err
 			}
@@ -573,13 +576,13 @@ func buildStep(n *xnode) (Step, error) {
 			}
 			s.Entry = raw
 		case "cwd":
-			v, err := compileContent(child)
+			v, err := compileTextElem(child)
 			if err != nil {
 				return Step{}, err
 			}
 			s.Cwd = v
 		case "stdin":
-			v, err := compileContent(child)
+			v, err := compileTextElem(child)
 			if err != nil {
 				return Step{}, err
 			}
@@ -608,6 +611,9 @@ func buildFormatRef(n *xnode) (*FormatRef, error) {
 // buildEntry converts an <entry> element into JSON (a json.RawMessage whose
 // string leaves are templates, rendered later by renderEntry).
 func buildEntry(n *xnode) (json.RawMessage, error) {
+	if err := checkAttrs(n); err != nil {
+		return nil, err
+	}
 	val, err := entryObject(n)
 	if err != nil {
 		return nil, err

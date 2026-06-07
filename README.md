@@ -99,7 +99,7 @@ with `expr=` (or just type `{{ ... }}` in the text).
 | `<value expr="{{ or .a .b }}"/>` | `{{ or .a .b }}` | Verbatim template escape hatch. |
 | `<if test="var.token">A<else/>B</if>` | `{{ if truthy .var.token }}A{{ else }}B{{ end }}` | `test=` is a context path; truthy unless empty/`false`/`0`/`no`. |
 | `<if test="arg.tag" eq="latest">...</if>` | `{{ if eq (printf "%v" .arg.tag) "latest" }}...{{ end }}` | `eq=` compares to a literal. |
-| `<for each="items" as="i">...</for>` | `{{ range $i := .items }}...{{ end }}` | Iterate a slice/map. |
+| `<for each="items">...</for>` | `{{ range .items }}...{{ end }}` | Iterate; `.` rebinds to each element (`<value name="field"/>` reads the element). |
 
 ```xml
 <path><if test="arg.username">/users/<value name="arg.username" as="urlpath"/><else/>/user</if></path>

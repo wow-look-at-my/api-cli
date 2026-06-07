@@ -191,3 +191,34 @@ func TestDisplayValue(t *testing.T) {
 	assert.Equal(t, "1.5", displayValue(1.5))
 	assert.Equal(t, `["a","b"]`, displayValue([]any{"a", "b"}))
 }
+
+func TestFields_MixedObjectNullArrayStaysTable(t *testing.T) {
+	parsed := []any{
+		map[string]any{"login": "a", "stars": int64(1)},
+		nil, // a null row among objects must not collapse the table to lines
+		map[string]any{"login": "b", "stars": int64(2)},
+	}
+	f := &Fields{List: []Field{{Name: "login", Path: "login"}, {Name: "stars", Path: "stars"}}}
+	out, err := renderFields(f, parsed, fctx(parsed), "", 0)
+	require.NoError(t, err)
+	assert.Contains(t, out, "login  stars")
+	assert.Contains(t, out, "a")
+	assert.Contains(t, out, "b")
+}
+
+func TestFields_JSONDefaultOnEmptyString(t *testing.T) {
+	parsed := map[string]any{"a": ""}
+	f := &Fields{List: []Field{{Name: "a", Path: "a", Default: "N/A"}}}
+	out, err := renderFields(f, parsed, fctx(parsed), "json", 0)
+	require.NoError(t, err)
+	assert.Contains(t, out, `"a": "N/A"`)
+}
+
+func TestFields_FooterSuppressedWhenBodyEmpty(t *testing.T) {
+	parsed := []any{map[string]any{"a": "1"}}
+	// The only field is json-only, so the table body is empty in this sink.
+	f := &Fields{Footer: "FOOT", List: []Field{{Name: "a", Path: "a", ShowIn: "json"}}}
+	out, err := renderFields(f, parsed, fctx(parsed), "table", 0)
+	require.NoError(t, err)
+	assert.NotContains(t, out, "FOOT")
+}

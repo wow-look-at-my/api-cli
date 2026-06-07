@@ -215,3 +215,19 @@ func TestApplyJQ_RuntimeError(t *testing.T) {
 	_, err := applyJQ("var.f", []byte(`[1,2]`), data)
 	require.Error(t, err)
 }
+
+func TestRunRequest_JQErrorGoesToErrOut(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"a":1}`))
+	}))
+	defer srv.Close()
+	swapHTTPClient(t, srv)
+
+	req := &Request{Method: "GET", URL: srv.URL + "/x", Response: &Response{JQ: "var.bad"}}
+	data := map[string]any{"var": map[string]any{"bad": "this is ( not jq"}}
+	var errBuf bytes.Buffer
+	out, code := runRequest(req, data, &errBuf)
+	assert.NotEqual(t, 0, code)
+	assert.Empty(t, out)
+	assert.NotEmpty(t, errBuf.String()) // captured in errOut, not the global stderr
+}
