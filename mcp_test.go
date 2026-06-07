@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // --- buildToolInputSchema ---
@@ -535,8 +535,8 @@ func TestCollectMCPLeaves_ChildOverridesFormat(t *testing.T) {
 	parentFmt := &FormatRef{Name: "parent"}
 	childFmt := &FormatRef{Name: "child"}
 	formats := map[string]*Format{
-		"parent": {Views: []View{{Name: "p", Template: "x"}}},
-		"child":  {Views: []View{{Name: "c", Template: "y"}}},
+		"parent":	{Views: []View{{Name: "p", Template: "x"}}},
+		"child":	{Views: []View{{Name: "c", Template: "y"}}},
 	}
 	cmds := []Command{{Name: "leaf", Format: childFmt}}
 	leaves := collectMCPLeaves(cmds, mcpInherit{cmd: cmd, format: parentFmt, formats: formats})
@@ -555,8 +555,8 @@ func TestMcpFormat_NoFormat(t *testing.T) {
 func TestMcpFormat_InlineFormat(t *testing.T) {
 	leaf := &mcpLeaf{
 		formatRef: &FormatRef{Inline: &Format{
-			Input: "json",
-			Views: []View{{Name: "v", Template: "ID={{.data.id}}"}},
+			Input:	"json",
+			Views:	[]View{{Name: "v", Template: "ID={{.data.id}}"}},
 		}},
 	}
 	data := map[string]any{"arg": map[string]any{}}
@@ -568,13 +568,13 @@ func TestMcpFormat_InlineFormat(t *testing.T) {
 func TestMcpFormat_NamedFormat(t *testing.T) {
 	formats := map[string]*Format{
 		"item": {
-			Input: "json",
-			Views: []View{{Name: "detail", Template: "name={{.data.name}}"}},
+			Input:	"json",
+			Views:	[]View{{Name: "detail", Template: "name={{.data.name}}"}},
 		},
 	}
 	leaf := &mcpLeaf{
-		formatRef: &FormatRef{Name: "item"},
-		formats:   formats,
+		formatRef:	&FormatRef{Name: "item"},
+		formats:	formats,
 	}
 	out, ok := mcpFormat(leaf, `{"name":"alice"}`, map[string]any{})
 	assert.True(t, ok)
@@ -584,8 +584,8 @@ func TestMcpFormat_NamedFormat(t *testing.T) {
 func TestMcpFormat_LinesInput(t *testing.T) {
 	leaf := &mcpLeaf{
 		formatRef: &FormatRef{Inline: &Format{
-			Input: "lines",
-			Views: []View{{Name: "v", Template: "{{len .data}} lines"}},
+			Input:	"lines",
+			Views:	[]View{{Name: "v", Template: "{{len .data}} lines"}},
 		}},
 	}
 	out, ok := mcpFormat(leaf, "a\nb\nc\n", map[string]any{})
@@ -596,7 +596,7 @@ func TestMcpFormat_LinesInput(t *testing.T) {
 func TestMcpFormat_ViewSelection(t *testing.T) {
 	leaf := &mcpLeaf{
 		formatRef: &FormatRef{Inline: &Format{
-			Input: "json",
+			Input:	"json",
 			Views: []View{
 				{Name: "list", When: `{{ kindIs "slice" .data }}`, Template: "LIST"},
 				{Name: "detail", Default: true, Template: "DETAIL"},
@@ -615,8 +615,8 @@ func TestMcpFormat_ViewSelection(t *testing.T) {
 func TestMcpFormat_TTYIsTrue(t *testing.T) {
 	leaf := &mcpLeaf{
 		formatRef: &FormatRef{Inline: &Format{
-			Input: "raw",
-			Views: []View{{Name: "v", Template: "tty={{.tty}}"}},
+			Input:	"raw",
+			Views:	[]View{{Name: "v", Template: "tty={{.tty}}"}},
 		}},
 	}
 	out, ok := mcpFormat(leaf, "x", map[string]any{})
@@ -627,9 +627,9 @@ func TestMcpFormat_TTYIsTrue(t *testing.T) {
 func TestMcpFormat_RespectsAuthorWhenFalse(t *testing.T) {
 	leaf := &mcpLeaf{
 		formatRef: &FormatRef{Inline: &Format{
-			Input: "raw",
-			When:  "false",
-			Views: []View{{Name: "v", Template: "formatted"}},
+			Input:	"raw",
+			When:	"false",
+			Views:	[]View{{Name: "v", Template: "formatted"}},
 		}},
 	}
 	_, ok := mcpFormat(leaf, "raw", map[string]any{})
@@ -640,11 +640,11 @@ func TestMcpFormat_RespectsAuthorWhenFalse(t *testing.T) {
 
 func TestMcpExecLeaf_WithFormat(t *testing.T) {
 	leaf := &mcpLeaf{
-		node:    Command{},
-		cmdTmpl: &Cmd{Shell: true, Template: `printf '{"count":3}'`},
+		node:		Command{},
+		cmdTmpl:	&Cmd{Shell: true, Template: `printf '{"count":3}'`},
 		formatRef: &FormatRef{Inline: &Format{
-			Input: "json",
-			Views: []View{{Name: "v", Template: "count={{.data.count}}"}},
+			Input:	"json",
+			Views:	[]View{{Name: "v", Template: "count={{.data.count}}"}},
 		}},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{})
@@ -654,11 +654,11 @@ func TestMcpExecLeaf_WithFormat(t *testing.T) {
 
 func TestMcpExecLeaf_FormatNotAppliedOnError(t *testing.T) {
 	leaf := &mcpLeaf{
-		node:    Command{},
-		cmdTmpl: &Cmd{Shell: true, Template: "echo bad; exit 1"},
+		node:		Command{},
+		cmdTmpl:	&Cmd{Shell: true, Template: "echo bad; exit 1"},
 		formatRef: &FormatRef{Inline: &Format{
-			Input: "raw",
-			Views: []View{{Name: "v", Template: "formatted"}},
+			Input:	"raw",
+			Views:	[]View{{Name: "v", Template: "formatted"}},
 		}},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{})

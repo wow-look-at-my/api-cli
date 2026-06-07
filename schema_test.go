@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/require"
 )
 
 // TestExampleConfigMatchesSchema validates every shipped *.example.json (auto-
