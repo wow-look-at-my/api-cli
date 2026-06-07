@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-	EXPERIMENT ONLY. Nothing loads this file. Exploring a declaration format
-	for api-cli. No Go code, schema, or loader is wired to it.
+	The api-cli config for a comfortable read-only GitHub REST API wrapper.
+	Loaded by api-cli (XML configs); see ../../README.md for the full reference.
 
 	FORMATTING MODEL: a command declares ONE thing: the shape of its output
 	records (which fields, with optional rename / default / compute / transform).
@@ -66,7 +66,7 @@
 
 <config
 	name="github"
-	schema="https://raw.githubusercontent.com/wow-look-at-my/api-cli/master/api.schema.json">
+	schema="https://raw.githubusercontent.com/wow-look-at-my/api-cli/master/api.schema.xsd">
 
 	<description>Comfortable read-only wrapper for the GitHub REST API. Aggressively strips noise from responses: *url fields, GraphQL node_ids, empty gravatar_ids, duplicate counts, reaction breakdowns, permission objects, and other metadata that bloats output without adding value. Set $GITHUB_TOKEN / $GH_TOKEN for authenticated access (60 req/hr unauthenticated, 5000/hr authenticated). Set $GITHUB_API_URL to target a GitHub Enterprise Server instance.</description>
 
@@ -450,7 +450,7 @@
 			<fields over="data">
 				<field name="language">@key</field>
 				<field name="bytes">@value</field>
-				<field name="percent" expr='{{ $t := 0 }}{{ range $.data }}{{ $t = add $t . }}{{ end }}{{ printf "%.1f%%" (mulf 100.0 (divf . $t)) }}'/>
+				<field name="percent" expr='{{ $t := 0 }}{{ range $.data }}{{ $t = add $t . }}{{ end }}{{ printf "%.1f%%" (mulf 100.0 (divf .value $t)) }}'/>
 			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/languages</path>

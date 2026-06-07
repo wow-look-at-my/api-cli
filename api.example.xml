@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+	Example api-cli config (XML). A declarative wrapper for
+	https://jsonplaceholder.typicode.com, a public fake REST API.
+
+	The root <run><request> is inherited by every leaf; each leaf declares an
+	<entry> (path + query) and a <fields> output shape that the renderer turns
+	into a table, a list, JSON, etc. automatically. `whoami` shows the engine is
+	still general-purpose: a <run> can be a plain shell command, not just HTTP.
+-->
+
+<config name="apicli" schema="./api.schema.xsd">
+
+	<description>Declarative alias CLI for https://jsonplaceholder.typicode.com -- a public fake REST API. Every leaf inherits the root request; declare an &lt;entry&gt; and a &lt;fields&gt; shape and the output formats itself.</description>
+
+	<vars>
+		<var name="base_url">https://jsonplaceholder.typicode.com</var>
+	</vars>
+
+	<!-- Inherited by every leaf unless a leaf declares its own <run>. -->
+	<run>
+		<request method="GET">
+			<url><value name="var.base_url"/><value name="entry.path"/></url>
+			<query from="entry.query"/>
+			<header name="Accept">application/json</header>
+		</request>
+	</run>
+
+	<command name="users" description="Work with users.">
+		<command name="get" description="Fetch a user by ID.">
+			<arg name="id" type="int" required="true" description="Numeric user ID."/>
+			<fields>
+				<field name="id">id</field>
+				<field name="name">name</field>
+				<field name="username">username</field>
+				<field name="email">email</field>
+				<field name="phone">phone</field>
+				<field name="website">website</field>
+			</fields>
+			<entry>
+				<path>/users/<value name="arg.id"/></path>
+			</entry>
+		</command>
+		<command name="list" description="List users.">
+			<flag name="limit" short="l" type="int" default="10" description="Max results."/>
+			<fields footer="{{ len .data }} users">
+				<field name="id">id</field>
+				<field name="name">name</field>
+				<field name="username">username</field>
+				<field name="email">email</field>
+			</fields>
+			<entry>
+				<path>/users</path>
+				<query>
+					<param name="_limit"><value name="flag.limit"/></param>
+				</query>
+			</entry>
+		</command>
+		<command name="create" description="Create a user. Overrides the inherited GET with a POST + JSON body.">
+			<flag name="name" type="string" required="true" description="Full name."/>
+			<flag name="email" type="string" required="true" description="Email address."/>
+			<run>
+				<request method="POST">
+					<url><value name="var.base_url"/>/users</url>
+					<header name="Content-Type">application/json</header>
+					<body>{"name":{{ .flag.name | toJson }},"email":{{ .flag.email | toJson }}}</body>
+				</request>
+			</run>
+			<fields>
+				<field name="id">id</field>
+				<field name="name">name</field>
+				<field name="email">email</field>
+			</fields>
+		</command>
+	</command>
+
+	<command name="posts" description="Work with posts.">
+		<command name="get" description="Fetch a post by ID.">
+			<arg name="id" type="int" required="true" description="Numeric post ID."/>
+			<entry>
+				<path>/posts/<value name="arg.id"/></path>
+			</entry>
+		</command>
+		<command name="list" description="List posts, optionally filtered by user.">
+			<flag name="user" short="u" type="int" default="0" description="Filter by user ID; 0 means all."/>
+			<fields footer="{{ len .data }} posts">
+				<field name="id">id</field>
+				<field name="userId">userId</field>
+				<field name="title">title</field>
+			</fields>
+			<entry>
+				<path>/posts</path>
+				<query>
+					<param name="userId"><if test="flag.user"><value name="flag.user"/></if></param>
+				</query>
+			</entry>
+		</command>
+	</command>
+
+	<!-- Hybrid: a <run> can be a plain shell command, not an HTTP request. -->
+	<command name="whoami" description="Print the current username (a plain shell alias, no HTTP).">
+		<run>id -un</run>
+	</command>
+
+</config>

@@ -118,9 +118,27 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 	}
 
 	var errBuf bytes.Buffer
-	out, code := mcpCapture(leaf.cmdTmpl, leafCwd, leafStdin, data, &errBuf)
+	var out string
+	var code int
+	if leaf.request.Defined() {
+		out, code = runRequest(leaf.request, data, &errBuf)
+	} else {
+		out, code = mcpCapture(leaf.cmdTmpl, leafCwd, leafStdin, data, &errBuf)
+	}
 	if code != 0 {
 		return mcpCombine(out, errBuf.String()), true
+	}
+
+	// The <fields> auto-formatter takes precedence. MCP behaves like
+	// --format=always: .tty is true, .width is 80, no width-based dropping.
+	if leaf.node.Fields != nil {
+		parsed := parseInput(out, "json")
+		ctx := formatContext(parsed, data, true, 80)
+		rendered, ferr := renderFields(leaf.node.Fields, parsed, ctx, "", 0)
+		if ferr != nil {
+			return "error: " + ferr.Error(), true
+		}
+		return rendered, false
 	}
 
 	if formatted, ok := mcpFormat(leaf, out, data); ok {

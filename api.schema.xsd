@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XSD reference for api-cli XML configs. This documents the grammar for editor
+  tooling and `api-cli docs schema`. The authoritative parser is xmlsource.go;
+  this schema is a guide, not the enforcement point (api-cli validates configs
+  by loading them).
+
+  Element content may interleave text with the placeholders <value>, <if> and
+  <for>, which compile to Go text/template source.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+
+  <!-- ===== Placeholders (mixed content) ===== -->
+  <xs:complexType name="value">
+    <xs:attribute name="name" type="xs:string"/>
+    <xs:attribute name="expr" type="xs:string"/>
+    <xs:attribute name="default" type="xs:string"/>
+    <xs:attribute name="as" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="ifType" mixed="true">
+    <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+    <xs:attribute name="test" type="xs:string" use="required"/>
+    <xs:attribute name="eq" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="forType" mixed="true">
+    <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+    <xs:attribute name="each" type="xs:string" use="required"/>
+    <xs:attribute name="as" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:group name="placeholders">
+    <xs:choice>
+      <xs:element name="value" type="value"/>
+      <xs:element name="if" type="ifType"/>
+      <xs:element name="else"><xs:complexType/></xs:element>
+      <xs:element name="for" type="forType"/>
+    </xs:choice>
+  </xs:group>
+
+  <!-- A run-of-the-mill text+placeholder content model (url, header, var, ...). -->
+  <xs:complexType name="content" mixed="true">
+    <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+  </xs:complexType>
+
+  <!-- ===== Executables: <run> is a request, argv, or a shell string ===== -->
+  <xs:complexType name="run" mixed="true">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="request" type="request"/>
+      <xs:element name="argv" type="content"/>
+      <xs:group ref="placeholders"/>
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:complexType name="request">
+    <xs:sequence>
+      <xs:element name="url" type="content"/>
+      <xs:element name="query" type="query" minOccurs="0"/>
+      <xs:choice minOccurs="0" maxOccurs="unbounded">
+        <xs:element name="header" type="header"/>
+        <xs:element name="if" type="headerIf"/>
+      </xs:choice>
+      <xs:element name="body" type="content" minOccurs="0"/>
+      <xs:element name="response" type="response" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="method" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="header" mixed="true">
+    <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="headerIf">
+    <xs:sequence>
+      <xs:element name="header" type="header" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="test" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="query">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="param" type="header"/>
+      <xs:element name="if" type="paramIf"/>
+    </xs:choice>
+    <xs:attribute name="from" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="paramIf">
+    <xs:sequence>
+      <xs:element name="param" type="header" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="test" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="response">
+    <xs:attribute name="jq" type="xs:string"/>
+  </xs:complexType>
+
+  <!-- ===== Output shape ===== -->
+  <xs:complexType name="fields">
+    <xs:sequence>
+      <xs:element name="field" type="field" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="over" type="xs:string"/>
+    <xs:attribute name="footer" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="field" mixed="true">
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="default" type="xs:string"/>
+    <xs:attribute name="truncate" type="xs:integer"/>
+    <xs:attribute name="firstline" type="xs:boolean"/>
+    <xs:attribute name="priority" type="xs:integer"/>
+    <xs:attribute name="show_in" type="xs:string"/>
+    <xs:attribute name="expr" type="xs:string"/>
+  </xs:complexType>
+
+  <!-- ===== Legacy <format>/<view> presentation ===== -->
+  <xs:complexType name="formats">
+    <xs:sequence>
+      <xs:element name="format" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="view" type="view" maxOccurs="unbounded"/>
+          </xs:sequence>
+          <xs:attribute name="name" type="xs:string" use="required"/>
+          <xs:attribute name="input" type="xs:string"/>
+          <xs:attribute name="when" type="xs:string"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="view" mixed="true">
+    <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="when" type="xs:string"/>
+    <xs:attribute name="default" type="xs:boolean"/>
+  </xs:complexType>
+
+  <xs:complexType name="formatRef" mixed="true">
+    <xs:sequence>
+      <xs:element name="view" type="view" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="ref" type="xs:string"/>
+    <xs:attribute name="input" type="xs:string"/>
+    <xs:attribute name="when" type="xs:string"/>
+  </xs:complexType>
+
+  <!-- ===== Args / flags / vars / steps ===== -->
+  <xs:complexType name="arg">
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="type" type="xs:string"/>
+    <xs:attribute name="required" type="xs:boolean"/>
+    <xs:attribute name="variadic" type="xs:boolean"/>
+    <xs:attribute name="description" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="flag">
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="short" type="xs:string"/>
+    <xs:attribute name="type" type="xs:string"/>
+    <xs:attribute name="default" type="xs:string"/>
+    <xs:attribute name="required" type="xs:boolean"/>
+    <xs:attribute name="conflicts" type="xs:string"/>
+    <xs:attribute name="description" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="vars">
+    <xs:sequence>
+      <xs:element name="var" type="content" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="preconditions">
+    <xs:sequence>
+      <xs:element name="precondition" type="content" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="steps">
+    <xs:sequence>
+      <xs:element name="step" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="run" type="run" minOccurs="0"/>
+            <xs:element name="entry" type="entry" minOccurs="0"/>
+            <xs:element name="cwd" type="content" minOccurs="0"/>
+            <xs:element name="stdin" type="content" minOccurs="0"/>
+          </xs:sequence>
+          <xs:attribute name="name" type="xs:string" use="required"/>
+          <xs:attribute name="when" type="xs:string"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- entry is an arbitrary structure (path, query, or user-defined keys). -->
+  <xs:complexType name="entry">
+    <xs:sequence>
+      <xs:any processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- ===== Command tree (recursive) ===== -->
+  <xs:complexType name="command">
+    <xs:sequence>
+      <xs:element name="arg" type="arg" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="flag" type="flag" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="vars" type="vars" minOccurs="0"/>
+      <xs:element name="run" type="run" minOccurs="0"/>
+      <xs:element name="cwd" type="content" minOccurs="0"/>
+      <xs:element name="stdin" type="content" minOccurs="0"/>
+      <xs:element name="confirm" type="content" minOccurs="0"/>
+      <xs:element name="preconditions" type="preconditions" minOccurs="0"/>
+      <xs:element name="steps" type="steps" minOccurs="0"/>
+      <xs:element name="entry" type="entry" minOccurs="0"/>
+      <xs:element name="fields" type="fields" minOccurs="0"/>
+      <xs:element name="format" type="formatRef" minOccurs="0"/>
+      <xs:element name="command" type="command" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="description" type="xs:string"/>
+    <xs:attribute name="passthrough" type="xs:boolean"/>
+    <xs:attribute name="confirm" type="xs:string"/>
+  </xs:complexType>
+
+  <!-- ===== Root ===== -->
+  <xs:element name="config">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="description" type="xs:string" minOccurs="0"/>
+        <xs:element name="vars" type="vars" minOccurs="0"/>
+        <xs:element name="run" type="run" minOccurs="0"/>
+        <xs:element name="cwd" type="content" minOccurs="0"/>
+        <xs:element name="stdin" type="content" minOccurs="0"/>
+        <xs:element name="formats" type="formats" minOccurs="0"/>
+        <xs:element name="command" type="command" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:attribute name="name" type="xs:string" use="required"/>
+      <xs:attribute name="schema" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>

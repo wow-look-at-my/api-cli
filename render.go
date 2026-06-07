@@ -51,7 +51,25 @@ func funcMap() template.FuncMap {
 	fm["stripANSI"] = stripANSI
 	fm["filterSuffix"] = filterSuffix
 	fm["filterPrefix"] = filterPrefix
+	fm["truthy"] = templateTruthy
 	return fm
+}
+
+// templateTruthy reports whether v is truthy under the same rules as the format
+// `when` predicates (see isTruthy): nil and false are falsy; strings use
+// isTruthy ("", "false", "0", "no" falsy); other values are stringified first.
+// Used by <if test=> placeholders compiled from XML.
+func templateTruthy(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return false
+	case bool:
+		return x
+	case string:
+		return isTruthy(x)
+	default:
+		return isTruthy(fmt.Sprintf("%v", x))
+	}
 }
 
 // tabwriter formats rows with columns aligned by displayWidth. Accepts:
@@ -382,6 +400,25 @@ func walkEntry(v any, data any) (any, error) {
 	default:
 		return v, nil
 	}
+}
+
+// lookupPath walks a dotted context path ("var.filter", "data.items") into a
+// nested map structure. Returns nil if any segment is missing or a non-map is
+// traversed. An empty path returns the value unchanged.
+func lookupPath(data any, path string) any {
+	cur := data
+	for _, seg := range strings.Split(path, ".") {
+		seg = strings.TrimSpace(seg)
+		if seg == "" {
+			continue
+		}
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return nil
+		}
+		cur = m[seg]
+	}
+	return cur
 }
 
 // mergeVars merges `child` into a copy of `parent`, with the child winning on
