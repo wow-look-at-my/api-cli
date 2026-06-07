@@ -52,12 +52,18 @@
 	  <view ... when-kind="list">    gate a view to when its data is a list
 	                                  (replaces when='{{ kindIs "slice" .data }}')
 
-	COMMANDS as nodes:
-	  <run> holds one <exec> or a <pipeline> of <exec> stages. <exec> holds
-	  <arg> tokens; each is ONE argv slot, so mixing text + <value> needs no
-	  shell quoting at all (the big payoff of nodes: shellquote disappears).
-	  <if> may wrap <arg>s. A shell-string form would still be possible as plain
-	  text in <run>, but argv is shown here because nodes make it quoting-free.
+	WEB REQUESTS as nodes (first-class; no curl/wget/shell):
+	  <run> holds a <request method="GET">. Inside:
+	    <url> ... </url>            full URL, built from <value> nodes (base+path)
+	    <query from="entry.query"/> turn a map into the query string, OR list
+	                                <param name="..">..</param> (wrap in <if> to
+	                                make a param conditional)
+	    <header name="..">..</header>   one per header; <if>/<else-if> may gate
+	                                    them (used for the auth header)
+	    <response jq="var.filter"/> shape the JSON response with the jq program
+	                                at that var; omit it for a raw body
+	  For arbitrary non-HTTP commands the format still has <exec><arg>..</arg>
+	  (and <pipeline>), but nothing here shells out.
 
 	Still opaque: the jq `filter` var stays CDATA text; it is jq source, a
 	foreign language, not our placeholder system.
@@ -82,33 +88,24 @@
 		<var name="filter"><![CDATA[walk(if type == "object" then with_entries(select((.key | endswith("url") | not) and (.key | IN("node_id","gravatar_id","user_view_type","site_admin","performed_via_github_app","active_lock_reason","author_association","temp_clone_token","custom_properties","issue_field_values","permissions","_links","network_count","pinned_comment","reactions","sub_issues_summary","issue_dependencies_summary") | not))) | if has("forks_count") then del(.forks) else . end | if has("watchers_count") then del(.watchers) else . end | if has("open_issues_count") then del(.open_issues) else . end else . end)]]></var>
 	</vars>
 
-	<!-- Root command, inherited by every leaf. As an argv pipeline: no
-	     shellquote anywhere because each <arg> is a single token. -->
+	<!-- Root request, inherited by every leaf. First-class <request>: no curl,
+	     no shell, no quoting. The URL is base_url + each leaf's entry.path;
+	     entry.query becomes the query string; the JSON response is shaped by the
+	     jq program in var.filter. -->
 	<run>
-		<pipeline>
-			<exec>
-				<arg>curl</arg>
-				<arg>-fsSL</arg>
-				<arg>-H</arg>
-				<arg>User-Agent: <value name="var.ua"/></arg>
-				<arg>-H</arg>
-				<arg>Accept: application/vnd.github+json</arg>
-				<arg>-H</arg>
-				<arg>X-GitHub-Api-Version: 2022-11-28</arg>
-				<if test="env.GITHUB_TOKEN">
-					<arg>-H</arg>
-					<arg>Authorization: Bearer <value name="env.GITHUB_TOKEN"/></arg>
-				<else-if test="env.GH_TOKEN"/>
-					<arg>-H</arg>
-					<arg>Authorization: Bearer <value name="env.GH_TOKEN"/></arg>
-				</if>
-				<arg><value name="var.base_url"/><value name="entry.path"/><value name="entry.query" as="querystring"/></arg>
-			</exec>
-			<exec>
-				<arg>jq</arg>
-				<arg><value name="var.filter"/></arg>
-			</exec>
-		</pipeline>
+		<request method="GET">
+			<url><value name="var.base_url"/><value name="entry.path"/></url>
+			<query from="entry.query"/>
+			<header name="User-Agent"><value name="var.ua"/></header>
+			<header name="Accept">application/vnd.github+json</header>
+			<header name="X-GitHub-Api-Version">2022-11-28</header>
+			<if test="env.GITHUB_TOKEN">
+				<header name="Authorization">Bearer <value name="env.GITHUB_TOKEN"/></header>
+			<else-if test="env.GH_TOKEN"/>
+				<header name="Authorization">Bearer <value name="env.GH_TOKEN"/></header>
+			</if>
+			<response jq="var.filter"/>
+		</request>
 	</run>
 
 	<formats>
@@ -368,22 +365,16 @@
 			<arg name="repo" type="string" required="true" description="owner/name."/>
 			<arg name="number" type="int" required="true"/>
 			<run>
-				<exec>
-					<arg>curl</arg>
-					<arg>-fsSL</arg>
-					<arg>-H</arg>
-					<arg>User-Agent: <value name="var.ua"/></arg>
-					<arg>-H</arg>
-					<arg>Accept: application/vnd.github.diff</arg>
+				<request method="GET">
+					<url><value name="var.base_url"/>/repos/<value name="arg.repo"/>/pulls/<value name="arg.number"/></url>
+					<header name="User-Agent"><value name="var.ua"/></header>
+					<header name="Accept">application/vnd.github.diff</header>
 					<if test="env.GITHUB_TOKEN">
-						<arg>-H</arg>
-						<arg>Authorization: Bearer <value name="env.GITHUB_TOKEN"/></arg>
+						<header name="Authorization">Bearer <value name="env.GITHUB_TOKEN"/></header>
 					<else-if test="env.GH_TOKEN"/>
-						<arg>-H</arg>
-						<arg>Authorization: Bearer <value name="env.GH_TOKEN"/></arg>
+						<header name="Authorization">Bearer <value name="env.GH_TOKEN"/></header>
 					</if>
-					<arg><value name="var.base_url"/>/repos/<value name="arg.repo"/>/pulls/<value name="arg.number"/></arg>
-				</exec>
+				</request>
 			</run>
 		</command>
 		<command name="pr-comments" description="List a pull request's comments. Defaults to the conversation (issue) comments; pass --review for inline code-review comments." format="comment">
@@ -475,22 +466,19 @@
 			<arg name="repo" type="string" required="true"/>
 			<flag name="ref" short="r" type="string" default="" description="Branch / SHA / tag."/>
 			<run>
-				<exec>
-					<arg>curl</arg>
-					<arg>-fsSL</arg>
-					<arg>-H</arg>
-					<arg>User-Agent: <value name="var.ua"/></arg>
-					<arg>-H</arg>
-					<arg>Accept: application/vnd.github.raw</arg>
+				<request method="GET">
+					<url><value name="var.base_url"/>/repos/<value name="arg.repo"/>/readme</url>
+					<query>
+						<if test="flag.ref"><param name="ref"><value name="flag.ref"/></param></if>
+					</query>
+					<header name="User-Agent"><value name="var.ua"/></header>
+					<header name="Accept">application/vnd.github.raw</header>
 					<if test="env.GITHUB_TOKEN">
-						<arg>-H</arg>
-						<arg>Authorization: Bearer <value name="env.GITHUB_TOKEN"/></arg>
+						<header name="Authorization">Bearer <value name="env.GITHUB_TOKEN"/></header>
 					<else-if test="env.GH_TOKEN"/>
-						<arg>-H</arg>
-						<arg>Authorization: Bearer <value name="env.GH_TOKEN"/></arg>
+						<header name="Authorization">Bearer <value name="env.GH_TOKEN"/></header>
 					</if>
-					<arg><value name="var.base_url"/>/repos/<value name="arg.repo"/>/readme<if test="flag.ref">?ref=<value name="flag.ref" as="urlpath"/></if></arg>
-				</exec>
+				</request>
 			</run>
 		</command>
 		<command name="languages" description="Map of languages to byte counts.">
