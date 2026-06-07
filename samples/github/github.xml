@@ -19,7 +19,7 @@
 	      <field name="branch" expr='{{.head.ref}} -> {{.base.ref}}'/>  computed
 	      <field name="resource">@key</field>              @key/@value for a map
 	      <field name="state" show_in="json">state</field>  real field, JSON only
-	      <field name="state" hide_in="json" expr='...'/>   virtual, hidden in JSON
+	      <field name="state" show_in="!json" expr='...'/>   virtual, hidden in JSON
 	    With NO <fields> at all, every (filtered) field of the response is output.
 	    over=    the records live at this path (search -> data.items; rate /
 	             languages -> a map; topics -> data.names) rather than the root.
@@ -31,11 +31,12 @@
 	  first; ties keep document order.
 
 	  Virtual fields: a field with expr= and no source path is a string
-	  interpolation of the record's other values. show_in / hide_in (comma lists
-	  of modes; defaults show_in="*", hide_in="") gate a field per
-	  representation: it shows in mode M iff show_in has M (or *) AND hide_in
-	  lacks M. So a raw field can feed JSON while a virtual field of the SAME
-	  name renders for humans: clean data, pretty display.
+	  interpolation of the record's other values. show_in (default "*") gates a
+	  field per representation: an allowlist like "json,csv" shows ONLY there, or
+	  a negated list like "!json" shows everywhere EXCEPT there. The two forms
+	  cannot be mixed ("json,!csv" is invalid). So a raw field show_in="json"
+	  feeds JSON while a virtual field of the SAME name show_in="!json" renders
+	  for humans: clean data, pretty display.
 
 	  Automatic representation of that one shape, by data shape and chosen sink:
 	    array of records  -> table   (or JSON array,  or Markdown table, ...)
@@ -242,16 +243,16 @@
 				<field name="state" show_in="json">state</field>
 				<field name="draft" show_in="json">draft</field>
 				<field name="merged" show_in="json">merged</field>
-				<field name="state" hide_in="json" expr='{{ .state }}{{ if .draft }}, draft{{ end }}{{ if .merged }}, merged{{ end }}'/>
+				<field name="state" show_in="!json" expr='{{ .state }}{{ if .draft }}, draft{{ end }}{{ if .merged }}, merged{{ end }}'/>
 				<!-- branch: head/base for JSON, "head -> base" for humans. -->
 				<field name="head" show_in="json">head.ref</field>
 				<field name="base" show_in="json">base.ref</field>
-				<field name="branch" hide_in="json" expr='{{ .head.ref }} -> {{ .base.ref }}'/>
+				<field name="branch" show_in="!json" expr='{{ .head.ref }} -> {{ .base.ref }}'/>
 				<!-- diff: raw counts for JSON, one summary string for humans. -->
 				<field name="additions" show_in="json" default="0">additions</field>
 				<field name="deletions" show_in="json" default="0">deletions</field>
 				<field name="changed_files" show_in="json" default="0">changed_files</field>
-				<field name="diff" hide_in="json" expr='+{{ .additions }} -{{ .deletions }} across {{ .changed_files }} file(s)'/>
+				<field name="diff" show_in="!json" expr='+{{ .additions }} -{{ .deletions }} across {{ .changed_files }} file(s)'/>
 				<field name="created">created_at</field>
 				<field name="updated">updated_at</field>
 				<field name="comments" default="0">comments</field>
@@ -363,7 +364,7 @@
 				<!-- author: name + email for JSON, "name <email>" for humans. -->
 				<field name="name" show_in="json">commit.author.name</field>
 				<field name="email" show_in="json">commit.author.email</field>
-				<field name="author" hide_in="json" expr='{{ .commit.author.name }} &lt;{{ .commit.author.email }}&gt;'/>
+				<field name="author" show_in="!json" expr='{{ .commit.author.name }} &lt;{{ .commit.author.email }}&gt;'/>
 				<field name="date">commit.author.date</field>
 				<field name="message">commit.message</field>
 			</fields>

@@ -22,232 +22,28 @@
     "response": { "jq": "{{.var.filter}}" }
   },
 
-  "formats": {
-    "user": {
-      "input": "json",
-      "views": [
-        {
-          "name": "table",
-          "when": "{{ kindIs \"slice\" .data }}",
-          "template": "{{ $rows := list \"LOGIN\\tID\\tTYPE\" }}{{ range .data }}{{ $rows = append $rows (printf \"%v\\t%v\\t%v\" .login .id .type) }}{{ end }}{{ tabwriter $rows }}"
-        },
-        {
-          "name": "detail",
-          "default": true,
-          "template": [
-            "Login:     {{.data.login}}",
-            "ID:        {{.data.id}}",
-            "Name:      {{default \"-\" .data.name}}",
-            "Company:   {{default \"-\" .data.company}}",
-            "Location:  {{default \"-\" .data.location}}",
-            "Bio:       {{default \"-\" .data.bio}}",
-            "Followers: {{.data.followers}}    Following: {{.data.following}}    Repos: {{.data.public_repos}}",
-            "Created:   {{.data.created_at}}",
-            ""
-          ]
-        }
-      ]
-    },
-
-    "repo": {
-      "input": "json",
-      "views": [
-        {
-          "name": "table",
-          "when": "{{ kindIs \"slice\" .data }}",
-          "template": "{{ $rows := list \"NAME\\tSTARS\\tFORKS\\tLANG\\tDESCRIPTION\" }}{{ range .data }}{{ $rows = append $rows (printf \"%v\\t%v\\t%v\\t%v\\t%v\" .full_name .stargazers_count .forks_count (default \"-\" .language) (default \"\" .description)) }}{{ end }}{{ tabwriter $rows }}"
-        },
-        {
-          "name": "detail",
-          "default": true,
-          "template": [
-            "Repo:        {{.data.full_name}}",
-            "Description: {{default \"-\" .data.description}}",
-            "Language:    {{default \"-\" .data.language}}",
-            "Stars:       {{.data.stargazers_count}}",
-            "Forks:       {{.data.forks_count}}",
-            "Issues:      {{.data.open_issues_count}}",
-            "Default:     {{.data.default_branch}}",
-            "License:     {{if .data.license}}{{.data.license.spdx_id}}{{else}}-{{end}}",
-            "Created:     {{.data.created_at}}",
-            "Updated:     {{.data.updated_at}}",
-            "Pushed:      {{.data.pushed_at}}",
-            "Archived:    {{.data.archived}}    Fork: {{.data.fork}}    Private: {{.data.private}}",
-            ""
-          ]
-        }
-      ]
-    },
-
-    "issue": {
-      "input": "json",
-      "views": [
-        {
-          "name": "table",
-          "when": "{{ kindIs \"slice\" .data }}",
-          "template": "{{ $rows := list \"#\\tSTATE\\tAUTHOR\\tTITLE\" }}{{ range .data }}{{ $rows = append $rows (printf \"#%v\\t%v\\t%v\\t%v\" .number .state .user.login .title) }}{{ end }}{{ tabwriter $rows }}"
-        },
-        {
-          "name": "detail",
-          "default": true,
-          "template": [
-            "#{{.data.number}} ({{.data.state}}): {{.data.title}}",
-            "Author:  {{.data.user.login}}",
-            "Created: {{.data.created_at}}",
-            "Updated: {{.data.updated_at}}",
-            "{{if .data.labels}}Labels:  {{range $i, $l := .data.labels}}{{if $i}}, {{end}}{{$l.name}}{{end}}",
-            "{{end}}",
-            "",
-            "{{default \"\" .data.body}}",
-            ""
-          ]
-        }
-      ]
-    },
-
-    "pr": {
-      "input": "json",
-      "views": [
-        {
-          "name": "detail",
-          "default": true,
-          "template": [
-            "#{{.data.number}} ({{.data.state}}{{if .data.draft}}, draft{{end}}{{if .data.merged}}, merged{{end}}): {{.data.title}}",
-            "Author:   {{.data.user.login}}",
-            "Branch:   {{.data.head.ref}} -> {{.data.base.ref}}",
-            "Created:  {{.data.created_at}}",
-            "Updated:  {{.data.updated_at}}",
-            "Comments: {{default 0 .data.comments}} conversation, {{default 0 .data.review_comments}} review",
-            "Commits:  {{default 0 .data.commits}}",
-            "Diff:     +{{default 0 .data.additions}} -{{default 0 .data.deletions}} across {{default 0 .data.changed_files}} file(s)",
-            "{{if .data.labels}}Labels:   {{range $i, $l := .data.labels}}{{if $i}}, {{end}}{{$l.name}}{{end}}",
-            "{{end}}",
-            "{{default \"\" .data.body}}",
-            ""
-          ]
-        }
-      ]
-    },
-
-    "comment": {
-      "input": "json",
-      "views": [
-        {
-          "name": "list",
-          "default": true,
-          "template": [
-            "{{if .data}}{{range .data}}@{{.user.login}}{{if .path}} on {{.path}}{{with .line}}:{{.}}{{end}}{{end}} ({{.created_at}}):",
-            "{{.body}}",
-            "",
-            "{{end}}{{else}}No comments.",
-            "{{end}}"
-          ]
-        }
-      ]
-    },
-
-    "release": {
-      "input": "json",
-      "views": [
-        {
-          "name": "table",
-          "when": "{{ kindIs \"slice\" .data }}",
-          "template": "{{ $rows := list \"TAG\\tNAME\\tPUBLISHED\\tDRAFT\\tPRERELEASE\" }}{{ range .data }}{{ $rows = append $rows (printf \"%v\\t%v\\t%v\\t%v\\t%v\" .tag_name (default \"-\" .name) .published_at .draft .prerelease) }}{{ end }}{{ tabwriter $rows }}"
-        },
-        {
-          "name": "detail",
-          "default": true,
-          "template": [
-            "Tag:       {{.data.tag_name}}",
-            "Name:      {{default \"-\" .data.name}}",
-            "Published: {{.data.published_at}}",
-            "Author:    {{.data.author.login}}",
-            "Draft:     {{.data.draft}}    Prerelease: {{.data.prerelease}}",
-            "",
-            "{{default \"\" .data.body}}",
-            ""
-          ]
-        }
-      ]
-    },
-
-    "commit": {
-      "input": "json",
-      "views": [
-        {
-          "name": "table",
-          "when": "{{ kindIs \"slice\" .data }}",
-          "template": "{{ $rows := list \"SHA\\tAUTHOR\\tDATE\\tMESSAGE\" }}{{ range .data }}{{ $rows = append $rows (printf \"%v\\t%v\\t%v\\t%v\" (substr 0 7 .sha) .commit.author.name .commit.author.date (regexReplaceAll \"\\n.*\" .commit.message \"\")) }}{{ end }}{{ tabwriter $rows }}"
-        },
-        {
-          "name": "detail",
-          "default": true,
-          "template": [
-            "SHA:     {{.data.sha}}",
-            "Author:  {{.data.commit.author.name}} <{{.data.commit.author.email}}>",
-            "Date:    {{.data.commit.author.date}}",
-            "",
-            "{{.data.commit.message}}",
-            ""
-          ]
-        }
-      ]
-    },
-
-    "branch": {
-      "input": "json",
-      "views": [
-        {
-          "name": "table",
-          "default": true,
-          "when": "{{ kindIs \"slice\" .data }}",
-          "template": "{{ $rows := list \"NAME\\tSHA\\tPROTECTED\" }}{{ range .data }}{{ $rows = append $rows (printf \"%v\\t%v\\t%v\" .name (substr 0 7 .commit.sha) .protected) }}{{ end }}{{ tabwriter $rows }}"
-        }
-      ]
-    },
-
-    "tag": {
-      "input": "json",
-      "views": [
-        {
-          "name": "table",
-          "default": true,
-          "when": "{{ kindIs \"slice\" .data }}",
-          "template": "{{ $rows := list \"NAME\\tSHA\" }}{{ range .data }}{{ $rows = append $rows (printf \"%v\\t%v\" .name (substr 0 7 .commit.sha)) }}{{ end }}{{ tabwriter $rows }}"
-        }
-      ]
-    },
-
-    "rate": {
-      "input": "json",
-      "views": [
-        {
-          "name": "table",
-          "default": true,
-          "template": "{{ $rows := list \"RESOURCE\\tLIMIT\\tREMAINING\\tRESET\" }}{{ range $k, $v := .data.resources }}{{ $rows = append $rows (printf \"%v\\t%v\\t%v\\t%v\" $k $v.limit $v.remaining $v.reset) }}{{ end }}{{ tabwriter $rows }}"
-        }
-      ]
-    },
-
-    "raw": {
-      "input": "raw",
-      "views": [
-        { "name": "raw", "default": true, "template": "{{ .data }}\n" }
-      ]
-    }
-  },
-
   "commands": [
     {
       "name": "user",
       "description": "Read user info.",
-      "format": "user",
       "commands": [
         {
           "name": "get",
           "description": "Fetch a user. Omit USERNAME to use /user (the authenticated viewer; requires a token).",
           "args": [
             { "name": "username", "type": "string", "description": "GitHub username." }
+          ],
+          "fields": [
+            { "name": "login" },
+            { "name": "id" },
+            { "name": "name", "default": "-" },
+            { "name": "company", "default": "-" },
+            { "name": "location", "default": "-" },
+            { "name": "bio", "default": "-" },
+            { "name": "followers" },
+            { "name": "following" },
+            { "name": "repos", "from": "public_repos" },
+            { "name": "created", "from": "created_at" }
           ],
           "entry": {
             "path": "{{if .arg.username}}/users/{{urlpath .arg.username}}{{else}}/user{{end}}"
@@ -264,7 +60,13 @@
             { "name": "page", "short": "p", "type": "int", "default": 1, "description": "Page number." },
             { "name": "sort", "type": "string", "default": "updated", "description": "created|updated|pushed|full_name." }
           ],
-          "format": "repo",
+          "fields": [
+            { "name": "name", "from": "full_name" },
+            { "name": "stars", "from": "stargazers_count" },
+            { "name": "forks", "from": "forks_count", "priority": -1 },
+            { "name": "lang", "from": "language", "default": "-" },
+            { "name": "description", "default": "-", "priority": -2 }
+          ],
           "entry": {
             "path": "/users/{{urlpath .arg.username}}/repos",
             "query": {
@@ -280,16 +82,11 @@
           "args": [
             { "name": "username", "type": "string", "required": true }
           ],
-          "format": {
-            "input": "json",
-            "views": [
-              {
-                "name": "table",
-                "default": true,
-                "template": "{{ $rows := list \"LOGIN\\tID\\tDESCRIPTION\" }}{{ range .data }}{{ $rows = append $rows (printf \"%v\\t%v\\t%v\" .login .id (default \"\" .description)) }}{{ end }}{{ tabwriter $rows }}"
-              }
-            ]
-          },
+          "fields": [
+            { "name": "login" },
+            { "name": "id" },
+            { "name": "description", "default": "-" }
+          ],
           "entry": {
             "path": "/users/{{urlpath .arg.username}}/orgs"
           }
@@ -300,13 +97,28 @@
     {
       "name": "repo",
       "description": "Read repository info.",
-      "format": "repo",
       "commands": [
         {
           "name": "get",
           "description": "Fetch a repository.",
           "args": [
             { "name": "repo", "type": "string", "required": true, "description": "owner/name." }
+          ],
+          "fields": [
+            { "name": "repo", "from": "full_name" },
+            { "name": "description", "default": "-" },
+            { "name": "language", "default": "-" },
+            { "name": "stars", "from": "stargazers_count" },
+            { "name": "forks", "from": "forks_count" },
+            { "name": "issues", "from": "open_issues_count" },
+            { "name": "default", "from": "default_branch" },
+            { "name": "license", "default": "-", "expr": "{{ with .license }}{{ .spdx_id }}{{ end }}" },
+            { "name": "created", "from": "created_at" },
+            { "name": "updated", "from": "updated_at" },
+            { "name": "pushed", "from": "pushed_at" },
+            { "name": "archived" },
+            { "name": "fork" },
+            { "name": "private" }
           ],
           "entry": {
             "path": "/repos/{{.arg.repo}}"
@@ -324,7 +136,12 @@
             { "name": "page", "short": "p", "type": "int", "default": 1 },
             { "name": "labels", "type": "string", "default": "", "description": "Comma-separated label names." }
           ],
-          "format": "issue",
+          "fields": [
+            { "name": "number" },
+            { "name": "state" },
+            { "name": "author", "from": "user.login" },
+            { "name": "title" }
+          ],
           "entry": {
             "path": "/repos/{{.arg.repo}}/issues",
             "query": {
@@ -342,7 +159,16 @@
             { "name": "repo", "type": "string", "required": true, "description": "owner/name." },
             { "name": "number", "type": "int", "required": true }
           ],
-          "format": "issue",
+          "fields": [
+            { "name": "number" },
+            { "name": "state" },
+            { "name": "title" },
+            { "name": "author", "from": "user.login" },
+            { "name": "created", "from": "created_at" },
+            { "name": "updated", "from": "updated_at" },
+            { "name": "labels", "expr": "{{ range $i, $l := .labels }}{{ if $i }}, {{ end }}{{ $l.name }}{{ end }}" },
+            { "name": "body", "default": "" }
+          ],
           "entry": {
             "path": "/repos/{{.arg.repo}}/issues/{{.arg.number}}"
           }
@@ -358,7 +184,12 @@
             { "name": "limit", "short": "n", "type": "int", "default": 30 },
             { "name": "page", "short": "p", "type": "int", "default": 1 }
           ],
-          "format": "issue",
+          "fields": [
+            { "name": "number" },
+            { "name": "state" },
+            { "name": "author", "from": "user.login" },
+            { "name": "title" }
+          ],
           "entry": {
             "path": "/repos/{{.arg.repo}}/pulls",
             "query": {
@@ -375,7 +206,33 @@
             { "name": "repo", "type": "string", "required": true, "description": "owner/name." },
             { "name": "number", "type": "int", "required": true }
           ],
-          "format": "pr",
+          "fields": [
+            { "name": "number" },
+            { "name": "title" },
+            { "name": "author", "from": "user.login" },
+
+            { "name": "state", "show_in": "json" },
+            { "name": "draft", "show_in": "json" },
+            { "name": "merged", "show_in": "json" },
+            { "name": "state", "show_in": "!json", "expr": "{{ .state }}{{ if .draft }}, draft{{ end }}{{ if .merged }}, merged{{ end }}" },
+
+            { "name": "head", "from": "head.ref", "show_in": "json" },
+            { "name": "base", "from": "base.ref", "show_in": "json" },
+            { "name": "branch", "show_in": "!json", "expr": "{{ .head.ref }} -> {{ .base.ref }}" },
+
+            { "name": "additions", "default": "0", "show_in": "json" },
+            { "name": "deletions", "default": "0", "show_in": "json" },
+            { "name": "changed_files", "default": "0", "show_in": "json" },
+            { "name": "diff", "show_in": "!json", "expr": "+{{ .additions }} -{{ .deletions }} across {{ .changed_files }} file(s)" },
+
+            { "name": "created", "from": "created_at" },
+            { "name": "updated", "from": "updated_at" },
+            { "name": "comments", "default": "0" },
+            { "name": "review_comments", "default": "0" },
+            { "name": "commits", "default": "0" },
+            { "name": "labels", "expr": "{{ range $i, $l := .labels }}{{ if $i }}, {{ end }}{{ $l.name }}{{ end }}" },
+            { "name": "body", "default": "", "priority": -1 }
+          ],
           "entry": {
             "path": "/repos/{{.arg.repo}}/pulls/{{.arg.number}}"
           }
@@ -387,7 +244,6 @@
             { "name": "repo", "type": "string", "required": true, "description": "owner/name." },
             { "name": "number", "type": "int", "required": true }
           ],
-          "format": "raw",
           "request": {
             "method": "GET",
             "url": "{{.var.base_url}}/repos/{{.arg.repo}}/pulls/{{.arg.number}}",
@@ -410,7 +266,12 @@
             { "name": "limit", "short": "n", "type": "int", "default": 30, "description": "Items per page (max 100)." },
             { "name": "page", "short": "p", "type": "int", "default": 1, "description": "Page number." }
           ],
-          "format": "comment",
+          "fields": [
+            { "name": "author", "from": "user.login" },
+            { "name": "on", "default": "-", "expr": "{{ .path }}{{ with .line }}:{{ . }}{{ end }}" },
+            { "name": "created", "from": "created_at" },
+            { "name": "body" }
+          ],
           "entry": {
             "path": "/repos/{{.arg.repo}}/{{if .flag.review}}pulls/{{.arg.number}}/comments{{else}}issues/{{.arg.number}}/comments{{end}}",
             "query": {
@@ -429,7 +290,13 @@
             { "name": "limit", "short": "n", "type": "int", "default": 30 },
             { "name": "page", "short": "p", "type": "int", "default": 1 }
           ],
-          "format": "release",
+          "fields": [
+            { "name": "tag", "from": "tag_name" },
+            { "name": "name", "default": "-" },
+            { "name": "published", "from": "published_at" },
+            { "name": "draft" },
+            { "name": "prerelease" }
+          ],
           "entry": {
             "path": "/repos/{{.arg.repo}}/releases",
             "query": {
@@ -445,7 +312,15 @@
             { "name": "repo", "type": "string", "required": true },
             { "name": "tag", "type": "string", "required": true, "description": "Tag name, or `latest`." }
           ],
-          "format": "release",
+          "fields": [
+            { "name": "tag", "from": "tag_name" },
+            { "name": "name", "default": "-" },
+            { "name": "published", "from": "published_at" },
+            { "name": "author", "from": "author.login" },
+            { "name": "draft" },
+            { "name": "prerelease" },
+            { "name": "body", "default": "" }
+          ],
           "entry": {
             "path": "/repos/{{.arg.repo}}/releases/{{if eq .arg.tag \"latest\"}}latest{{else}}tags/{{urlpath .arg.tag}}{{end}}"
           }
@@ -462,7 +337,12 @@
             { "name": "branch", "type": "string", "default": "", "description": "Branch / SHA / tag to start from." },
             { "name": "path", "type": "string", "default": "", "description": "Restrict to commits touching this path." }
           ],
-          "format": "commit",
+          "fields": [
+            { "name": "sha", "truncate": 7 },
+            { "name": "author", "from": "commit.author.name" },
+            { "name": "date", "from": "commit.author.date" },
+            { "name": "message", "from": "commit.message", "firstline": true }
+          ],
           "entry": {
             "path": "/repos/{{.arg.repo}}/commits",
             "query": {
@@ -480,7 +360,14 @@
             { "name": "repo", "type": "string", "required": true },
             { "name": "sha", "type": "string", "required": true, "description": "Commit SHA, branch, or tag." }
           ],
-          "format": "commit",
+          "fields": [
+            { "name": "sha" },
+            { "name": "name", "from": "commit.author.name", "show_in": "json" },
+            { "name": "email", "from": "commit.author.email", "show_in": "json" },
+            { "name": "author", "show_in": "!json", "expr": "{{ .commit.author.name }} <{{ .commit.author.email }}>" },
+            { "name": "date", "from": "commit.author.date" },
+            { "name": "message", "from": "commit.message" }
+          ],
           "entry": {
             "path": "/repos/{{.arg.repo}}/commits/{{urlpath .arg.sha}}"
           }
@@ -491,7 +378,11 @@
           "args": [
             { "name": "repo", "type": "string", "required": true }
           ],
-          "format": "branch",
+          "fields": [
+            { "name": "name" },
+            { "name": "sha", "from": "commit.sha", "truncate": 7 },
+            { "name": "protected" }
+          ],
           "entry": {
             "path": "/repos/{{.arg.repo}}/branches",
             "query": { "per_page": "100" }
@@ -503,7 +394,10 @@
           "args": [
             { "name": "repo", "type": "string", "required": true }
           ],
-          "format": "tag",
+          "fields": [
+            { "name": "name" },
+            { "name": "sha", "from": "commit.sha", "truncate": 7 }
+          ],
           "entry": {
             "path": "/repos/{{.arg.repo}}/tags",
             "query": { "per_page": "100" }
@@ -511,7 +405,7 @@
         },
         {
           "name": "contents",
-          "description": "Fetch a file or directory listing. Omit PATH to list the repo root; otherwise a slash-delimited path (not URL-encoded).",
+          "description": "Fetch a file or directory listing. Omit PATH to list the repo root; otherwise a slash-delimited path (not URL-encoded). With no fields, a directory listing is an array (table) and a single file is an object (list); the shape decides.",
           "args": [
             { "name": "repo", "type": "string", "required": true },
             { "name": "path", "type": "string", "description": "File or directory path within the repo. Omit for the root listing." }
@@ -533,7 +427,6 @@
           "flags": [
             { "name": "ref", "short": "r", "type": "string", "default": "", "description": "Branch / SHA / tag." }
           ],
-          "format": "raw",
           "request": {
             "method": "GET",
             "url": "{{.var.base_url}}/repos/{{.arg.repo}}/readme",
@@ -547,40 +440,27 @@
         },
         {
           "name": "languages",
-          "description": "Map of languages to byte counts.",
+          "description": "Map of languages to byte counts. over=\"data\" walks the map with @key/@value; percent is an aggregate computed with the expr escape hatch.",
           "args": [
             { "name": "repo", "type": "string", "required": true }
           ],
-          "format": {
-            "input": "json",
-            "views": [
-              {
-                "name": "table",
-                "default": true,
-                "template": "{{ $total := 0 }}{{ range $_, $b := .data }}{{ $total = add $total $b }}{{ end }}{{ $rows := list \"LANGUAGE\\tBYTES\\t%\" }}{{ range $lang, $bytes := .data }}{{ $rows = append $rows (printf \"%v\\t%v\\t%.1f%%\" $lang $bytes (mulf 100.0 (divf $bytes $total))) }}{{ end }}{{ tabwriter $rows }}"
-              }
-            ]
-          },
+          "over": "data",
+          "fields": [
+            { "name": "language", "from": "@key" },
+            { "name": "bytes", "from": "@value" },
+            { "name": "percent", "expr": "{{ $t := 0 }}{{ range $.data }}{{ $t = add $t . }}{{ end }}{{ printf \"%.1f%%\" (mulf 100.0 (divf . $t)) }}" }
+          ],
           "entry": {
             "path": "/repos/{{.arg.repo}}/languages"
           }
         },
         {
           "name": "topics",
-          "description": "List repository topics.",
+          "description": "List repository topics. The records are the scalar strings at data.names.",
           "args": [
             { "name": "repo", "type": "string", "required": true }
           ],
-          "format": {
-            "input": "json",
-            "views": [
-              {
-                "name": "list",
-                "default": true,
-                "template": "{{ range .data.names }}{{ . }}\n{{ end }}"
-              }
-            ]
-          },
+          "over": "data.names",
           "entry": {
             "path": "/repos/{{.arg.repo}}/topics"
           }
@@ -598,26 +478,17 @@
           "args": [
             { "name": "org", "type": "string", "required": true }
           ],
-          "format": {
-            "input": "json",
-            "views": [
-              {
-                "name": "detail",
-                "default": true,
-                "template": [
-                  "Login:       {{.data.login}}",
-                  "ID:          {{.data.id}}",
-                  "Name:        {{default \"-\" .data.name}}",
-                  "Description: {{default \"-\" .data.description}}",
-                  "Location:    {{default \"-\" .data.location}}",
-                  "Blog:        {{default \"-\" .data.blog}}",
-                  "Members:     {{default 0 .data.followers}}    Repos: {{.data.public_repos}}",
-                  "Created:     {{.data.created_at}}",
-                  ""
-                ]
-              }
-            ]
-          },
+          "fields": [
+            { "name": "login" },
+            { "name": "id" },
+            { "name": "name", "default": "-" },
+            { "name": "description", "default": "-" },
+            { "name": "location", "default": "-" },
+            { "name": "blog", "default": "-" },
+            { "name": "members", "from": "followers" },
+            { "name": "repos", "from": "public_repos" },
+            { "name": "created", "from": "created_at" }
+          ],
           "entry": {
             "path": "/orgs/{{urlpath .arg.org}}"
           }
@@ -632,7 +503,11 @@
             { "name": "limit", "short": "n", "type": "int", "default": 30 },
             { "name": "page", "short": "p", "type": "int", "default": 1 }
           ],
-          "format": "user",
+          "fields": [
+            { "name": "login" },
+            { "name": "id" },
+            { "name": "type" }
+          ],
           "entry": {
             "path": "/orgs/{{urlpath .arg.org}}/public_members",
             "query": {
@@ -652,7 +527,13 @@
             { "name": "page", "short": "p", "type": "int", "default": 1 },
             { "name": "type", "type": "string", "default": "all", "description": "all|public|private|forks|sources|member." }
           ],
-          "format": "repo",
+          "fields": [
+            { "name": "name", "from": "full_name" },
+            { "name": "stars", "from": "stargazers_count" },
+            { "name": "forks", "from": "forks_count", "priority": -1 },
+            { "name": "lang", "from": "language", "default": "-" },
+            { "name": "description", "default": "-", "priority": -2 }
+          ],
           "entry": {
             "path": "/orgs/{{urlpath .arg.org}}/repos",
             "query": {
@@ -681,19 +562,14 @@
             { "name": "sort", "type": "string", "default": "", "description": "stars|forks|updated|help-wanted-issues." },
             { "name": "order", "type": "string", "default": "desc", "description": "asc|desc." }
           ],
-          "format": {
-            "input": "json",
-            "views": [
-              {
-                "name": "table",
-                "default": true,
-                "template": [
-                  "{{ $rows := list \"NAME\\tSTARS\\tLANG\\tDESCRIPTION\" }}{{ range .data.items }}{{ $rows = append $rows (printf \"%v\\t%v\\t%v\\t%v\" .full_name .stargazers_count (default \"-\" .language) (default \"\" .description)) }}{{ end }}{{ tabwriter $rows }}",
-                  "{{.data.total_count}} total"
-                ]
-              }
-            ]
-          },
+          "over": "data.items",
+          "footer": "{{.data.total_count}} total",
+          "fields": [
+            { "name": "name", "from": "full_name" },
+            { "name": "stars", "from": "stargazers_count" },
+            { "name": "lang", "from": "language", "default": "-" },
+            { "name": "description", "default": "-" }
+          ],
           "entry": {
             "path": "/search/repositories",
             "query": {
@@ -715,19 +591,12 @@
             { "name": "limit", "short": "n", "type": "int", "default": 30 },
             { "name": "page", "short": "p", "type": "int", "default": 1 }
           ],
-          "format": {
-            "input": "json",
-            "views": [
-              {
-                "name": "table",
-                "default": true,
-                "template": [
-                  "{{ $rows := list \"REPO\\tPATH\" }}{{ range .data.items }}{{ $rows = append $rows (printf \"%v\\t%v\" .repository.full_name .path) }}{{ end }}{{ tabwriter $rows }}",
-                  "{{.data.total_count}} total"
-                ]
-              }
-            ]
-          },
+          "over": "data.items",
+          "footer": "{{.data.total_count}} total",
+          "fields": [
+            { "name": "repo", "from": "repository.full_name" },
+            { "name": "path" }
+          ],
           "entry": {
             "path": "/search/code",
             "query": {
@@ -751,19 +620,14 @@
           "vars": {
             "filter": "walk(if type == \"object\" then with_entries(select((.key == \"repository_url\" or (.key | endswith(\"url\") | not)) and (.key | IN(\"node_id\",\"gravatar_id\",\"user_view_type\",\"site_admin\",\"performed_via_github_app\",\"active_lock_reason\",\"author_association\",\"temp_clone_token\",\"custom_properties\",\"issue_field_values\",\"permissions\",\"_links\",\"network_count\",\"pinned_comment\",\"reactions\",\"sub_issues_summary\",\"issue_dependencies_summary\") | not))) | if has(\"forks_count\") then del(.forks) else . end | if has(\"watchers_count\") then del(.watchers) else . end | if has(\"open_issues_count\") then del(.open_issues) else . end else . end)"
           },
-          "format": {
-            "input": "json",
-            "views": [
-              {
-                "name": "table",
-                "default": true,
-                "template": [
-                  "{{ $base := printf \"%s/repos/\" .var.base_url }}{{ $rows := list \"REPO\\t#\\tSTATE\\tTITLE\" }}{{ range .data.items }}{{ $rows = append $rows (printf \"%v\\t#%v\\t%v\\t%v\" (default \"\" .repository_url | trimPrefix $base) .number .state .title) }}{{ end }}{{ tabwriter $rows }}",
-                  "{{.data.total_count}} total"
-                ]
-              }
-            ]
-          },
+          "over": "data.items",
+          "footer": "{{.data.total_count}} total",
+          "fields": [
+            { "name": "repo", "expr": "{{ .repository_url | default \"\" | trimPrefix (printf \"%s/repos/\" $.var.base_url) }}" },
+            { "name": "number" },
+            { "name": "state" },
+            { "name": "title" }
+          ],
           "entry": {
             "path": "/search/issues",
             "query": {
@@ -784,19 +648,13 @@
             { "name": "limit", "short": "n", "type": "int", "default": 30 },
             { "name": "page", "short": "p", "type": "int", "default": 1 }
           ],
-          "format": {
-            "input": "json",
-            "views": [
-              {
-                "name": "table",
-                "default": true,
-                "template": [
-                  "{{ $rows := list \"LOGIN\\tID\\tTYPE\" }}{{ range .data.items }}{{ $rows = append $rows (printf \"%v\\t%v\\t%v\" .login .id .type) }}{{ end }}{{ tabwriter $rows }}",
-                  "{{.data.total_count}} total"
-                ]
-              }
-            ]
-          },
+          "over": "data.items",
+          "footer": "{{.data.total_count}} total",
+          "fields": [
+            { "name": "login" },
+            { "name": "id" },
+            { "name": "type" }
+          ],
           "entry": {
             "path": "/search/users",
             "query": {
@@ -812,7 +670,13 @@
     {
       "name": "rate-limit",
       "description": "Show the current rate-limit status. (RESET column is unix epoch seconds.)",
-      "format": "rate",
+      "over": "data.resources",
+      "fields": [
+        { "name": "resource", "from": "@key" },
+        { "name": "limit" },
+        { "name": "remaining" },
+        { "name": "reset" }
+      ],
       "entry": {
         "path": "/rate_limit"
       }
