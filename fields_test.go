@@ -57,7 +57,7 @@ func TestFields_Over(t *testing.T) {
 func TestFields_MapWalkWithExpr(t *testing.T) {
 	parsed := map[string]any{"Go": int64(100), "Rust": int64(100)}
 	f := &Fields{
-		Over: "data",
+		Over:	"data",
 		List: []Field{
 			{Name: "language", Path: "@key"},
 			{Name: "bytes", Path: "@value"},
@@ -109,9 +109,9 @@ func TestFields_JSONSinkDerived(t *testing.T) {
 
 func TestFields_DefaultTruncateFirstline(t *testing.T) {
 	parsed := map[string]any{
-		"lang": nil,
-		"sha":  "abcdef1234567890",
-		"msg":  "first line\nsecond line",
+		"lang":	nil,
+		"sha":	"abcdef1234567890",
+		"msg":	"first line\nsecond line",
 	}
 	f := &Fields{List: []Field{
 		{Name: "lang", Path: "lang", Default: "-"},
@@ -132,8 +132,9 @@ func TestFields_PriorityDrop(t *testing.T) {
 		{Name: "drop", Path: "b", Priority: -2},
 		{Name: "alsokeep", Path: "c", Priority: 0},
 	}}
-	// Narrow width forces the lowest-priority column out.
-	out, err := renderFields(f, parsed, fctx(parsed), "table", 12)
+	// Narrow width forces the lowest-priority column out (full table is 20
+	// wide; 16 fits keep+alsokeep but not the priority -2 column).
+	out, err := renderFields(f, parsed, fctx(parsed), "table", 16)
 	require.NoError(t, err)
 	assert.Contains(t, out, "keep")
 	assert.Contains(t, out, "alsokeep")
@@ -187,6 +188,6 @@ func TestDisplayValue(t *testing.T) {
 	assert.Equal(t, "true", displayValue(true))
 	assert.Equal(t, "42", displayValue(int64(42)))
 	assert.Equal(t, "3", displayValue(float64(3)))
-	assert.Equal(t, "1.5", displayValue(float64(1.5)))
+	assert.Equal(t, "1.5", displayValue(1.5))
 	assert.Equal(t, `["a","b"]`, displayValue([]any{"a", "b"}))
 }

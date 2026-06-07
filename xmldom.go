@@ -45,7 +45,7 @@ func (n *xnode) children() []*xnode {
 // processing instructions, and directives are dropped; CDATA arrives as ordinary
 // character data.
 func parseDOM(src []byte) (*xnode, error) {
-	dec := xml.NewDecoder(bytes.NewReader(src))
+	dec := xml.NewDecoder(bytes.NewReader(stripXMLDecl(src)))
 	dec.Strict = true
 	var root *xnode
 	var stack []*xnode
@@ -93,6 +93,28 @@ func parseDOM(src []byte) (*xnode, error) {
 		return nil, fmt.Errorf("no root element")
 	}
 	return root, nil
+}
+
+// stripXMLDecl removes a leading XML declaration (<?xml ... ?>). Go's
+// encoding/xml supports only XML 1.0 and errors on a version="1.1" declaration,
+// but the shipped configs declare 1.1 for the stricter xml-validator. The
+// declaration carries nothing the loader needs, so we drop it before decoding.
+func stripXMLDecl(src []byte) []byte {
+	trimmed := bytes.TrimLeft(src, " \t\r\n")
+	if !bytes.HasPrefix(trimmed, []byte("<?xml")) {
+		return src
+	}
+	rest := trimmed[len("<?xml"):]
+	// Only treat it as the declaration (not another <?xml...?> PI) when the
+	// next byte ends the target or is whitespace.
+	if len(rest) > 0 && rest[0] != ' ' && rest[0] != '\t' && rest[0] != '\r' && rest[0] != '\n' && rest[0] != '?' {
+		return src
+	}
+	i := bytes.Index(trimmed, []byte("?>"))
+	if i < 0 {
+		return src
+	}
+	return trimmed[i+2:]
 }
 
 // checkAttrs rejects any attribute on n not in the allowed set.

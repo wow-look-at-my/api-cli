@@ -138,7 +138,7 @@ func TestRunRequest_POSTBody(t *testing.T) {
 	assert.Equal(t, "POST", gotMethod)
 	assert.Equal(t, "application/json", gotCT)
 	assert.JSONEq(t, `{"name":"ada"}`, gotBody)
-	assert.Contains(t, out, `"ok": true`)
+	assert.Contains(t, out, `{"ok":true}`) // no <response>, so the raw body is returned
 }
 
 func TestRunRequest_HTTPErrorStatus(t *testing.T) {

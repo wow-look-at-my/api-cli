@@ -194,7 +194,7 @@ func TestParseXML_ParseErrors(t *testing.T) {
 		"var no name":        `<config name="x"><vars><var>v</var></vars><command name="c"><run>x</run></command></config>`,
 		"field path+expr":    `<config name="x"><command name="c"><run>x</run><fields><field name="f" expr="e">p</field></fields></command></config>`,
 		"field neither":      `<config name="x"><command name="c"><run>x</run><fields><field name="f"/></fields></command></config>`,
-		"run request+text":   `<config name="x"><run><request><url>u</url></request>extra</run><command name="c"/></config>`,
+		"run request+element": `<config name="x"><run><request><url>u</url></request><argv>x</argv></run><command name="c"/></config>`,
 		"bad flag default":   `<config name="x"><command name="c"><flag name="n" type="int" default="notanint"/><run>x</run></command></config>`,
 	}
 	for name, src := range cases {
