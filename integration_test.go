@@ -179,7 +179,7 @@ func TestIntegration_StdinPassthrough(t *testing.T) {
 
 func TestIntegration_ExampleConfigLoads(t *testing.T) {
 	// Sanity check: the shipped example validates cleanly.
-	cfg, err := Load("api.example.json")
+	cfg, err := Load("api.example.xml")
 	require.NoError(t, err)
 	assert.NotEmpty(t, cfg.Name)
 }

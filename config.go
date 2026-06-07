@@ -19,6 +19,7 @@ type Config struct {
 	Description string             `json:"description,omitempty"`
 	Vars        map[string]any     `json:"vars,omitempty"`
 	Command     *Cmd               `json:"command,omitempty"`
+	Request     *Request           `json:"request,omitempty"`
 	Cwd         string             `json:"cwd,omitempty"`
 	Stdin       string             `json:"stdin,omitempty"`
 	Formats     map[string]*Format `json:"formats,omitempty"`
@@ -58,6 +59,7 @@ type Command struct {
 	Flags         []Flag          `json:"flags,omitempty"`
 	Vars          map[string]any  `json:"vars,omitempty"`
 	Command       *Cmd            `json:"command,omitempty"`
+	Request       *Request        `json:"request,omitempty"`
 	Cwd           string          `json:"cwd,omitempty"`
 	Stdin         string          `json:"stdin,omitempty"`
 	Steps         []Step          `json:"steps,omitempty"`
@@ -65,6 +67,7 @@ type Command struct {
 	Preconditions []string        `json:"preconditions,omitempty"`
 	Confirm       string          `json:"confirm,omitempty"`
 	Format        *FormatRef      `json:"format,omitempty"`
+	Fields        *Fields         `json:"fields,omitempty"`
 	Commands      []Command       `json:"commands,omitempty"`
 }
 
@@ -262,6 +265,86 @@ func (c *Cmd) Defined() bool {
 	return c.Shell || len(c.Argv) > 0
 }
 
+// Request is a first-class HTTP request, the alternative to a shell/argv Cmd as
+// a leaf's executable. It is built from a <run><request> element. Like Cmd it
+// inherits down the command tree: the closest ancestor that defines a <run>
+// (whether request or command) wins for a subtree.
+//
+// Every string field is a Go template rendered against the leaf's data context
+// (.arg, .flag, .env, .var, .entry, .result) at invocation time.
+type Request struct {
+	Method   string    `json:"method,omitempty"`   // template; defaults to GET
+	URL      string    `json:"url"`                // template
+	QueryFrom string   `json:"queryFrom,omitempty"` // context path to a map of params (<query from=>)
+	Query    []Param   `json:"query,omitempty"`    // explicit <param> children
+	Headers  []Header  `json:"headers,omitempty"`
+	Body     string    `json:"body,omitempty"`     // template; empty means no body
+	Response *Response `json:"response,omitempty"` // nil means stream the raw body
+}
+
+// Defined reports whether the request has anything to execute (a URL).
+func (r *Request) Defined() bool {
+	return r != nil && strings.TrimSpace(r.URL) != ""
+}
+
+// Param is one query parameter. Name and Value are templates. When, if
+// non-empty, is a context path: the param is included only when it is truthy
+// (set by an enclosing <if test=>).
+type Param struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	When  string `json:"when,omitempty"`
+}
+
+// Header is one request header. Name and Value are templates. When mirrors
+// Param.When for headers wrapped in <if test=>.
+type Header struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	When  string `json:"when,omitempty"`
+}
+
+// Response shapes a JSON response body before output. JQ is a context path
+// (e.g. "var.filter") resolving to a jq program; the program is run over the
+// decoded body and the result(s) are emitted as JSON.
+type Response struct {
+	JQ string `json:"jq,omitempty"`
+}
+
+// Fields declares the shape of a leaf's output records: which fields, with
+// optional rename / default / transform / compute. The renderer represents that
+// one declaration automatically as a table, a "Label: value" list, lines, JSON,
+// Markdown, or CSV, choosing a default from the data's shape (overridable with
+// --as). Built from a <fields> element.
+type Fields struct {
+	Over   string  `json:"over,omitempty"`   // context path to the records (default: the whole body)
+	Footer string  `json:"footer,omitempty"` // template for a trailing summary line
+	List   []Field `json:"fields,omitempty"`
+}
+
+// Field is one column/row in a Fields declaration.
+//
+//   - Path is a record-relative source path ("stargazers_count", "user.login"),
+//     or the sentinels "@key"/"@value" when Over walks a map.
+//   - Expr, if set, is a Go template evaluated with the record as "." and the
+//     whole format context as "$"; it overrides Path (a virtual field).
+//   - Default substitutes for an empty value; Truncate caps the string length;
+//     FirstLine keeps only the first line.
+//   - Priority orders width-constrained dropping (lowest dropped first; default 0).
+//   - ShowIn gates the field per representation: "" / "*" = all; an allowlist
+//     ("json,csv") shows only there; a negated list ("!json") shows everywhere
+//     except there. The two forms cannot be mixed.
+type Field struct {
+	Name      string `json:"name"`
+	Path      string `json:"path,omitempty"`
+	Expr      string `json:"expr,omitempty"`
+	Default   string `json:"default,omitempty"`
+	Truncate  int    `json:"truncate,omitempty"`
+	FirstLine bool   `json:"firstLine,omitempty"`
+	Priority  int    `json:"priority,omitempty"`
+	ShowIn    string `json:"showIn,omitempty"`
+}
+
 var reservedCommandNames = map[string]bool{
 	"help":       true,
 	"completion": true,
@@ -290,26 +373,24 @@ var validFormatInputs = map[string]bool{
 	"raw":   true,
 }
 
-// Load reads and parses a config file. Unknown keys are rejected to catch
-// typos early.
+// Load reads and parses an XML config file. The XML element tree is mapped to
+// the Config model by parseConfigXML (see xmlsource.go); node placeholders
+// (<value>/<if>/<for>) are compiled to Go templates there. Unknown elements
+// and attributes are rejected to catch typos early.
 func Load(path string) (*Config, error) {
-	f, err := os.Open(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("open config %q: %w", path, err)
 	}
-	defer f.Close()
 
-	dec := json.NewDecoder(f)
-	dec.DisallowUnknownFields()
-
-	var cfg Config
-	if err := dec.Decode(&cfg); err != nil {
+	cfg, err := parseConfigXML(raw)
+	if err != nil {
 		return nil, fmt.Errorf("parse config %q: %w", path, err)
 	}
-	if err := validate(&cfg); err != nil {
+	if err := validate(cfg); err != nil {
 		return nil, fmt.Errorf("validate config %q: %w", path, err)
 	}
-	return &cfg, nil
+	return cfg, nil
 }
 
 func validate(cfg *Config) error {
@@ -324,13 +405,31 @@ func validate(cfg *Config) error {
 			return err
 		}
 	}
+	if cfg.Command.Defined() && cfg.Request.Defined() {
+		return fmt.Errorf("top-level: a <run> is either a command or a request, not both")
+	}
+	if err := validateRequest(cfg.Request, "request"); err != nil {
+		return err
+	}
 	seen := map[string]bool{}
-	hasRootCmd := cfg.Command.Defined()
+	hasRootRun := cfg.Command.Defined() || cfg.Request.Defined()
 	for i, c := range cfg.Commands {
 		where := fmt.Sprintf("commands[%d]", i)
-		if err := validateCommand(&c, where, seen, hasRootCmd, cfg.Formats); err != nil {
+		if err := validateCommand(&c, where, seen, hasRootRun, cfg.Formats); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// validateRequest checks a request's invariants. A nil request is fine
+// (no request configured at this node).
+func validateRequest(r *Request, where string) error {
+	if r == nil {
+		return nil
+	}
+	if strings.TrimSpace(r.URL) == "" {
+		return fmt.Errorf("%s: <request> requires a <url>", where)
 	}
 	return nil
 }
@@ -366,7 +465,7 @@ func validateFormat(f *Format, where string) error {
 // an ancestor has a command template available (we need at least one to reach
 // a leaf). formats is the top-level format registry; named refs resolve into
 // it.
-func validateCommand(c *Command, where string, siblings map[string]bool, inheritedCmd bool, formats map[string]*Format) error {
+func validateCommand(c *Command, where string, siblings map[string]bool, inheritedRun bool, formats map[string]*Format) error {
 	if strings.TrimSpace(c.Name) == "" {
 		return fmt.Errorf("%s: \"name\" is required", where)
 	}
@@ -451,12 +550,25 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		}
 	}
 
-	haveCmd := inheritedCmd || c.Command.Defined()
+	if c.Command.Defined() && c.Request.Defined() {
+		return fmt.Errorf("%s: a <run> is either a command or a request, not both", where)
+	}
+	if err := validateRequest(c.Request, where+".request"); err != nil {
+		return err
+	}
+	if c.Fields != nil && c.Format.Defined() {
+		return fmt.Errorf("%s: use either <fields> or <format>, not both", where)
+	}
+	if c.Fields != nil && len(c.Commands) > 0 {
+		return fmt.Errorf("%s: <fields> is only allowed on leaves (nodes with no subcommands)", where)
+	}
 
-	// Leaf: must have a command available.
+	haveRun := inheritedRun || c.Command.Defined() || c.Request.Defined()
+
+	// Leaf: must have something to run available.
 	if len(c.Commands) == 0 {
-		if !haveCmd {
-			return fmt.Errorf("%s: leaf has no command and no ancestor defines one", where)
+		if !haveRun {
+			return fmt.Errorf("%s: leaf has no command/request and no ancestor defines one", where)
 		}
 	}
 
@@ -498,7 +610,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	childSeen := map[string]bool{}
 	for i, child := range c.Commands {
 		cw := fmt.Sprintf("%s.commands[%d]", where, i)
-		if err := validateCommand(&child, cw, childSeen, haveCmd, formats); err != nil {
+		if err := validateCommand(&child, cw, childSeen, haveRun, formats); err != nil {
 			return err
 		}
 	}

@@ -1,0 +1,625 @@
+<?xml version="1.1" encoding="UTF-8"?>
+
+<!--
+	The api-cli config for a comfortable read-only GitHub REST API wrapper.
+	Loaded by api-cli (XML configs); see ../../README.md for the full reference.
+
+	FORMATTING MODEL: a command declares ONE thing: the shape of its output
+	records (which fields, with optional rename / default / compute / transform).
+	That single declaration is then represented automatically in whatever form
+	is asked for: a table, a "Label: value" list, JSON, Markdown, CSV, ... You
+	never write "table" or "list" anywhere; the renderer picks one from the
+	data's shape, and a runtime flag (or a pipe) can force any representation.
+
+	  Output shape, via <fields>:
+	    <fields [over="data.items"] [footer="..."]>
+	      <field name="stars">stargazers_count</field>     rename a field
+	      <field name="lang" default="-">language</field>  fallback for empty
+	      <field name="sha" truncate="7">sha</field>        transform
+	      <field name="branch" expr='{{.head.ref}} -> {{.base.ref}}'/>  computed
+	      <field name="resource">@key</field>              @key/@value for a map
+	      <field name="state" show_in="json">state</field>  real field, JSON only
+	      <field name="state" show_in="!json" expr='...'/>   virtual, hidden in JSON
+	    With NO <fields> at all, every (filtered) field of the response is output.
+	    over=    the records live at this path (search -> data.items; rate /
+	             languages -> a map; topics -> data.names) rather than the root.
+	    footer=  a trailing summary line (search's "N total").
+
+	  Order: fields render in document order (left-to-right columns,
+	  top-to-bottom list rows). priority="N" (integer, default 0): when a sink is
+	  space-constrained (a narrow table), the lowest-priority fields are dropped
+	  first; ties keep document order.
+
+	  Virtual fields: a field with expr= and no source path is a string
+	  interpolation of the record's other values. show_in (default "*") gates a
+	  field per representation: an allowlist like "json,csv" shows ONLY there, or
+	  a negated list like "!json" shows everywhere EXCEPT there. The two forms
+	  cannot be mixed ("json,!csv" is invalid). So a raw field show_in="json"
+	  feeds JSON while a virtual field of the SAME name show_in="!json" renders
+	  for humans: clean data, pretty display.
+
+	  Automatic representation of that one shape, by data shape and chosen sink:
+	    array of records  -> table   (or JSON array,  or Markdown table, ...)
+	    single record     -> list    (Label: value)  (or JSON object, ...)
+	    array of scalars  -> lines   (or JSON array)
+	    non-JSON / scalar -> raw
+	  So pr-diff (diff), readme (raw), and contents (dir array OR file object)
+	  declare nothing. A runtime layer (not in this file) would mirror
+	  PowerShell's verbs (table / list / json | markdown | csv flags) to force a
+	  representation, the way you'd pipe to Format-Table / ConvertTo-Json / etc.
+
+	  SCOPES: a <field> body/expr is relative to each record (login, not
+	  data.login); @key/@value is the entry when <fields over=> walks a map;
+	  expr= also sees the whole context via $ ($.data, $.var, ...). Placeholders
+	  (<value>/<if>/<for>) and the text/template expr= escape hatch work as
+	  before.
+
+	WEB REQUESTS are first-class (no curl/wget/shell). <run> holds a
+	<request method="GET"> with <url>, <query from="entry.query"/> (or <param>s),
+	<header> children (auth gated on var.token, resolved once in <vars>), and an
+	optional <response jq="var.filter"/> to shape the JSON. Omit <response> for a
+	raw body. The jq `filter` var stays CDATA (jq source, a foreign language).
+
+	Whitespace: structural indentation is TABS; assume the loader strips the
+	common leading tabs from any text content.
+-->
+
+<config
+	name="github"
+	schema="https://raw.githubusercontent.com/wow-look-at-my/api-cli/master/api.schema.xsd">
+
+	<description>Comfortable read-only wrapper for the GitHub REST API. Aggressively strips noise from responses: *url fields, GraphQL node_ids, empty gravatar_ids, duplicate counts, reaction breakdowns, permission objects, and other metadata that bloats output without adding value. Set $GITHUB_TOKEN / $GH_TOKEN for authenticated access (60 req/hr unauthenticated, 5000/hr authenticated). Set $GITHUB_API_URL to target a GitHub Enterprise Server instance.</description>
+
+	<vars>
+		<var name="base_url"><value name="env.GITHUB_API_URL" default="https://api.github.com"/></var>
+		<var name="ua">api-cli-github-example</var>
+		<!-- Resolve the token once: whichever of GITHUB_TOKEN / GH_TOKEN is set.
+		     Every request then just checks var.token, no per-request if/else. -->
+		<var name="token"><value expr='{{ or .env.GITHUB_TOKEN .env.GH_TOKEN }}'/></var>
+		<!-- Noise keys to strip from every response (alongside any *url key). -->
+		<var name="noise">"node_id","gravatar_id","user_view_type","site_admin","performed_via_github_app","active_lock_reason","author_association","temp_clone_token","custom_properties","issue_field_values","permissions","_links","network_count","pinned_comment","reactions","sub_issues_summary","issue_dependencies_summary"</var>
+		<!-- Extra jq predicate for keys to KEEP despite the rules below. Default
+		     keeps nothing extra; a command can override it (see search issues). -->
+		<var name="keep">false</var>
+		<!-- Shared response filter, written once: drop *url keys and the noise
+		     list (unless var.keep rescues a key), then drop a bare count when its
+		     *_count twin exists. Commands tweak it via var.keep, not by copying. -->
+		<var name="filter"><if test="env.GITHUB_RAW">.<else/><![CDATA[walk(
+  if type == "object" then
+    with_entries(select(
+      ((.key | endswith("url") | not) and (.key | IN({{.var.noise}}) | not))
+      or ({{.var.keep}})
+    ))
+    | if has("forks_count")       then del(.forks)       else . end
+    | if has("watchers_count")    then del(.watchers)    else . end
+    | if has("open_issues_count") then del(.open_issues) else . end
+  else . end
+)]]></if></var>
+	</vars>
+
+	<!-- Root request, inherited by every leaf. -->
+	<run>
+		<request method="GET">
+			<url><value name="var.base_url"/><value name="entry.path"/></url>
+			<query from="entry.query"/>
+			<header name="User-Agent"><value name="var.ua"/></header>
+			<header name="Accept">application/vnd.github+json</header>
+			<header name="X-GitHub-Api-Version">2022-11-28</header>
+			<if test="var.token">
+				<header name="Authorization">Bearer <value name="var.token"/></header>
+			</if>
+			<response jq="var.filter"/>
+		</request>
+	</run>
+
+	<command name="user" description="Read user info.">
+		<command name="get" description="Fetch a user. Omit USERNAME to use /user (the authenticated viewer; requires a token).">
+			<arg name="username" type="string" description="GitHub username."/>
+			<fields>
+				<field name="login">login</field>
+				<field name="id">id</field>
+				<field name="name" default="-">name</field>
+				<field name="company" default="-">company</field>
+				<field name="location" default="-">location</field>
+				<field name="bio" default="-">bio</field>
+				<field name="followers">followers</field>
+				<field name="following">following</field>
+				<field name="repos">public_repos</field>
+				<field name="created">created_at</field>
+			</fields>
+			<entry>
+				<path><if test="arg.username">/users/<value name="arg.username" as="urlpath"/><else/>/user</if></path>
+			</entry>
+		</command>
+		<command name="repos" description="List a user's public repositories.">
+			<arg name="username" type="string" required="true"/>
+			<flag name="limit" short="n" type="int" default="30" description="Items per page (max 100)."/>
+			<flag name="page" short="p" type="int" default="1" description="Page number."/>
+			<flag name="sort" type="string" default="updated" description="created|updated|pushed|full_name."/>
+			<fields>
+				<field name="name">full_name</field>
+				<field name="stars">stargazers_count</field>
+				<field name="forks" priority="-1">forks_count</field>
+				<field name="lang" default="-">language</field>
+				<field name="description" default="-" priority="-2">description</field>
+			</fields>
+			<entry>
+				<path>/users/<value name="arg.username" as="urlpath"/>/repos</path>
+				<query>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+					<param name="sort"><value name="flag.sort"/></param>
+				</query>
+			</entry>
+		</command>
+		<command name="orgs" description="List a user's public organization memberships.">
+			<arg name="username" type="string" required="true"/>
+			<fields>
+				<field name="login">login</field>
+				<field name="id">id</field>
+				<field name="description" default="-">description</field>
+			</fields>
+			<entry>
+				<path>/users/<value name="arg.username" as="urlpath"/>/orgs</path>
+			</entry>
+		</command>
+	</command>
+
+	<command name="repo" description="Read repository info.">
+		<command name="get" description="Fetch a repository.">
+			<arg name="repo" type="string" required="true" description="owner/name."/>
+			<fields>
+				<field name="repo">full_name</field>
+				<field name="description" default="-">description</field>
+				<field name="language" default="-">language</field>
+				<field name="stars">stargazers_count</field>
+				<field name="forks">forks_count</field>
+				<field name="issues">open_issues_count</field>
+				<field name="default">default_branch</field>
+				<field name="license" default="-" expr='{{ with .license }}{{ .spdx_id }}{{ end }}'/>
+				<field name="created">created_at</field>
+				<field name="updated">updated_at</field>
+				<field name="pushed">pushed_at</field>
+				<field name="archived">archived</field>
+				<field name="fork">fork</field>
+				<field name="private">private</field>
+			</fields>
+			<entry>
+				<path>/repos/<value name="arg.repo"/></path>
+			</entry>
+		</command>
+		<command name="issues" description="List issues for a repository.">
+			<arg name="repo" type="string" required="true" description="owner/name."/>
+			<flag name="state" type="string" default="open" description="open|closed|all."/>
+			<flag name="limit" short="n" type="int" default="30"/>
+			<flag name="page" short="p" type="int" default="1"/>
+			<flag name="labels" type="string" default="" description="Comma-separated label names."/>
+			<fields>
+				<field name="number">number</field>
+				<field name="state">state</field>
+				<field name="author">user.login</field>
+				<field name="title">title</field>
+			</fields>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/issues</path>
+				<query>
+					<param name="state"><value name="flag.state"/></param>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+					<param name="labels"><value name="flag.labels"/></param>
+				</query>
+			</entry>
+		</command>
+		<command name="issue" description="Fetch a single issue.">
+			<arg name="repo" type="string" required="true" description="owner/name."/>
+			<arg name="number" type="int" required="true"/>
+			<fields>
+				<field name="number">number</field>
+				<field name="state">state</field>
+				<field name="title">title</field>
+				<field name="author">user.login</field>
+				<field name="created">created_at</field>
+				<field name="updated">updated_at</field>
+				<field name="labels" expr='{{ range $i, $l := .labels }}{{ if $i }}, {{ end }}{{ $l.name }}{{ end }}'/>
+				<field name="body" default="">body</field>
+			</fields>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/issues/<value name="arg.number"/></path>
+			</entry>
+		</command>
+		<command name="prs" description="List pull requests for a repository.">
+			<arg name="repo" type="string" required="true" description="owner/name."/>
+			<flag name="state" type="string" default="open" description="open|closed|all."/>
+			<flag name="limit" short="n" type="int" default="30"/>
+			<flag name="page" short="p" type="int" default="1"/>
+			<fields>
+				<field name="number">number</field>
+				<field name="state">state</field>
+				<field name="author">user.login</field>
+				<field name="title">title</field>
+			</fields>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/pulls</path>
+				<query>
+					<param name="state"><value name="flag.state"/></param>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+				</query>
+			</entry>
+		</command>
+		<command name="pr" description="Fetch a single pull request: description, comment counts, and diff size.">
+			<arg name="repo" type="string" required="true" description="owner/name."/>
+			<arg name="number" type="int" required="true"/>
+			<fields>
+				<field name="number">number</field>
+				<field name="title">title</field>
+				<field name="author">user.login</field>
+				<!-- state: structured fields for JSON, one composed string for humans (same output name). -->
+				<field name="state" show_in="json">state</field>
+				<field name="draft" show_in="json">draft</field>
+				<field name="merged" show_in="json">merged</field>
+				<field name="state" show_in="!json" expr='{{ .state }}{{ if .draft }}, draft{{ end }}{{ if .merged }}, merged{{ end }}'/>
+				<!-- branch: head/base for JSON, "head -> base" for humans. -->
+				<field name="head" show_in="json">head.ref</field>
+				<field name="base" show_in="json">base.ref</field>
+				<field name="branch" show_in="!json" expr='{{ .head.ref }} -> {{ .base.ref }}'/>
+				<!-- diff: raw counts for JSON, one summary string for humans. -->
+				<field name="additions" show_in="json" default="0">additions</field>
+				<field name="deletions" show_in="json" default="0">deletions</field>
+				<field name="changed_files" show_in="json" default="0">changed_files</field>
+				<field name="diff" show_in="!json" expr='+{{ .additions }} -{{ .deletions }} across {{ .changed_files }} file(s)'/>
+				<field name="created">created_at</field>
+				<field name="updated">updated_at</field>
+				<field name="comments" default="0">comments</field>
+				<field name="review_comments" default="0">review_comments</field>
+				<field name="commits" default="0">commits</field>
+				<field name="labels" expr='{{ range $i, $l := .labels }}{{ if $i }}, {{ end }}{{ $l.name }}{{ end }}'/>
+				<field name="body" default="" priority="-1">body</field>
+			</fields>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/pulls/<value name="arg.number"/></path>
+			</entry>
+		</command>
+		<command name="pr-diff" description="Fetch the unified diff for a pull request.">
+			<arg name="repo" type="string" required="true" description="owner/name."/>
+			<arg name="number" type="int" required="true"/>
+			<run>
+				<request method="GET">
+					<url><value name="var.base_url"/>/repos/<value name="arg.repo"/>/pulls/<value name="arg.number"/></url>
+					<header name="User-Agent"><value name="var.ua"/></header>
+					<header name="Accept">application/vnd.github.diff</header>
+					<if test="var.token">
+						<header name="Authorization">Bearer <value name="var.token"/></header>
+					</if>
+				</request>
+			</run>
+		</command>
+		<command name="pr-comments" description="List a pull request's comments. Defaults to the conversation (issue) comments; pass --review for inline code-review comments.">
+			<arg name="repo" type="string" required="true" description="owner/name."/>
+			<arg name="number" type="int" required="true"/>
+			<flag name="review" short="r" type="bool" default="false" description="List inline code-review comments instead of conversation comments."/>
+			<flag name="limit" short="n" type="int" default="30" description="Items per page (max 100)."/>
+			<flag name="page" short="p" type="int" default="1" description="Page number."/>
+			<fields>
+				<field name="author">user.login</field>
+				<field name="on" default="-" expr='{{ .path }}{{ with .line }}:{{ . }}{{ end }}'/>
+				<field name="created">created_at</field>
+				<field name="body">body</field>
+			</fields>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/<if test="flag.review">pulls/<value name="arg.number"/>/comments<else/>issues/<value name="arg.number"/>/comments</if></path>
+				<query>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+				</query>
+			</entry>
+		</command>
+		<command name="releases" description="List releases.">
+			<arg name="repo" type="string" required="true"/>
+			<flag name="limit" short="n" type="int" default="30"/>
+			<flag name="page" short="p" type="int" default="1"/>
+			<fields>
+				<field name="tag">tag_name</field>
+				<field name="name" default="-">name</field>
+				<field name="published">published_at</field>
+				<field name="draft">draft</field>
+				<field name="prerelease">prerelease</field>
+			</fields>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/releases</path>
+				<query>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+				</query>
+			</entry>
+		</command>
+		<command name="release" description="Fetch a release by tag, or `latest`.">
+			<arg name="repo" type="string" required="true"/>
+			<arg name="tag" type="string" required="true" description="Tag name, or `latest`."/>
+			<fields>
+				<field name="tag">tag_name</field>
+				<field name="name" default="-">name</field>
+				<field name="published">published_at</field>
+				<field name="author">author.login</field>
+				<field name="draft">draft</field>
+				<field name="prerelease">prerelease</field>
+				<field name="body" default="">body</field>
+			</fields>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/releases/<if test="arg.tag" eq="latest">latest<else/>tags/<value name="arg.tag" as="urlpath"/></if></path>
+			</entry>
+		</command>
+		<command name="commits" description="List recent commits.">
+			<arg name="repo" type="string" required="true"/>
+			<flag name="limit" short="n" type="int" default="30"/>
+			<flag name="page" short="p" type="int" default="1"/>
+			<flag name="branch" type="string" default="" description="Branch / SHA / tag to start from."/>
+			<flag name="path" type="string" default="" description="Restrict to commits touching this path."/>
+			<fields>
+				<field name="sha" truncate="7">sha</field>
+				<field name="author">commit.author.name</field>
+				<field name="date">commit.author.date</field>
+				<field name="message" firstline="true">commit.message</field>
+			</fields>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/commits</path>
+				<query>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+					<param name="sha"><value name="flag.branch"/></param>
+					<param name="path"><value name="flag.path"/></param>
+				</query>
+			</entry>
+		</command>
+		<command name="commit" description="Fetch a single commit.">
+			<arg name="repo" type="string" required="true"/>
+			<arg name="sha" type="string" required="true" description="Commit SHA, branch, or tag."/>
+			<fields>
+				<field name="sha">sha</field>
+				<!-- author: name + email for JSON, "name <email>" for humans. -->
+				<field name="name" show_in="json">commit.author.name</field>
+				<field name="email" show_in="json">commit.author.email</field>
+				<field name="author" show_in="!json" expr='{{ .commit.author.name }} &lt;{{ .commit.author.email }}&gt;'/>
+				<field name="date">commit.author.date</field>
+				<field name="message">commit.message</field>
+			</fields>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/commits/<value name="arg.sha" as="urlpath"/></path>
+			</entry>
+		</command>
+		<command name="branches" description="List branches.">
+			<arg name="repo" type="string" required="true"/>
+			<fields>
+				<field name="name">name</field>
+				<field name="sha" truncate="7">commit.sha</field>
+				<field name="protected">protected</field>
+			</fields>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/branches</path>
+				<query>
+					<param name="per_page">100</param>
+				</query>
+			</entry>
+		</command>
+		<command name="tags" description="List tags.">
+			<arg name="repo" type="string" required="true"/>
+			<fields>
+				<field name="name">name</field>
+				<field name="sha" truncate="7">commit.sha</field>
+			</fields>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/tags</path>
+				<query>
+					<param name="per_page">100</param>
+				</query>
+			</entry>
+		</command>
+		<command name="contents" description="Fetch a file or directory listing. Omit PATH to list the repo root; otherwise a slash-delimited path (not URL-encoded). With no field projection, a directory listing is an array (table) and a single file is an object (list); the shape decides.">
+			<arg name="repo" type="string" required="true"/>
+			<arg name="path" type="string" description="File or directory path within the repo. Omit for the root listing."/>
+			<flag name="ref" short="r" type="string" default="" description="Branch / SHA / tag."/>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/contents<if test="arg.path">/<value name="arg.path"/></if></path>
+				<query>
+					<param name="ref"><value name="flag.ref"/></param>
+				</query>
+			</entry>
+		</command>
+		<command name="readme" description="Fetch the rendered raw README.">
+			<arg name="repo" type="string" required="true"/>
+			<flag name="ref" short="r" type="string" default="" description="Branch / SHA / tag."/>
+			<run>
+				<request method="GET">
+					<url><value name="var.base_url"/>/repos/<value name="arg.repo"/>/readme</url>
+					<query>
+						<if test="flag.ref"><param name="ref"><value name="flag.ref"/></param></if>
+					</query>
+					<header name="User-Agent"><value name="var.ua"/></header>
+					<header name="Accept">application/vnd.github.raw</header>
+					<if test="var.token">
+						<header name="Authorization">Bearer <value name="var.token"/></header>
+					</if>
+				</request>
+			</run>
+		</command>
+		<command name="languages" description="Map of languages to byte counts.">
+			<arg name="repo" type="string" required="true"/>
+			<!-- A map (language -> bytes). over="data" walks it with @key/@value;
+			     the percent is an aggregate, so it uses the expr escape hatch:
+			     `.` is this row's byte count, $.data is the whole map to total. -->
+			<fields over="data">
+				<field name="language">@key</field>
+				<field name="bytes">@value</field>
+				<field name="percent" expr='{{ $t := 0 }}{{ range $.data }}{{ $t = add $t . }}{{ end }}{{ printf "%.1f%%" (mulf 100.0 (divf .value $t)) }}'/>
+			</fields>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/languages</path>
+			</entry>
+		</command>
+		<command name="topics" description="List repository topics.">
+			<arg name="repo" type="string" required="true"/>
+			<!-- The records are the scalar strings at data.names. -->
+			<fields over="data.names"/>
+			<entry>
+				<path>/repos/<value name="arg.repo"/>/topics</path>
+			</entry>
+		</command>
+	</command>
+
+	<command name="org" description="Read organization info.">
+		<command name="get" description="Fetch an org.">
+			<arg name="org" type="string" required="true"/>
+			<fields>
+				<field name="login">login</field>
+				<field name="id">id</field>
+				<field name="name" default="-">name</field>
+				<field name="description" default="-">description</field>
+				<field name="location" default="-">location</field>
+				<field name="blog" default="-">blog</field>
+				<field name="members">followers</field>
+				<field name="repos">public_repos</field>
+				<field name="created">created_at</field>
+			</fields>
+			<entry>
+				<path>/orgs/<value name="arg.org" as="urlpath"/></path>
+			</entry>
+		</command>
+		<command name="members" description="List public members.">
+			<arg name="org" type="string" required="true"/>
+			<flag name="limit" short="n" type="int" default="30"/>
+			<flag name="page" short="p" type="int" default="1"/>
+			<fields>
+				<field name="login">login</field>
+				<field name="id">id</field>
+				<field name="type">type</field>
+			</fields>
+			<entry>
+				<path>/orgs/<value name="arg.org" as="urlpath"/>/public_members</path>
+				<query>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+				</query>
+			</entry>
+		</command>
+		<command name="repos" description="List org repositories.">
+			<arg name="org" type="string" required="true"/>
+			<flag name="limit" short="n" type="int" default="30"/>
+			<flag name="page" short="p" type="int" default="1"/>
+			<flag name="type" type="string" default="all" description="all|public|private|forks|sources|member."/>
+			<fields>
+				<field name="name">full_name</field>
+				<field name="stars">stargazers_count</field>
+				<field name="forks" priority="-1">forks_count</field>
+				<field name="lang" default="-">language</field>
+				<field name="description" default="-" priority="-2">description</field>
+			</fields>
+			<entry>
+				<path>/orgs/<value name="arg.org" as="urlpath"/>/repos</path>
+				<query>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+					<param name="type"><value name="flag.type"/></param>
+				</query>
+			</entry>
+		</command>
+	</command>
+
+	<command name="search" description="Search across GitHub.">
+		<command name="repos" description="Search repositories. QUERY accepts the full GitHub search syntax (e.g. `language:go stars:>1000`).">
+			<arg name="query" type="string" required="true"/>
+			<flag name="limit" short="n" type="int" default="30"/>
+			<flag name="page" short="p" type="int" default="1"/>
+			<flag name="sort" type="string" default="" description="stars|forks|updated|help-wanted-issues."/>
+			<flag name="order" type="string" default="desc" description="asc|desc."/>
+			<fields over="data.items" footer="{{.data.total_count}} total">
+				<field name="name">full_name</field>
+				<field name="stars">stargazers_count</field>
+				<field name="lang" default="-">language</field>
+				<field name="description" default="-">description</field>
+			</fields>
+			<entry>
+				<path>/search/repositories</path>
+				<query>
+					<param name="q"><value name="arg.query"/></param>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+					<param name="sort"><value name="flag.sort"/></param>
+					<param name="order"><value name="flag.order"/></param>
+				</query>
+			</entry>
+		</command>
+		<command name="code" description="Search code. Requires authentication.">
+			<arg name="query" type="string" required="true"/>
+			<flag name="limit" short="n" type="int" default="30"/>
+			<flag name="page" short="p" type="int" default="1"/>
+			<fields over="data.items" footer="{{.data.total_count}} total">
+				<field name="repo">repository.full_name</field>
+				<field name="path">path</field>
+			</fields>
+			<entry>
+				<path>/search/code</path>
+				<query>
+					<param name="q"><value name="arg.query"/></param>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+				</query>
+			</entry>
+		</command>
+		<command name="issues" description="Search issues and pull requests.">
+			<arg name="query" type="string" required="true"/>
+			<flag name="limit" short="n" type="int" default="30"/>
+			<flag name="page" short="p" type="int" default="1"/>
+			<flag name="sort" type="string" default="" description="comments|reactions|created|updated."/>
+			<vars>
+				<!-- Keep repository_url; the REPO column is derived from it. -->
+				<var name="keep">.key == "repository_url"</var>
+			</vars>
+			<fields over="data.items" footer="{{.data.total_count}} total">
+				<field name="repo" expr='{{ .repository_url | default "" | trimPrefix (printf "%s/repos/" $.var.base_url) }}'/>
+				<field name="number">number</field>
+				<field name="state">state</field>
+				<field name="title">title</field>
+			</fields>
+			<entry>
+				<path>/search/issues</path>
+				<query>
+					<param name="q"><value name="arg.query"/></param>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+					<param name="sort"><value name="flag.sort"/></param>
+				</query>
+			</entry>
+		</command>
+		<command name="users" description="Search users.">
+			<arg name="query" type="string" required="true"/>
+			<flag name="limit" short="n" type="int" default="30"/>
+			<flag name="page" short="p" type="int" default="1"/>
+			<fields over="data.items" footer="{{.data.total_count}} total">
+				<field name="login">login</field>
+				<field name="id">id</field>
+				<field name="type">type</field>
+			</fields>
+			<entry>
+				<path>/search/users</path>
+				<query>
+					<param name="q"><value name="arg.query"/></param>
+					<param name="per_page"><value name="flag.limit"/></param>
+					<param name="page"><value name="flag.page"/></param>
+				</query>
+			</entry>
+		</command>
+	</command>
+
+	<command name="rate-limit" description="Show the current rate-limit status. (RESET column is unix epoch seconds.)">
+		<fields over="data.resources">
+			<field name="resource">@key</field>
+			<field name="limit">limit</field>
+			<field name="remaining">remaining</field>
+			<field name="reset">reset</field>
+		</fields>
+		<entry>
+			<path>/rate_limit</path>
+		</entry>
+	</command>
+
+</config>
