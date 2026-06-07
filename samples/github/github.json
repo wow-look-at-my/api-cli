@@ -44,6 +44,22 @@
       ]
     },
 
+    "contents": {
+      "input": "json",
+      "views": [
+        {
+          "name": "table",
+          "when": "{{ kindIs \"slice\" .data }}",
+          "template": "{{ $rows := list \"TYPE\\tSIZE\\tNAME\" }}{{ range .data }}{{ $rows = append $rows (printf \"%v\\t%v\\t%v\" .type .size .name) }}{{ end }}{{ tabwriter $rows }}"
+        },
+        {
+          "name": "file",
+          "default": true,
+          "template": "Path:     {{.data.path}}\nType:     {{.data.type}}\nSize:     {{.data.size}}\nSHA:      {{.data.sha}}{{if .data.encoding}}\nEncoding: {{.data.encoding}}{{end}}\n"
+        }
+      ]
+    },
+
     "issue": {
       "input": "json",
       "views": [
@@ -431,6 +447,7 @@
           "flags": [
             { "name": "ref", "short": "r", "type": "string", "default": "", "description": "Branch / SHA / tag." }
           ],
+          "format": "contents",
           "entry": {
             "path": "/repos/{{.arg.repo}}/contents{{if .arg.path}}/{{.arg.path}}{{end}}",
             "query": { "ref": "{{.flag.ref}}" }
