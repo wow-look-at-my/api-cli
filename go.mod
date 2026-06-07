@@ -4,11 +4,10 @@ go 1.25.0
 
 require (
 	github.com/Masterminds/sprig/v3 v3.2.3
+	github.com/itchyny/gojq v0.12.19
 	github.com/modelcontextprotocol/go-sdk v1.5.0
-	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
-	github.com/wow-look-at-my/yaml-fixed v0.0.0-20260606185458-326a8c67c5ee
 	golang.org/x/term v0.37.0
 	golang.org/x/text v0.31.0
 )
@@ -22,6 +21,7 @@ require (
 	github.com/huandu/xstrings v1.3.3 // indirect
 	github.com/imdario/mergo v0.3.11 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/itchyny/timefmt-go v0.1.8 // indirect
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

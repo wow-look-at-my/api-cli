@@ -1,155 +1,140 @@
 # api-cli — repo orientation for Claude
 
 This is a single-binary Go CLI built on **cobra**. It's a *declarative alias
-system*: the user supplies a config — **tab-indented YAML** (parsed by
-`yaml-fixed`) or JSON — (`./api.json` by default, or `--config <path>`), and at
-runtime the binary builds a cobra command tree from that config. Each leaf
-renders a Go `text/template` against a data context and executes the result.
-Common use case: wrapping REST APIs with `curl`, but the system is
-general-purpose.
+system*: the user supplies an **XML** config (`./api.xml` by default, or
+`--config <path>`), and at runtime the binary builds a cobra command tree from
+that config. Each leaf either runs a command (shell or argv) or performs a
+first-class HTTP **request**, then renders the result — optionally through the
+**fields** auto-formatter.
 
-The user-facing semantics are documented exhaustively in `README.md`. This
-file is a fast orientation for code changes.
+It is a *hybrid* tool: HTTP requests are first-class (`<run><request>`, no
+curl/jq subprocess), but the general shell/argv execution engine is fully
+retained, so non-HTTP aliases (git, tar, ...) still work.
+
+The user-facing semantics are documented in `README.md`. This file is a fast
+orientation for code changes.
 
 ## Module / dependencies
 
 - Module: `github.com/wow-look-at-my/api-cli`, Go 1.25.0.
 - CLI parsing: `github.com/spf13/cobra`.
-- Config parsing: `github.com/wow-look-at-my/yaml-fixed` (tab-indented YAML; tabs
-  only, spaces rejected). Valid JSON is detected and passed straight to
-  `encoding/json` unchanged — see `yamlsource.go`.
+- Config parsing: **XML** via the stdlib `encoding/xml` tokenizer (`xmldom.go`).
+  No third-party config parser. (The Go decoder only supports XML 1.0, so the
+  leading `<?xml ... ?>` declaration is stripped before decoding — see
+  `stripXMLDecl`.)
 - Templating: Go stdlib `text/template` + `github.com/Masterminds/sprig/v3`.
-- JSON Schema validation (test only): `github.com/santhosh-tekuri/jsonschema/v5`.
-- TTY / terminal width: `golang.org/x/term`.
-- East Asian Wide width tables: `golang.org/x/text/width`.
+- jq (response shaping): `github.com/itchyny/gojq` (pure Go, embedded — no jq
+  binary needed).
+- TTY / terminal width: `golang.org/x/term`. East Asian Wide width:
+  `golang.org/x/text/width`.
 - MCP server: `github.com/modelcontextprotocol/go-sdk`.
-- Test assertions: `github.com/stretchr/testify` (go-toolchain's vet
-  canonicalizes testify imports to upstream on every run).
+- Test assertions: `github.com/stretchr/testify`.
+- XML validation (CI only): `wow-look-at-my/xml-validator` — well-formedness,
+  **XML 1.1** (shipped files declare `version="1.1"`). Not used with `--schema`:
+  it stack-overflows on the recursive `<command>` grammar.
 
-Do not add new third-party deps without a clear reason. Stdlib + sprig
-covers most needs.
+Do not add new third-party deps without a clear reason.
 
 ## File map
 
 | File                            | Role                                                        |
 |---------------------------------|-------------------------------------------------------------|
-| `main.go`                       | Entrypoint, root cobra command, persistent flags, config loading. `preparseGlobalFlags` extracts `--config` / `--mcp` / `--cors` from argv via a tolerant pflag parse before the cobra tree is built. |
-| `config.go`                     | Schema structs (`Config`, `Command`, `Step`, `Arg`, `Flag`, `Cmd`, `Format`, `View`, `FormatRef`); `Load` (reads bytes → `sourceToJSON` → strict `encoding/json` decode); `validate`. |
-| `yamlsource.go`                 | `sourceToJSON`: valid JSON passes straight through; otherwise the source is parsed as tab-YAML via `yaml-fixed` (`yaml.Parse`) and re-encoded to JSON, preserving the single strict decode path (unknown-field rejection, `Cmd`/`FormatRef` unmarshalers). |
-| `build.go`                      | Walks `Config.Commands` building `cobra.Command` tree. Threads inheritance for `command`/`cwd`/`stdin`/`confirm`/`format`. Implements `runLeaf` and `passthroughParse`. |
-| `exec.go`                       | `doExec` (streaming), `captureExec` (steps), `captureExecCapped` (format path with 32 MiB cap), `parseResult`, `cappedTee`. |
-| `render.go`                     | `renderString`, `renderEntry`, `funcMap` with sprig + custom helpers (`querystring`, `shellquote`, `urlpath`, `spread`, `fileExists`, `dirExists`, `tabwriter`, `padRight`, `padLeft`, `displayWidth`, `stripANSI`, `filterSuffix`, `filterPrefix`). |
-| `format.go`                     | Format-system runtime: `resolveFormat`, `userVerdictFromFlags`, `stdoutTTY`, `formatContext`, `renderPredicate` (cached), `parseInput`, `selectView`, `execLeaf`, `runFormatted`. |
-| `align.go`                      | Width-aware aligner: `displayWidth`, `stripANSI`, `alignColumns`, `padRight`, `padLeft`. ANSI-stripping state machine + East Asian Width lookup. |
-| `mcp.go`                        | MCP (Model Context Protocol) server entrypoint: `runMCP` (stdio / http / sse transports), `buildMCPServer`. `mcpLeaf` carries inherited format context. |
-| `mcp_exec.go`                   | MCP tool execution: `mcpExecLeaf` runs a leaf and applies formatting via `mcpFormat`. Behaves like `--format=always`: `.tty` is `true`, `.width` is 80. |
-| `cors.go`                       | CORS middleware for the MCP HTTP/SSE server. `CorsLevel` (disabled/permissive/strict/enabled), `parseCorsLevel`, `withCORS`, origin matchers. |
-| `debug.go`                      | Debug/verbose logging infrastructure: `logVerbose`, `logDebug`, `logDebugBlock`, helpers. Package-level `verboseMode`/`debugMode` vars set from `--verbose`/`--debug` flags in `runLeaf`. |
-| `docs.go`                       | Built-in `docs` subcommand: embeds README, schema, and example via `go:embed`. Schema key lookup via `schemaLookup`. |
-| `api.schema.json`               | Authoritative JSON Schema for configs. Updated alongside `config.go`. |
-| `api.example.json`              | Reference config; covered by `TestExampleConfigMatchesSchema` and integration tests. |
-| `samples/github/github.yaml`    | Read-only GitHub REST API wrapper, in tab-indented YAML: table/detail views, `jq`-based response trimming. Used by the Docker image and the CI demo step. Schema-checked by `TestGithubSampleLoadsAndMatchesSchema`. |
-| `samples/github/Dockerfile.github` | Alpine image: builds `api-cli`, ships with `curl`+`jq`+`samples/github/github.yaml`. ENTRYPOINT runs `--mcp`; transport is CMD (default `stdio`). CI publishes to `pazer.build/api-cli`. |
-| `*_test.go`                     | Unit + integration tests (testify). `integration_test.go` has the `execCmd` / `execCmdFull` helpers used by most tests. |
+| `main.go`                       | Entrypoint, root cobra command, persistent flags, config loading. `preparseGlobalFlags` extracts `--config` / `--mcp` / `--cors` before the cobra tree is built. Config discovery: `./api.xml`. |
+| `config.go`                     | Schema structs (`Config`, `Command`, `Step`, `Arg`, `Flag`, `Cmd`, `Request`, `Param`, `Header`, `Response`, `Fields`, `Field`, `Format`, `View`, `FormatRef`); `Load` (bytes → `parseConfigXML` → `validate`); `validate`/`validateCommand`/`validateRequest`. |
+| `xmldom.go`                     | XML tokenizer → order-preserving DOM (`xnode`): preserves mixed content, CDATA, attribute order. `stripXMLDecl`, `checkAttrs` (rejects unknown attributes). |
+| `xmlcompile.go`                 | Placeholder compiler: `<value>`/`<if>`/`<else>`/`<for>` (+ surrounding text) → Go `text/template` source. `cleanText`/`dedentTabs` handle structural-tab whitespace. |
+| `xmlsource.go`                  | `parseConfigXML` + config builders (`buildConfig`, `buildCommandNode`/`addCommandChild`, `buildRun`, `buildRequest`, `buildFields`, `buildEntry`, ...). `<entry>` is converted to a `json.RawMessage`. |
+| `build.go`                      | Builds the `cobra.Command` tree. Threads inheritance for run (`*Cmd`/`*Request`), `cwd`/`stdin`/`confirm`/`format`. `runLeaf`, `passthroughParse`, `renderVars` (fixpoint — vars may reference other vars). |
+| `exec.go`                       | Shell/argv execution: `doExec` (streaming), `captureExec` (steps), `captureExecCapped` (format path, 32 MiB cap), `parseResult`, `cappedTee`. |
+| `request.go`                    | First-class HTTP: `runRequest` (net/http) builds URL/query/headers/body from templates; `applyJQ` (embedded gojq) for `<response jq=>`. `httpClient` is a package var (tests swap it for httptest). |
+| `fields.go`                     | The `<fields>` auto-formatter: `renderFields` represents one declaration as table / list / lines / raw / json / markdown / csv, with `show_in` gating, `@key`/`@value` map walking, and priority-based column dropping. Reuses `align.go`. |
+| `format.go`                     | Execution + presentation dispatch: `execLeaf` picks command-vs-request execution and fields-vs-legacy-format-vs-raw output. `captureRun`, `streamRequest`, `runFieldsFormatted`, `runFormatted`, `resolveFormat`, `selectView`. |
+| `render.go`                     | `renderString`, `renderEntry`, `lookupPath`, `funcMap` (sprig + custom helpers incl. `truthy`, `querystring`, `urlpath`, `spread`, ...). |
+| `align.go`                      | Width-aware aligner: `displayWidth`, `stripANSI`, `alignColumns`, `padRight`/`padLeft`. |
+| `mcp.go` / `mcp_exec.go`        | MCP server: one tool per leaf. Threads run (`*Cmd`/`*Request`) + format inheritance; `mcpExecLeaf` runs the leaf and applies `<fields>` (like `--format=always`: `.tty` true, width 80) or a legacy format. |
+| `cors.go` / `debug.go` / `docs.go` | CORS middleware for MCP HTTP/SSE; verbose/debug logging; the `docs` subcommand (embeds `README.md`, `api.schema.xsd`, `api.example.xml`). |
+| `api.schema.xsd`                | XSD reference for the XML grammar (editor aid + `docs schema`). NOT enforced at runtime; the loader is authoritative. |
+| `api.example.xml`              | Reference config (jsonplaceholder); loaded by `TestExampleConfigsLoad`. |
+| `samples/github/github.xml`     | Read-only GitHub REST API wrapper in XML: first-class requests, jq noise-trimming, fields views. Used by the Docker image and CI demo; loaded by `TestGithubSampleLoads`. |
+| `samples/github/Dockerfile.github` | Alpine image: ships `api-cli` + `github.xml`; ENTRYPOINT runs `--mcp`. No curl/jq (requests + gojq built in). |
+| `*_test.go`                     | Unit + integration tests. `integration_test.go` has `execCmd`/`execCmdFull`; `request_test.go`/`request_integration_test.go` use httptest via `swapHTTPClient`. |
+
+## The XML config model
+
+`<config name="..."><command>...</command></config>`. Element content may
+interleave text with **placeholders** that compile to Go templates:
+
+- `<value name="var.x"/>` → `{{ .var.x }}`; `default=`/`as=` add `| default
+  "..."` / a wrapping func; `expr="..."` is a verbatim template.
+- `<if test="path" [eq="lit"]>...<else/>...</if>` → `{{ if truthy .path }}...`
+  (or `{{ if eq (printf "%v" .path) "lit" }}...`).
+- `<for each="path" [as="x"]>...</for>` → `{{ range ... }}...{{ end }}`.
+
+`<run>` is the executable (inherited): a `<request>`, an `<argv>` list, or shell
+text. `<entry>` (path/query/arbitrary) becomes `.entry`. `<fields>` declares
+output shape; `<vars>/<var>` define `.var` (fixpoint resolution).
 
 ## Key design rules
 
-1. **Inheritance pattern.** `command`, `cwd`, `stdin`, `confirm`, `format`
-   all inherit down the tree: closest non-empty (or `Defined()`) ancestor
-   wins; a leaf overrides its ancestor for that subtree. Threading happens
-   in `buildCommand` (`build.go`) via `inherited*` parameters and in
-   `collectMCPLeaves` (`mcp.go`) via the same pattern; new inheritable
-   fields must be threaded in both paths.
-2. **Streaming fast path stays intact.** `doExec` streams the child's
-   stdout straight to `execStdout`. The format path captures via
-   `captureExecCapped` (32 MiB buffer; on overflow, prefix flushes and
-   the rest streams through). When no format applies *or* the user has
-   opted out, `runLeaf` calls `doExec` and never touches the capture
-   path.
-3. **Format AND-semantics.** Formatting applies iff the author's
-   `format.when` predicate is truthy AND the user verdict is yes.
-   `--no-format` / `NO_FORMAT=1` / `--format=raw` veto from the user side.
-   `--format=always` lies about `.tty` in predicate context but cannot
-   override an explicit `when: "false"`.
-4. **Steps capture, leaves stream (or capture if formatted).** Steps
-   capture via `captureExec` (no cap — step output is expected to be
-   small structured data feeding `.result.<name>`). A step with a `when`
-   predicate that evaluates falsy is skipped entirely: no command runs,
-   `.result.<name>` is not set, and the execution count is unaffected.
-   The leaf's own command streams unless a format applies, in which case
-   it goes through `captureExecCapped`.
-5. **Templates use missingkey=zero.** Missing map keys render as nil (or
-   `<no value>` for `map[string]any`). For strict mode, use sprig's
-   `required`. Don't change this default.
-6. **Test redirection.** `execStdin`, `execStdout`, `execStderr` are
-   package-level `io.Reader`/`Writer` vars; tests swap them for
-   `bytes.Buffer`. The TTY check (`stdoutTTY`) type-asserts to
-   `*os.File` — non-files are treated as non-TTYs, which is exactly
-   what the test path wants.
-7. **Passthrough mode.** When `Command.Passthrough` is true, the cobra
-   command accepts arbitrary args (everything after `--` in the wrapper
-   script). `passthroughParse` in `build.go` extracts declared flags
-   from the raw args; everything else lands in `.rest` (a `[]string`).
-   The template data context gets `.rest` alongside the usual `.flag`,
-   `.env`, `.var`, `.result`, `.entry` namespaces.
+1. **Inheritance.** `<run>` (command *or* request), `cwd`, `stdin`, `confirm`,
+   `format` inherit down the tree; closest non-empty ancestor wins. A node's
+   `<run>` of either kind clears the inherited run of the other kind. Threaded
+   in `buildCommand` (`build.go`) and `collectMCPLeaves` (`mcp.go`) — new
+   inheritable fields need both paths.
+2. **Placeholders compile to templates.** The node language is sugar over
+   `text/template`; everything funnels through `renderString`.
+3. **Execution is command OR request.** `execLeaf` streams raw (`doExec` /
+   `streamRequest`) unless a formatter applies. Steps are command-only.
+4. **Formatting precedence.** `<fields>` (always, unless the user opts out) >
+   legacy `<format>` (author `when` AND user verdict) > raw. `--no-format` /
+   `--format=raw` / `NO_FORMAT` veto. `--as=<sink>` forces a fields
+   representation.
+5. **Fields scoping.** A `<field>` body is a record-relative path; `@key`/
+   `@value` are the entry when `over=` walks a map; `expr=` sees the record
+   promoted to the top level plus the whole context via `$` (`$.var`, `$.data`).
+6. **Templates use `missingkey=zero`.** Don't change this default.
+7. **Test redirection.** `execStdin/Stdout/Stderr` and `httpClient` are
+   package-level vars; tests swap them.
 
 ## Adding a new field to the config
 
 1. Add it to the relevant struct in `config.go`.
-2. If it inherits, add an `inherited<Name>` parameter to `buildCommand`
-   (mirror `inheritedCmd` / `inheritedCwd` / etc.). Update the call sites
-   in `main.go` and the recursive `buildCommand` self-call.
-3. If it needs validation, extend `validate` / `validateCommand`.
-4. Add it to `api.schema.json` (top-level or under `definitions/commandNode`).
-5. Add a row to the relevant table in `README.md`.
-6. Update `api.example.json` if the example should exercise it.
-7. Add tests: unit (struct unmarshal, validation) + integration (end-to-end
-   via `execCmd` / `execCmdFull`).
-
-## Adding a new template helper
-
-1. Implement the function in `render.go` (or a topical file like `align.go`).
-2. Register it in `funcMap()` in `render.go`.
-3. Document in the "Template helpers" table in `README.md`.
-4. Add tests in `render_test.go` (renders correctly via a template).
+2. Parse it in `xmlsource.go` (the relevant `build*` function); reject unknown
+   attrs via `checkAttrs`.
+3. If it inherits, thread it in `buildCommand` (`build.go`) and
+   `collectMCPLeaves` (`mcp.go`).
+4. If it needs validation, extend `validate` / `validateCommand`.
+5. Document it in `api.schema.xsd` and `README.md`; exercise it in
+   `api.example.xml` if integration tests rely on it.
+6. Add tests: unit (parse + validate in `xmlsource_test.go`) + integration.
 
 ## Common gotchas
 
-- **`build.go` line budget.** The toolchain warns at 500 lines. If you're
-  adding more than a few lines to `build.go`, consider extracting into
-  `format.go` or a new topical file.
-- **Schema drift.** `api.schema.json` is validated against
-  `api.example.json` by `TestExampleConfigMatchesSchema`. Any new field
-  needs both documentation and an example in `api.example.json` if it's
-  exercised by integration tests.
-- **`spread` sentinel.** The `spread` template helper uses NUL (`\x00`)
-  bytes to delimit elements and SOH (`\x01`) as an end marker. In
-  argv-form commands, the executor splits on NUL into separate argv
-  slots. In shell-form commands, `expandSpreadForShell` (`exec.go`)
-  replaces each sentinel region with shell-quoted elements.
-- **Number normalization in step results.** `parseResult` (`exec.go`)
-  normalizes JSON numbers to `int64` / `float64` so sprig arithmetic works
-  without casts. The format path's `parseInput("json", ...)` reuses this.
-- **`when` predicate reuse.** `Step.When` and `Format.When` / `View.When`
-  share the same truthiness rules (`isTruthy` in `format.go`): empty,
-  `"false"`, `"0"`, `"no"` are falsy, everything else is truthy. Step
-  `when` is evaluated in `runLeaf` (`build.go`) before entry rendering or
-  command execution; format/view `when` is evaluated in `format.go` via
-  `renderPredicate`.
+- **Line budget.** go-toolchain warns at 500 lines, **errors at 750**. Several
+  files are near the warning; extract into a topical file rather than growing one
+  past 750.
+- **XML 1.1.** Shipped `*.xml`/`*.xsd` must declare `version="1.1"` (the CI
+  `xml-validator` rejects 1.0 / missing declarations). The Go loader strips the
+  declaration, so inline test snippets can omit it.
+- **`spread` sentinel.** NUL/SOH markers delimit spread elements (`render.go` /
+  `exec.go`).
+- **Number normalization.** `parseResult` (`exec.go`) normalizes JSON numbers to
+  `int64`/`float64`; `displayValue` (`fields.go`) renders them without a trailing
+  `.0`. gojq output is re-marshaled then reparsed through the same path.
+- **`when` vs `test`.** `when=` (step/view/format) is a full template predicate;
+  `test=` (`<if>`) is a context path checked for truthiness.
 
 ## Tooling
 
 - `go-toolchain` runs `go mod tidy`, vet, all tests with coverage, and the
-  build. **Do not run bare `go build` / `go test` / `go mod tidy` —
-  always `go-toolchain`.**
-- Coverage minimum is 80% (toolchain enforces).
-- CI: `.github/workflows/ci.yml` uses `wow-look-at-my/go-toolchain@v1`.
+  build. **Always `go-toolchain`, never bare `go ...`.** Coverage minimum 80%.
+- CI: `.github/workflows/ci.yml` (go-toolchain test + demo, `validate-xml`,
+  docker).
 
 ## Conventions
 
-- Lowercase `lint`, `test`, etc. — go-toolchain handles all of it.
-- Commit messages: clear "what + why" 1-2 line summary; do not lead with
-  "Add" if the change is a refactor.
+- Lowercase `lint`, `test`, etc. — go-toolchain handles it.
+- Commit messages: clear "what + why" summary; don't lead with "Add" for a
+  refactor.
 - Branch naming for Claude sessions: `claude/<descriptor>-<short-id>`.
-- Squash-merge: PRs get squashed into a single commit on merge — do not
-  rebase or force-push to clean up history.
+- Squash-merge: PRs squash to one commit — don't rebase/force-push to clean up.

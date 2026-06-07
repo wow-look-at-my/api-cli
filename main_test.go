@@ -13,7 +13,7 @@ import (
 
 // chdir switches the working directory for the duration of the test and
 // restores it on cleanup. Used for config-discovery tests that need to
-// control ./api.json's existence.
+// control ./api.xml's existence.
 func chdir(t *testing.T, dir string) {
 	t.Helper()
 	prev, err := os.Getwd()
@@ -80,15 +80,11 @@ func TestRun_InvalidConfigReturns2(t *testing.T) {
 
 func TestRun_HappyPath(t *testing.T) {
 	dir := t.TempDir()
-	cfg := `{
-      "name": "t",
-      "command": "printf '%s' {{.arg.id}}",
-      "commands": [{
-        "name": "show",
-        "args": [{"name": "id", "type": "int", "required": true}]
-      }]
-    }`
-	p := filepath.Join(dir, "api.json")
+	cfg := `<config name="t">
+	<run>printf '%s' {{.arg.id}}</run>
+	<command name="show"><arg name="id" type="int" required="true"/></command>
+</config>`
+	p := filepath.Join(dir, "api.xml")
 	require.NoError(t, os.WriteFile(p, []byte(cfg), 0o600))
 
 	prevOut := execStdout
@@ -109,14 +105,13 @@ func TestRun_HappyPath(t *testing.T) {
 	assert.Equal(t, "42", buf.String())
 }
 
-func TestRun_PicksUpCwdAPIJson(t *testing.T) {
+func TestRun_PicksUpCwdAPIXml(t *testing.T) {
 	dir := t.TempDir()
-	cfg := `{
-      "name": "t",
-      "command": "true",
-      "commands": [{"name":"ping"}]
-    }`
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "api.json"), []byte(cfg), 0o600))
+	cfg := `<config name="t">
+	<run>true</run>
+	<command name="ping"/>
+</config>`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "api.xml"), []byte(cfg), 0o600))
 	chdir(t, dir)
 
 	prevOut := execStdout
@@ -231,12 +226,11 @@ func TestApplyEnvVars_BadFormat(t *testing.T) {
 
 func TestRun_VarSetsEnv(t *testing.T) {
 	dir := t.TempDir()
-	cfg := `{
-      "name": "t",
-      "command": "printf '%s' {{.env.API_CLI_TEST_TOKEN}}",
-      "commands": [{"name":"show"}]
-    }`
-	p := filepath.Join(dir, "api.json")
+	cfg := `<config name="t">
+	<run>printf '%s' {{.env.API_CLI_TEST_TOKEN}}</run>
+	<command name="show"/>
+</config>`
+	p := filepath.Join(dir, "api.xml")
 	require.NoError(t, os.WriteFile(p, []byte(cfg), 0o600))
 
 	prevOut := execStdout
