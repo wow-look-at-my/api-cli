@@ -6,7 +6,9 @@
     "base_url": "{{.env.GITHUB_API_URL | default \"https://api.github.com\"}}",
     "ua": "api-cli-github-example",
     "token": "{{ or .env.GITHUB_TOKEN .env.GH_TOKEN }}",
-    "filter": "walk(if type == \"object\" then with_entries(select((.key | endswith(\"url\") | not) and (.key | IN(\"node_id\",\"gravatar_id\",\"user_view_type\",\"site_admin\",\"performed_via_github_app\",\"active_lock_reason\",\"author_association\",\"temp_clone_token\",\"custom_properties\",\"issue_field_values\",\"permissions\",\"_links\",\"network_count\",\"pinned_comment\",\"reactions\",\"sub_issues_summary\",\"issue_dependencies_summary\") | not))) | if has(\"forks_count\") then del(.forks) else . end | if has(\"watchers_count\") then del(.watchers) else . end | if has(\"open_issues_count\") then del(.open_issues) else . end else . end)"
+    "noise": "\"node_id\",\"gravatar_id\",\"user_view_type\",\"site_admin\",\"performed_via_github_app\",\"active_lock_reason\",\"author_association\",\"temp_clone_token\",\"custom_properties\",\"issue_field_values\",\"permissions\",\"_links\",\"network_count\",\"pinned_comment\",\"reactions\",\"sub_issues_summary\",\"issue_dependencies_summary\"",
+    "keep": "false",
+    "filter": "walk(if type == \"object\" then with_entries(select(((.key | endswith(\"url\") | not) and (.key | IN({{.var.noise}}) | not)) or ({{.var.keep}}))) | if has(\"forks_count\") then del(.forks) else . end | if has(\"watchers_count\") then del(.watchers) else . end | if has(\"open_issues_count\") then del(.open_issues) else . end else . end)"
   },
 
   "request": {
@@ -618,7 +620,7 @@
             { "name": "sort", "type": "string", "default": "", "description": "comments|reactions|created|updated." }
           ],
           "vars": {
-            "filter": "walk(if type == \"object\" then with_entries(select((.key == \"repository_url\" or (.key | endswith(\"url\") | not)) and (.key | IN(\"node_id\",\"gravatar_id\",\"user_view_type\",\"site_admin\",\"performed_via_github_app\",\"active_lock_reason\",\"author_association\",\"temp_clone_token\",\"custom_properties\",\"issue_field_values\",\"permissions\",\"_links\",\"network_count\",\"pinned_comment\",\"reactions\",\"sub_issues_summary\",\"issue_dependencies_summary\") | not))) | if has(\"forks_count\") then del(.forks) else . end | if has(\"watchers_count\") then del(.watchers) else . end | if has(\"open_issues_count\") then del(.open_issues) else . end else . end)"
+            "keep": ".key == \"repository_url\""
           },
           "over": "data.items",
           "footer": "{{.data.total_count}} total",

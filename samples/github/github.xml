@@ -76,10 +76,25 @@
 		<!-- Resolve the token once: whichever of GITHUB_TOKEN / GH_TOKEN is set.
 		     Every request then just checks var.token, no per-request if/else. -->
 		<var name="token"><value expr='{{ or .env.GITHUB_TOKEN .env.GH_TOKEN }}'/></var>
-		<!-- jq filter shared by every command: recursively drop *url keys,
-		     GraphQL node_ids, and other noise, then drop counts that duplicate
-		     a *_count field. Opaque jq source, left verbatim. -->
-		<var name="filter"><![CDATA[walk(if type == "object" then with_entries(select((.key | endswith("url") | not) and (.key | IN("node_id","gravatar_id","user_view_type","site_admin","performed_via_github_app","active_lock_reason","author_association","temp_clone_token","custom_properties","issue_field_values","permissions","_links","network_count","pinned_comment","reactions","sub_issues_summary","issue_dependencies_summary") | not))) | if has("forks_count") then del(.forks) else . end | if has("watchers_count") then del(.watchers) else . end | if has("open_issues_count") then del(.open_issues) else . end else . end)]]></var>
+		<!-- Noise keys to strip from every response (alongside any *url key). -->
+		<var name="noise">"node_id","gravatar_id","user_view_type","site_admin","performed_via_github_app","active_lock_reason","author_association","temp_clone_token","custom_properties","issue_field_values","permissions","_links","network_count","pinned_comment","reactions","sub_issues_summary","issue_dependencies_summary"</var>
+		<!-- Extra jq predicate for keys to KEEP despite the rules below. Default
+		     keeps nothing extra; a command can override it (see search issues). -->
+		<var name="keep">false</var>
+		<!-- Shared response filter, written once: drop *url keys and the noise
+		     list (unless var.keep rescues a key), then drop a bare count when its
+		     *_count twin exists. Commands tweak it via var.keep, not by copying. -->
+		<var name="filter"><![CDATA[walk(
+  if type == "object" then
+    with_entries(select(
+      ((.key | endswith("url") | not) and (.key | IN({{.var.noise}}) | not))
+      or ({{.var.keep}})
+    ))
+    | if has("forks_count")       then del(.forks)       else . end
+    | if has("watchers_count")    then del(.watchers)    else . end
+    | if has("open_issues_count") then del(.open_issues) else . end
+  else . end
+)]]></var>
 	</vars>
 
 	<!-- Root request, inherited by every leaf. -->
@@ -556,7 +571,8 @@
 			<flag name="page" short="p" type="int" default="1"/>
 			<flag name="sort" type="string" default="" description="comments|reactions|created|updated."/>
 			<vars>
-				<var name="filter"><![CDATA[walk(if type == "object" then with_entries(select((.key == "repository_url" or (.key | endswith("url") | not)) and (.key | IN("node_id","gravatar_id","user_view_type","site_admin","performed_via_github_app","active_lock_reason","author_association","temp_clone_token","custom_properties","issue_field_values","permissions","_links","network_count","pinned_comment","reactions","sub_issues_summary","issue_dependencies_summary") | not))) | if has("forks_count") then del(.forks) else . end | if has("watchers_count") then del(.watchers) else . end | if has("open_issues_count") then del(.open_issues) else . end else . end)]]></var>
+				<!-- Keep repository_url; the REPO column is derived from it. -->
+				<var name="keep">.key == "repository_url"</var>
 			</vars>
 			<fields over="data.items" footer="{{.data.total_count}} total">
 				<field name="repo" expr='{{ .repository_url | default "" | trimPrefix (printf "%s/repos/" $.var.base_url) }}'/>
