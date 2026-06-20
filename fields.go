@@ -11,6 +11,7 @@ import (
 var knownSinks = map[string]bool{
 	"table": true, "list": true, "lines": true,
 	"raw": true, "json": true, "markdown": true, "csv": true,
+	"timeline": true,
 }
 
 // record is one row of output. obj is the object (object record), the entry
@@ -59,6 +60,8 @@ func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width 
 		out, err = renderMarkdownSink(recs, fieldsList, ctx, sink)
 	case "csv":
 		out, err = renderCSVSink(recs, fieldsList, ctx, sink)
+	case "timeline":
+		out, err = renderTimelineSink(recs, fieldsList, ctx)
 	}
 	if err != nil {
 		return "", err

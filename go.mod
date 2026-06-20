@@ -8,6 +8,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
+	github.com/wow-look-at-my/ascii-timeline v0.0.0-20260530054731-aa3acff2a327
 	golang.org/x/term v0.37.0
 	golang.org/x/text v0.31.0
 )

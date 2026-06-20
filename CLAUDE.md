@@ -28,6 +28,8 @@ orientation for code changes.
 - TTY / terminal width: `golang.org/x/term`. East Asian Wide width:
   `golang.org/x/text/width`.
 - MCP server: `github.com/modelcontextprotocol/go-sdk`.
+- Timeline sink: `github.com/wow-look-at-my/ascii-timeline/timeline` (pure-stdlib
+  renderer; powers `--as=timeline`).
 - Test assertions: `github.com/stretchr/testify`.
 - XML validation (CI only): `wow-look-at-my/xml-validator` — well-formedness,
   **XML 1.1** (shipped files declare `version="1.1"`). Not used with `--schema`:
@@ -47,7 +49,8 @@ Do not add new third-party deps without a clear reason.
 | `build.go`                      | Builds the `cobra.Command` tree. Threads inheritance for run (`*Cmd`/`*Request`), `cwd`/`stdin`/`confirm`/`format`. `runLeaf`, `passthroughParse`, `renderVars` (fixpoint — vars may reference other vars). |
 | `exec.go`                       | Shell/argv execution: `doExec` (streaming), `captureExec` (steps), `captureExecCapped` (format path, 32 MiB cap), `parseResult`, `cappedTee`. |
 | `request.go`                    | First-class HTTP: `runRequest` (net/http) builds URL/query/headers/body from templates; `applyJQ` (embedded gojq) for `<response jq=>`. `httpClient` is a package var (tests swap it for httptest). |
-| `fields.go`                     | The `<fields>` auto-formatter: `renderFields` represents one declaration as table / list / lines / raw / json / markdown / csv, with `show_in` gating, `@key`/`@value` map walking, and priority-based column dropping. Reuses `align.go`. |
+| `fields.go`                     | The `<fields>` auto-formatter: `renderFields` represents one declaration as table / list / lines / raw / json / markdown / csv / timeline, with `show_in` gating, `@key`/`@value` map walking, and priority-based column dropping. Reuses `align.go`. |
+| `timeline.go`                    | The `timeline` sink (`--as=timeline`): maps each record to an `ascii-timeline` event by field name (`label`/`date`/`start`/`end`/`description`/`color`), then renders via the `timeline` library. Color/width come from the format context (`.tty`/`.width`). |
 | `format.go`                     | Execution + presentation dispatch: `execLeaf` picks command-vs-request execution and fields-vs-legacy-format-vs-raw output. `captureRun`, `streamRequest`, `runFieldsFormatted`, `runFormatted`, `resolveFormat`, `selectView`. |
 | `render.go`                     | `renderString`, `renderEntry`, `lookupPath`, `funcMap` (sprig + custom helpers incl. `truthy`, `querystring`, `urlpath`, `spread`, ...). |
 | `align.go`                      | Width-aware aligner: `displayWidth`, `stripANSI`, `alignColumns`, `padRight`/`padLeft`. |

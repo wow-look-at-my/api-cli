@@ -324,6 +324,10 @@
 				<field name="published">published_at</field>
 				<field name="draft">draft</field>
 				<field name="prerelease">prerelease</field>
+				<!-- Timeline view (force the sink: as=timeline). show_in keeps
+				     these fields out of the table and json. -->
+				<field name="label" show_in="timeline">tag_name</field>
+				<field name="date" show_in="timeline">published_at</field>
 			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/releases</path>
@@ -360,6 +364,9 @@
 				<field name="author">commit.author.name</field>
 				<field name="date">commit.author.date</field>
 				<field name="message" firstline="true">commit.message</field>
+				<!-- Timeline view (force the sink: as=timeline). The date field
+				     above already maps; add a timeline-only label. -->
+				<field name="label" show_in="timeline" firstline="true">commit.message</field>
 			</fields>
 			<entry>
 				<path>/repos/<value name="arg.repo"/>/commits</path>
