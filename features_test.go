@@ -18,14 +18,14 @@ import (
 
 func TestIntegration_VariadicStringArgs(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:	"echo",
+			Name: "echo",
 			Args: []Arg{
 				{Name: "first", Required: true},
 				{Name: "rest", Variadic: true},
 			},
-			Command:	&Cmd{Argv: []string{"echo", "{{.arg.first}}", "{{spread .arg.rest}}"}},
+			Command: &Cmd{Argv: []string{"echo", "{{.arg.first}}", "{{spread .arg.rest}}"}},
 		}},
 	}
 	code, out := execCmd(t, cfg, "echo", "a", "b", "c", "d")
@@ -35,13 +35,13 @@ func TestIntegration_VariadicStringArgs(t *testing.T) {
 
 func TestIntegration_VariadicEmptyOptional(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:	"echo",
+			Name: "echo",
 			Args: []Arg{
 				{Name: "rest", Variadic: true},
 			},
-			Command:	&Cmd{Argv: []string{"echo", "{{spread .arg.rest}}", "done"}},
+			Command: &Cmd{Argv: []string{"echo", "{{spread .arg.rest}}", "done"}},
 		}},
 	}
 	code, out := execCmd(t, cfg, "echo")
@@ -51,13 +51,13 @@ func TestIntegration_VariadicEmptyOptional(t *testing.T) {
 
 func TestIntegration_VariadicRequiredRejectsZero(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:	"echo",
+			Name: "echo",
 			Args: []Arg{
 				{Name: "rest", Required: true, Variadic: true},
 			},
-			Command:	&Cmd{Argv: []string{"echo", "{{spread .arg.rest}}"}},
+			Command: &Cmd{Argv: []string{"echo", "{{spread .arg.rest}}"}},
 		}},
 	}
 	code, _ := execCmd(t, cfg, "echo")
@@ -66,13 +66,13 @@ func TestIntegration_VariadicRequiredRejectsZero(t *testing.T) {
 
 func TestIntegration_VariadicIntArgs(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:	"sum",
+			Name: "sum",
 			Args: []Arg{
 				{Name: "nums", Type: "int", Variadic: true},
 			},
-			Command:	&Cmd{Shell: true, Template: `printf '%d' {{add (index .arg.nums 0) (index .arg.nums 1)}}`},
+			Command: &Cmd{Shell: true, Template: `printf '%d' {{add (index .arg.nums 0) (index .arg.nums 1)}}`},
 		}},
 	}
 	code, out := execCmd(t, cfg, "sum", "3", "4")
@@ -82,13 +82,13 @@ func TestIntegration_VariadicIntArgs(t *testing.T) {
 
 func TestIntegration_VariadicIntRejectsNonNumeric(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:	"sum",
+			Name: "sum",
 			Args: []Arg{
 				{Name: "nums", Type: "int", Variadic: true},
 			},
-			Command:	&Cmd{Shell: true, Template: `true`},
+			Command: &Cmd{Shell: true, Template: `true`},
 		}},
 	}
 	code, _ := execCmd(t, cfg, "sum", "3", "oops")
@@ -99,12 +99,12 @@ func TestIntegration_VariadicIntRejectsNonNumeric(t *testing.T) {
 
 func TestIntegration_PreconditionPasses(t *testing.T) {
 	cfg := &Config{
-		Name:		"t",
-		Command:	&Cmd{Shell: true, Template: `echo ran`},
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: `echo ran`},
 		Commands: []Command{{
-			Name:		"go",
-			Args:		[]Arg{{Name: "n", Type: "int", Required: true}},
-			Preconditions:	[]string{`{{if le .arg.n 0}}n must be positive{{end}}`},
+			Name:          "go",
+			Args:          []Arg{{Name: "n", Type: "int", Required: true}},
+			Preconditions: []string{`{{if le .arg.n 0}}n must be positive{{end}}`},
 		}},
 	}
 	code, out := execCmd(t, cfg, "go", "5")
@@ -114,12 +114,12 @@ func TestIntegration_PreconditionPasses(t *testing.T) {
 
 func TestIntegration_PreconditionFails(t *testing.T) {
 	cfg := &Config{
-		Name:		"t",
-		Command:	&Cmd{Shell: true, Template: `echo should-not-run`},
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: `echo should-not-run`},
 		Commands: []Command{{
-			Name:		"go",
-			Args:		[]Arg{{Name: "n", Type: "int", Required: true}},
-			Preconditions:	[]string{`{{if le .arg.n 0}}n must be positive (got {{.arg.n}}){{end}}`},
+			Name:          "go",
+			Args:          []Arg{{Name: "n", Type: "int", Required: true}},
+			Preconditions: []string{`{{if le .arg.n 0}}n must be positive (got {{.arg.n}}){{end}}`},
 		}},
 	}
 	code, out, errOut := execCmdFull(t, cfg, "go", "0")
@@ -133,11 +133,11 @@ func TestIntegration_PreconditionFileExists(t *testing.T) {
 	target := dir + "/already-here"
 	require.NoError(t, os.WriteFile(target, []byte("x"), 0o600))
 	cfg := &Config{
-		Name:		"t",
-		Command:	&Cmd{Shell: true, Template: `echo created`},
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: `echo created`},
 		Commands: []Command{{
-			Name:	"create",
-			Args:	[]Arg{{Name: "out", Required: true}},
+			Name: "create",
+			Args: []Arg{{Name: "out", Required: true}},
 			Preconditions: []string{
 				`{{if fileExists .arg.out}}{{.arg.out}} already exists{{end}}`,
 			},
@@ -152,14 +152,14 @@ func TestIntegration_PreconditionFileExists(t *testing.T) {
 
 func TestIntegration_TemplatedStringDefault(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:	"show",
-			Args:	[]Arg{{Name: "archive", Required: true}},
+			Name: "show",
+			Args: []Arg{{Name: "archive", Required: true}},
 			Flags: []Flag{
 				{Name: "to", Type: "string", Default: `{{trimSuffix ".tar.gz" .arg.archive}}`},
 			},
-			Command:	&Cmd{Argv: []string{"echo", "{{.flag.to}}"}},
+			Command: &Cmd{Argv: []string{"echo", "{{.flag.to}}"}},
 		}},
 	}
 	code, out := execCmd(t, cfg, "show", "foo.tar.gz")
@@ -169,14 +169,14 @@ func TestIntegration_TemplatedStringDefault(t *testing.T) {
 
 func TestIntegration_TemplatedDefaultOverriddenByUser(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:	"show",
-			Args:	[]Arg{{Name: "archive", Required: true}},
+			Name: "show",
+			Args: []Arg{{Name: "archive", Required: true}},
 			Flags: []Flag{
 				{Name: "to", Type: "string", Default: `{{.arg.archive}}-default`},
 			},
-			Command:	&Cmd{Argv: []string{"echo", "{{.flag.to}}"}},
+			Command: &Cmd{Argv: []string{"echo", "{{.flag.to}}"}},
 		}},
 	}
 	code, out := execCmd(t, cfg, "show", "x", "--to", "explicit")
@@ -188,13 +188,13 @@ func TestIntegration_TemplatedDefaultOverriddenByUser(t *testing.T) {
 
 func TestIntegration_BoolDefaultTrueNegated(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:	"show",
+			Name: "show",
 			Flags: []Flag{
 				{Name: "verbose", Type: "bool", Default: true},
 			},
-			Command:	&Cmd{Shell: true, Template: `echo {{if .flag.verbose}}LOUD{{else}}quiet{{end}}`},
+			Command: &Cmd{Shell: true, Template: `echo {{if .flag.verbose}}LOUD{{else}}quiet{{end}}`},
 		}},
 	}
 	code, out := execCmd(t, cfg, "show")
@@ -208,10 +208,10 @@ func TestIntegration_BoolDefaultTrueNegated(t *testing.T) {
 
 func TestIntegration_BoolDefaultFalseHasNoNegation(t *testing.T) {
 	cfg := &Config{
-		Name:		"t",
-		Command:	&Cmd{Shell: true, Template: `true`},
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: `true`},
 		Commands: []Command{{
-			Name:	"x",
+			Name: "x",
 			Flags: []Flag{
 				{Name: "verbose", Type: "bool", Default: false},
 			},
@@ -228,10 +228,10 @@ func TestIntegration_BoolDefaultFalseHasNoNegation(t *testing.T) {
 
 func TestIntegration_ConflictsDetected(t *testing.T) {
 	cfg := &Config{
-		Name:		"t",
-		Command:	&Cmd{Shell: true, Template: `true`},
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: `true`},
 		Commands: []Command{{
-			Name:	"x",
+			Name: "x",
 			Flags: []Flag{
 				{Name: "strip", Type: "bool", Conflicts: []string{"keep"}},
 				{Name: "keep", Type: "bool"},
@@ -244,10 +244,10 @@ func TestIntegration_ConflictsDetected(t *testing.T) {
 
 func TestIntegration_ConflictsAllowSingle(t *testing.T) {
 	cfg := &Config{
-		Name:		"t",
-		Command:	&Cmd{Shell: true, Template: `echo ok`},
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: `echo ok`},
 		Commands: []Command{{
-			Name:	"x",
+			Name: "x",
 			Flags: []Flag{
 				{Name: "strip", Type: "bool", Conflicts: []string{"keep"}},
 				{Name: "keep", Type: "bool"},
@@ -263,12 +263,12 @@ func TestIntegration_ConflictsAllowSingle(t *testing.T) {
 
 func TestIntegration_ConfirmYesFlag(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:		"rm",
-			Args:		[]Arg{{Name: "name", Required: true}},
-			Confirm:	"Delete {{.arg.name}}?",
-			Command:	&Cmd{Argv: []string{"echo", "deleted"}},
+			Name:    "rm",
+			Args:    []Arg{{Name: "name", Required: true}},
+			Confirm: "Delete {{.arg.name}}?",
+			Command: &Cmd{Argv: []string{"echo", "deleted"}},
 		}},
 	}
 	code, out := execCmd(t, cfg, "rm", "foo", "--yes")
@@ -278,12 +278,12 @@ func TestIntegration_ConfirmYesFlag(t *testing.T) {
 
 func TestIntegration_ConfirmNonTTYWithoutYesFails(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:		"rm",
-			Args:		[]Arg{{Name: "name", Required: true}},
-			Confirm:	"Delete {{.arg.name}}?",
-			Command:	&Cmd{Argv: []string{"echo", "deleted"}},
+			Name:    "rm",
+			Args:    []Arg{{Name: "name", Required: true}},
+			Confirm: "Delete {{.arg.name}}?",
+			Command: &Cmd{Argv: []string{"echo", "deleted"}},
 		}},
 	}
 	code, out, errOut := execCmdFull(t, cfg, "rm", "foo")
@@ -301,11 +301,11 @@ func setInteractive(t *testing.T) {
 
 func TestIntegration_ConfirmAcceptY(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:		"rm",
-			Confirm:	"Sure?",
-			Command:	&Cmd{Argv: []string{"echo", "done"}},
+			Name:    "rm",
+			Confirm: "Sure?",
+			Command: &Cmd{Argv: []string{"echo", "done"}},
 		}},
 	}
 	setInteractive(t)
@@ -320,11 +320,11 @@ func TestIntegration_ConfirmAcceptY(t *testing.T) {
 
 func TestIntegration_ConfirmAcceptYes(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:		"rm",
-			Confirm:	"Sure?",
-			Command:	&Cmd{Argv: []string{"echo", "done"}},
+			Name:    "rm",
+			Confirm: "Sure?",
+			Command: &Cmd{Argv: []string{"echo", "done"}},
 		}},
 	}
 	setInteractive(t)
@@ -339,11 +339,11 @@ func TestIntegration_ConfirmAcceptYes(t *testing.T) {
 
 func TestIntegration_ConfirmRejectN(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:		"rm",
-			Confirm:	"Sure?",
-			Command:	&Cmd{Argv: []string{"echo", "should-not-run"}},
+			Name:    "rm",
+			Confirm: "Sure?",
+			Command: &Cmd{Argv: []string{"echo", "should-not-run"}},
 		}},
 	}
 	setInteractive(t)
@@ -358,11 +358,11 @@ func TestIntegration_ConfirmRejectN(t *testing.T) {
 
 func TestIntegration_ConfirmRejectEOF(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:		"rm",
-			Confirm:	"Sure?",
-			Command:	&Cmd{Argv: []string{"echo", "should-not-run"}},
+			Name:    "rm",
+			Confirm: "Sure?",
+			Command: &Cmd{Argv: []string{"echo", "should-not-run"}},
 		}},
 	}
 	setInteractive(t)
@@ -377,12 +377,12 @@ func TestIntegration_ConfirmRejectEOF(t *testing.T) {
 
 func TestIntegration_ConfirmTemplateRendersArgs(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:		"rm",
-			Args:		[]Arg{{Name: "target", Required: true}},
-			Confirm:	"Destroy {{.arg.target}} forever?",
-			Command:	&Cmd{Argv: []string{"echo", "destroyed"}},
+			Name:    "rm",
+			Args:    []Arg{{Name: "target", Required: true}},
+			Confirm: "Destroy {{.arg.target}} forever?",
+			Command: &Cmd{Argv: []string{"echo", "destroyed"}},
 		}},
 	}
 	code, out, errOut := execCmdFull(t, cfg, "rm", "my-secret", "--yes")
@@ -393,12 +393,12 @@ func TestIntegration_ConfirmTemplateRendersArgs(t *testing.T) {
 
 func TestIntegration_ConfirmEmptyRenderedSkips(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:		"rm",
-			Confirm:	"{{if eq .arg.mode \"dangerous\"}}Are you sure?{{end}}",
-			Args:		[]Arg{{Name: "mode", Required: true}},
-			Command:	&Cmd{Argv: []string{"echo", "ran"}},
+			Name:    "rm",
+			Confirm: "{{if eq .arg.mode \"dangerous\"}}Are you sure?{{end}}",
+			Args:    []Arg{{Name: "mode", Required: true}},
+			Command: &Cmd{Argv: []string{"echo", "ran"}},
 		}},
 	}
 	code, out := execCmd(t, cfg, "rm", "safe")
@@ -408,11 +408,11 @@ func TestIntegration_ConfirmEmptyRenderedSkips(t *testing.T) {
 
 func TestIntegration_ConfirmInherited(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:		"secrets",
-			Confirm:	"This is destructive. Continue?",
-			Command:	&Cmd{Argv: []string{"echo", "ok"}},
+			Name:    "secrets",
+			Confirm: "This is destructive. Continue?",
+			Command: &Cmd{Argv: []string{"echo", "ok"}},
 			Commands: []Command{
 				{Name: "rm", Args: []Arg{{Name: "name", Required: true}}},
 				{Name: "list"},
@@ -433,11 +433,11 @@ func TestIntegration_ConfirmInherited(t *testing.T) {
 
 func TestIntegration_ConfirmLeafOverridesGroup(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:		"secrets",
-			Confirm:	"group confirm",
-			Command:	&Cmd{Argv: []string{"echo", "ok"}},
+			Name:    "secrets",
+			Confirm: "group confirm",
+			Command: &Cmd{Argv: []string{"echo", "ok"}},
 			Commands: []Command{
 				{Name: "rm", Confirm: "leaf confirm"},
 			},
