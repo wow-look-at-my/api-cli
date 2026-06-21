@@ -13,9 +13,9 @@ import (
 
 func TestParseCorsLevel(t *testing.T) {
 	tests := []struct {
-		in	string
-		want	CorsLevel
-		err	bool
+		in   string
+		want CorsLevel
+		err  bool
 	}{
 		{"disabled", CorsDisabled, false},
 		{"DISABLED", CorsDisabled, false},
@@ -62,9 +62,9 @@ func TestCorsLevel_String(t *testing.T) {
 
 func TestSameOrigin(t *testing.T) {
 	tests := []struct {
-		origin		string
-		listenAddr	string
-		want		bool
+		origin     string
+		listenAddr string
+		want       bool
 	}{
 		{"http://127.0.0.1:8080", "127.0.0.1:8080", true},
 		{"http://127.0.0.1:8080", "127.0.0.1:9090", false},

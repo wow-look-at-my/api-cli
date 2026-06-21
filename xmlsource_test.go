@@ -215,21 +215,21 @@ func TestParseXML_ConfigLevelFields(t *testing.T) {
 
 func TestParseXML_ParseErrors(t *testing.T) {
 	cases := map[string]string{
-		"root not config":   `<nope/>`,
-		"unknown root attr":  `<config name="x" bogus="y"/>`,
-		"unknown child":      `<config name="x"><bogus/></config>`,
-		"malformed xml":      `<config name="x"><command></config>`,
-		"multiple roots":     `<config name="a"><command name="c"><run>x</run></command></config><config name="b"/>`,
+		"root not config":     `<nope/>`,
+		"unknown root attr":   `<config name="x" bogus="y"/>`,
+		"unknown child":       `<config name="x"><bogus/></config>`,
+		"malformed xml":       `<config name="x"><command></config>`,
+		"multiple roots":      `<config name="a"><command name="c"><run>x</run></command></config><config name="b"/>`,
 		"url unknown attr":    `<config name="x"><run><request><url bad="1">u</url></request></run><command name="c"/></config>`,
 		"cwd unknown attr":    `<config name="x"><cwd bad="1">/tmp</cwd><command name="c"><run>x</run></command></config>`,
-		"value name+expr":    `<config name="x"><vars><var name="v"><value name="a" expr="b"/></var></vars><command name="c"><run>x</run></command></config>`,
-		"value neither":      `<config name="x"><vars><var name="v"><value/></var></vars><command name="c"><run>x</run></command></config>`,
-		"if no test":         `<config name="x"><vars><var name="v"><if>x</if></var></vars><command name="c"><run>x</run></command></config>`,
-		"var no name":        `<config name="x"><vars><var>v</var></vars><command name="c"><run>x</run></command></config>`,
-		"field path+expr":    `<config name="x"><command name="c"><run>x</run><fields><field name="f" expr="e">p</field></fields></command></config>`,
-		"field neither":      `<config name="x"><command name="c"><run>x</run><fields><field name="f"/></fields></command></config>`,
+		"value name+expr":     `<config name="x"><vars><var name="v"><value name="a" expr="b"/></var></vars><command name="c"><run>x</run></command></config>`,
+		"value neither":       `<config name="x"><vars><var name="v"><value/></var></vars><command name="c"><run>x</run></command></config>`,
+		"if no test":          `<config name="x"><vars><var name="v"><if>x</if></var></vars><command name="c"><run>x</run></command></config>`,
+		"var no name":         `<config name="x"><vars><var>v</var></vars><command name="c"><run>x</run></command></config>`,
+		"field path+expr":     `<config name="x"><command name="c"><run>x</run><fields><field name="f" expr="e">p</field></fields></command></config>`,
+		"field neither":       `<config name="x"><command name="c"><run>x</run><fields><field name="f"/></fields></command></config>`,
 		"run request+element": `<config name="x"><run><request><url>u</url></request><argv>x</argv></run><command name="c"/></config>`,
-		"bad flag default":   `<config name="x"><command name="c"><flag name="n" type="int" default="notanint"/><run>x</run></command></config>`,
+		"bad flag default":    `<config name="x"><command name="c"><flag name="n" type="int" default="notanint"/><run>x</run></command></config>`,
 	}
 	for name, src := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -241,7 +241,7 @@ func TestParseXML_ParseErrors(t *testing.T) {
 
 func TestParseXML_ValidateErrors(t *testing.T) {
 	cases := map[string]string{
-		"leaf no run":      `<config name="x"><command name="c"/></config>`,
+		"leaf no run":       `<config name="x"><command name="c"/></config>`,
 		"request no url":    `<config name="x"><run><request><header name="A">v</header></request></run><command name="c"/></config>`,
 		"fields and format": `<config name="x"><formats><format name="u"><view name="v">x</view></format></formats><command name="c"><run>x</run><fields><field name="f">p</field></fields><format ref="u"/></command></config>`,
 	}
