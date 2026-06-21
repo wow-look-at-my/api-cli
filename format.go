@@ -20,9 +20,9 @@ const defaultFormatCap = 32 << 20
 type userVerdict int
 
 const (
-	userYes     userVerdict = iota // user wants formatting (default)
-	userNo                         // user opted out (--no-format / NO_FORMAT / --format=raw)
-	userAlways                     // user wants formatting and asks us to "lie" about TTY
+	userYes    userVerdict = iota // user wants formatting (default)
+	userNo                        // user opted out (--no-format / NO_FORMAT / --format=raw)
+	userAlways                    // user wants formatting and asks us to "lie" about TTY
 )
 
 // resolveFormat returns the effective Format for a leaf, looking up named

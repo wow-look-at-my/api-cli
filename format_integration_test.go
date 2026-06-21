@@ -16,14 +16,14 @@ import (
 // by callers via `views` and the parent-level `when` arg.
 func formatCfg(emitJSON, when string, views []View) *Config {
 	return &Config{
-		Name:	"t",
+		Name: "t",
 		Formats: map[string]*Format{
 			"f": {Input: "json", When: when, Views: views},
 		},
-		Command:	&Cmd{Shell: true, Template: `printf '%s' '` + emitJSON + `'`},
+		Command: &Cmd{Shell: true, Template: `printf '%s' '` + emitJSON + `'`},
 		Commands: []Command{{
-			Name:	"run",
-			Format:	&FormatRef{Name: "f"},
+			Name:   "run",
+			Format: &FormatRef{Name: "f"},
 		}},
 	}
 }
@@ -129,16 +129,16 @@ func TestIntegration_ViewFlagUnknown(t *testing.T) {
 
 func TestIntegration_LinesInputSplitsStdout(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Formats: map[string]*Format{
 			"f": {Input: "lines", When: "true", Views: []View{
 				{Name: "v", Template: `{{ range .data }}- {{.}}{{"\n"}}{{ end }}`},
 			}},
 		},
-		Command:	&Cmd{Shell: true, Template: `printf 'a\nb\nc\n'`},
+		Command: &Cmd{Shell: true, Template: `printf 'a\nb\nc\n'`},
 		Commands: []Command{{
-			Name:	"run",
-			Format:	&FormatRef{Name: "f"},
+			Name:   "run",
+			Format: &FormatRef{Name: "f"},
 		}},
 	}
 	code, out := execCmd(t, cfg, "run")
@@ -148,16 +148,16 @@ func TestIntegration_LinesInputSplitsStdout(t *testing.T) {
 
 func TestIntegration_RawInputPassesThroughTrimmed(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Formats: map[string]*Format{
 			"f": {Input: "raw", When: "true", Views: []View{
 				{Name: "v", Template: `[{{.data}}]`},
 			}},
 		},
-		Command:	&Cmd{Shell: true, Template: `printf 'hello\n\n'`},
+		Command: &Cmd{Shell: true, Template: `printf 'hello\n\n'`},
 		Commands: []Command{{
-			Name:	"run",
-			Format:	&FormatRef{Name: "f"},
+			Name:   "run",
+			Format: &FormatRef{Name: "f"},
 		}},
 	}
 	code, out := execCmd(t, cfg, "run")
@@ -167,16 +167,16 @@ func TestIntegration_RawInputPassesThroughTrimmed(t *testing.T) {
 
 func TestIntegration_NamedFormatReferencedFromLeaf(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Formats: map[string]*Format{
 			"u": {When: "true", Views: []View{
 				{Name: "v", Template: `id={{.data.id}}`},
 			}},
 		},
-		Command:	&Cmd{Shell: true, Template: `printf '%s' '{"id":7}'`},
+		Command: &Cmd{Shell: true, Template: `printf '%s' '{"id":7}'`},
 		Commands: []Command{{
-			Name:	"run",
-			Format:	&FormatRef{Name: "u"},
+			Name:   "run",
+			Format: &FormatRef{Name: "u"},
 		}},
 	}
 	code, out := execCmd(t, cfg, "run")
@@ -186,16 +186,16 @@ func TestIntegration_NamedFormatReferencedFromLeaf(t *testing.T) {
 
 func TestIntegration_FormatInheritedDownTree(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Formats: map[string]*Format{
 			"f": {When: "true", Views: []View{
 				{Name: "v", Template: `id={{.data.id}}`},
 			}},
 		},
-		Command:	&Cmd{Shell: true, Template: `printf '%s' '{"id":3}'`},
+		Command: &Cmd{Shell: true, Template: `printf '%s' '{"id":3}'`},
 		Commands: []Command{{
-			Name:	"users",
-			Format:	&FormatRef{Name: "f"},
+			Name:   "users",
+			Format: &FormatRef{Name: "f"},
 			Commands: []Command{{
 				Name: "get",
 			}},
@@ -208,7 +208,7 @@ func TestIntegration_FormatInheritedDownTree(t *testing.T) {
 
 func TestIntegration_LeafOverridesAncestorFormat(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Formats: map[string]*Format{
 			"parent": {When: "true", Views: []View{
 				{Name: "v", Template: `PARENT`},
@@ -217,13 +217,13 @@ func TestIntegration_LeafOverridesAncestorFormat(t *testing.T) {
 				{Name: "v", Template: `CHILD`},
 			}},
 		},
-		Command:	&Cmd{Shell: true, Template: `printf '{}'`},
+		Command: &Cmd{Shell: true, Template: `printf '{}'`},
 		Commands: []Command{{
-			Name:	"users",
-			Format:	&FormatRef{Name: "parent"},
+			Name:   "users",
+			Format: &FormatRef{Name: "parent"},
 			Commands: []Command{{
-				Name:	"get",
-				Format:	&FormatRef{Name: "child"},
+				Name:   "get",
+				Format: &FormatRef{Name: "child"},
 			}},
 		}},
 	}
@@ -234,17 +234,17 @@ func TestIntegration_LeafOverridesAncestorFormat(t *testing.T) {
 
 func TestIntegration_FormatExitCodePropagatedOnChildFailure(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Formats: map[string]*Format{
 			"f": {When: "true", Views: []View{
 				{Name: "v", Template: `FORMATTED`},
 			}},
 		},
 		// Print to stdout, then exit 7.
-		Command:	&Cmd{Shell: true, Template: `printf 'oops'; exit 7`},
+		Command: &Cmd{Shell: true, Template: `printf 'oops'; exit 7`},
 		Commands: []Command{{
-			Name:	"run",
-			Format:	&FormatRef{Name: "f"},
+			Name:   "run",
+			Format: &FormatRef{Name: "f"},
 		}},
 	}
 	code, out, errOut := execCmdFull(t, cfg, "run")
@@ -257,9 +257,9 @@ func TestIntegration_FormatExitCodePropagatedOnChildFailure(t *testing.T) {
 func TestIntegration_BackcompatNoFormatBlockBehavesAsBefore(t *testing.T) {
 	// A config with no `formats` and no `format` should behave exactly as before.
 	cfg := &Config{
-		Name:		"t",
-		Command:	&Cmd{Shell: true, Template: `printf '%s' '{"id":1,"name":"ada"}'`},
-		Commands:	[]Command{{Name: "run"}},
+		Name:     "t",
+		Command:  &Cmd{Shell: true, Template: `printf '%s' '{"id":1,"name":"ada"}'`},
+		Commands: []Command{{Name: "run"}},
 	}
 	code, out := execCmd(t, cfg, "run")
 	require.Equal(t, 0, code)

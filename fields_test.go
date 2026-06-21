@@ -57,7 +57,7 @@ func TestFields_Over(t *testing.T) {
 func TestFields_MapWalkWithExpr(t *testing.T) {
 	parsed := map[string]any{"Go": int64(100), "Rust": int64(100)}
 	f := &Fields{
-		Over:	"data",
+		Over: "data",
 		List: []Field{
 			{Name: "language", Path: "@key"},
 			{Name: "bytes", Path: "@value"},
@@ -109,9 +109,9 @@ func TestFields_JSONSinkDerived(t *testing.T) {
 
 func TestFields_DefaultTruncateFirstline(t *testing.T) {
 	parsed := map[string]any{
-		"lang":	nil,
-		"sha":	"abcdef1234567890",
-		"msg":	"first line\nsecond line",
+		"lang": nil,
+		"sha":  "abcdef1234567890",
+		"msg":  "first line\nsecond line",
 	}
 	f := &Fields{List: []Field{
 		{Name: "lang", Path: "lang", Default: "-"},

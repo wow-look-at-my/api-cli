@@ -8,13 +8,13 @@ import (
 
 func TestDisplayWidth_ASCII(t *testing.T) {
 	cases := []struct {
-		in	string
-		want	int
+		in   string
+		want int
 	}{
 		{"", 0},
 		{"hello", 5},
 		{"a b c", 5},
-		{"\t\n", 0},	// tab and newline are control chars; width 0
+		{"\t\n", 0}, // tab and newline are control chars; width 0
 	}
 	for _, c := range cases {
 		assert.Equal(t, c.want, displayWidth(c.in), "input %q", c.in)

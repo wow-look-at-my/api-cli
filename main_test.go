@@ -129,16 +129,16 @@ func TestRun_PicksUpCwdAPIXml(t *testing.T) {
 
 func TestRegisterFlag_AllTypes(t *testing.T) {
 	cfg := &Config{
-		Name:		"t",
-		Command:	&Cmd{Shell: true, Template: "true"},
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name:	"x",
+			Name: "x",
 			Flags: []Flag{
 				{Name: "s", Type: "string", Default: "hi"},
 				{Name: "b", Type: "bool", Default: true},
 				{Name: "n", Type: "int", Default: float64(7)},
 				{Name: "tags", Type: "string-slice", Default: []any{"a", "b"}},
-				{Name: "untyped"},	// default "string" fallback
+				{Name: "untyped"}, // default "string" fallback
 			},
 		}},
 	}
@@ -157,11 +157,11 @@ func TestRegisterFlag_AllTypes(t *testing.T) {
 func TestPreparseGlobalFlags(t *testing.T) {
 	// --cors defaults to "strict"; --config and --mcp default to "".
 	cases := []struct {
-		name	string
-		argv	[]string
-		cfg	string
-		mcp	string
-		cors	string
+		name string
+		argv []string
+		cfg  string
+		mcp  string
+		cors string
 	}{
 		{"empty", nil, "", "", "strict"},
 		{"only positionals", []string{"foo", "bar"}, "", "", "strict"},
@@ -255,11 +255,11 @@ func TestRun_VarSetsEnv(t *testing.T) {
 func TestStringSlice_PreservesCommas(t *testing.T) {
 	// StringArrayVar (vs StringSliceVar) keeps commas inside values.
 	cfg := &Config{
-		Name:		"t",
-		Command:	&Cmd{Shell: true, Template: "true"},
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name:	"x",
-			Flags:	[]Flag{{Name: "tag", Type: "string-slice"}},
+			Name:  "x",
+			Flags: []Flag{{Name: "tag", Type: "string-slice"}},
 		}},
 	}
 	require.NoError(t, validate(cfg))

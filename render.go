@@ -321,8 +321,8 @@ func repeatKey(key string, v any) (string, error) {
 }
 
 // shellQuote wraps s in single quotes for safe interpolation into a POSIX sh
-// command line. Embedded single quotes are escaped using the 'one single
-// quote per quote' dance: foo'bar becomes 'foo'\''bar'.
+// command line. Each embedded single quote is escaped by closing the quoted
+// run, emitting an escaped quote, and reopening (see the replacement below).
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

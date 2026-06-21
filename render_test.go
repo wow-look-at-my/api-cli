@@ -13,11 +13,11 @@ import (
 
 func TestRenderString_Namespaces(t *testing.T) {
 	data := map[string]any{
-		"arg":		map[string]any{"id": 42, "name": "ada"},
-		"flag":		map[string]any{"limit": 10, "verbose": true},
-		"env":		map[string]string{"TOKEN": "abc"},
-		"var":		map[string]any{"base_url": "https://x.example"},
-		"entry":	map[string]any{"path": "/users/42"},
+		"arg":   map[string]any{"id": 42, "name": "ada"},
+		"flag":  map[string]any{"limit": 10, "verbose": true},
+		"env":   map[string]string{"TOKEN": "abc"},
+		"var":   map[string]any{"base_url": "https://x.example"},
+		"entry": map[string]any{"path": "/users/42"},
 	}
 	cases := []struct{ in, want string }{
 		{"{{.arg.id}}", "42"},
@@ -89,9 +89,9 @@ func TestQueryString_EmptyIsBlank(t *testing.T) {
 
 func TestQueryString_MapStringAny(t *testing.T) {
 	got, err := queryString(map[string]any{
-		"a":	"1",
-		"b":	"2",
-		"no":	"",
+		"a":  "1",
+		"b":  "2",
+		"no": "",
 	})
 	require.NoError(t, err)
 	// url.Values.Encode sorts keys deterministically.
@@ -114,9 +114,9 @@ func TestQueryString_SliceValuesRepeat(t *testing.T) {
 
 func TestQueryString_MixedScalars(t *testing.T) {
 	got, err := queryString(map[string]any{
-		"n":	json.Number("42"),
-		"b":	true,
-		"nil":	nil,
+		"n":   json.Number("42"),
+		"b":   true,
+		"nil": nil,
 	})
 	require.NoError(t, err)
 	parts := strings.Split(strings.TrimPrefix(got, "?"), "&")
@@ -204,8 +204,8 @@ func TestUrlpathViaTemplate(t *testing.T) {
 func TestRenderEntry_StringsWalked(t *testing.T) {
 	raw := json.RawMessage(`{"path":"/users/{{.arg.id}}","query":{"limit":"{{.flag.limit}}"}}`)
 	data := map[string]any{
-		"arg":	map[string]any{"id": 42},
-		"flag":	map[string]any{"limit": 10},
+		"arg":  map[string]any{"id": 42},
+		"flag": map[string]any{"limit": 10},
 	}
 	v, err := renderEntry(raw, data)
 	require.NoError(t, err)
@@ -309,8 +309,8 @@ func TestFileExists(t *testing.T) {
 	f := dir + "/file.txt"
 	require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
 	assert.True(t, fileExists(f))
-	assert.False(t, fileExists(dir))		// directory, not file
-	assert.False(t, fileExists(dir+"/nope.txt"))	// missing
+	assert.False(t, fileExists(dir))             // directory, not file
+	assert.False(t, fileExists(dir+"/nope.txt")) // missing
 }
 
 func TestDirExists(t *testing.T) {
@@ -318,7 +318,7 @@ func TestDirExists(t *testing.T) {
 	f := dir + "/file.txt"
 	require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
 	assert.True(t, dirExists(dir))
-	assert.False(t, dirExists(f))	// file, not dir
+	assert.False(t, dirExists(f)) // file, not dir
 	assert.False(t, dirExists(dir+"/nope"))
 }
 

@@ -64,11 +64,11 @@ func TestIntegration_LeafCwdLiteral(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "marker"), []byte("here\n"), 0o600))
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:		"show",
-			Cwd:		dir,
-			Command:	&Cmd{Shell: true, Template: `cat marker`},
+			Name:    "show",
+			Cwd:     dir,
+			Command: &Cmd{Shell: true, Template: `cat marker`},
 		}},
 	}
 	code, out := execCmd(t, cfg, "show")
@@ -81,11 +81,11 @@ func TestIntegration_LeafCwdTemplated(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tag"), []byte("templated\n"), 0o600))
 	t.Setenv("API_CLI_CWD_TEST_DIR", dir)
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:		"show",
-			Cwd:		`{{.env.API_CLI_CWD_TEST_DIR}}`,
-			Command:	&Cmd{Shell: true, Template: `cat tag`},
+			Name:    "show",
+			Cwd:     `{{.env.API_CLI_CWD_TEST_DIR}}`,
+			Command: &Cmd{Shell: true, Template: `cat tag`},
 		}},
 	}
 	code, out := execCmd(t, cfg, "show")
@@ -98,10 +98,10 @@ func TestIntegration_CwdInheritsFromConfig(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "f"), []byte("inherited\n"), 0o600))
 	cfg := &Config{
-		Name:		"t",
-		Cwd:		dir,
-		Command:	&Cmd{Shell: true, Template: `cat f`},
-		Commands:	[]Command{{Name: "show"}},
+		Name:     "t",
+		Cwd:      dir,
+		Command:  &Cmd{Shell: true, Template: `cat f`},
+		Commands: []Command{{Name: "show"}},
 	}
 	code, out := execCmd(t, cfg, "show")
 	require.Equal(t, 0, code)
@@ -113,11 +113,11 @@ func TestIntegration_CwdInheritsThroughGroup(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "f"), []byte("group\n"), 0o600))
 	cfg := &Config{
-		Name:		"t",
-		Command:	&Cmd{Shell: true, Template: `cat f`},
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: `cat f`},
 		Commands: []Command{{
-			Name:	"outer",
-			Cwd:	dir,
+			Name: "outer",
+			Cwd:  dir,
 			Commands: []Command{
 				{Name: "leaf"},
 			},
@@ -134,9 +134,9 @@ func TestIntegration_LeafCwdOverridesAncestor(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(parent, "f"), []byte("parent\n"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(leafDir, "f"), []byte("leaf\n"), 0o600))
 	cfg := &Config{
-		Name:		"t",
-		Cwd:		parent,
-		Command:	&Cmd{Shell: true, Template: `cat f`},
+		Name:    "t",
+		Cwd:     parent,
+		Command: &Cmd{Shell: true, Template: `cat f`},
 		Commands: []Command{
 			{Name: "from-parent"},
 			{Name: "from-leaf", Cwd: leafDir},
@@ -155,15 +155,15 @@ func TestIntegration_StepInheritsLeafCwd(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "src"), []byte(`{"v":"hi"}`), 0o600))
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:	"run",
-			Cwd:	dir,
+			Name: "run",
+			Cwd:  dir,
 			Steps: []Step{{
-				Name:		"load",
-				Command:	&Cmd{Shell: true, Template: `cat src`},
+				Name:    "load",
+				Command: &Cmd{Shell: true, Template: `cat src`},
 			}},
-			Command:	&Cmd{Shell: true, Template: `printf '%s' {{.result.load.v}}`},
+			Command: &Cmd{Shell: true, Template: `printf '%s' {{.result.load.v}}`},
 		}},
 	}
 	code, out := execCmd(t, cfg, "run")
@@ -177,18 +177,18 @@ func TestIntegration_StepCwdOverridesLeaf(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(leafDir, "marker"), []byte("leaf\n"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(stepDir, "marker"), []byte(`"step"`), 0o600))
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:	"run",
-			Cwd:	leafDir,
+			Name: "run",
+			Cwd:  leafDir,
 			Steps: []Step{{
-				Name:		"where",
-				Cwd:		stepDir,
-				Command:	&Cmd{Shell: true, Template: `cat marker`},
+				Name:    "where",
+				Cwd:     stepDir,
+				Command: &Cmd{Shell: true, Template: `cat marker`},
 			}},
 			// The leaf's own command runs in leafDir; its output proves the
 			// step's override was scoped to the step.
-			Command:	&Cmd{Shell: true, Template: `printf '%s|%s' {{.result.where}} $(cat marker)`},
+			Command: &Cmd{Shell: true, Template: `printf '%s|%s' {{.result.where}} $(cat marker)`},
 		}},
 	}
 	code, out := execCmd(t, cfg, "run")
@@ -202,13 +202,13 @@ func TestIntegration_CwdRenderedWithArgs(t *testing.T) {
 	require.NoError(t, os.MkdirAll(sub, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(sub, "f"), []byte("ok\n"), 0o600))
 	cfg := &Config{
-		Name:	"t",
-		Vars:	map[string]any{"root": parent},
+		Name: "t",
+		Vars: map[string]any{"root": parent},
 		Commands: []Command{{
-			Name:		"show",
-			Args:		[]Arg{{Name: "name", Required: true}},
-			Cwd:		`{{.var.root}}/{{.arg.name}}`,
-			Command:	&Cmd{Shell: true, Template: `cat f`},
+			Name:    "show",
+			Args:    []Arg{{Name: "name", Required: true}},
+			Cwd:     `{{.var.root}}/{{.arg.name}}`,
+			Command: &Cmd{Shell: true, Template: `cat f`},
 		}},
 	}
 	code, out := execCmd(t, cfg, "show", "child")
@@ -218,11 +218,11 @@ func TestIntegration_CwdRenderedWithArgs(t *testing.T) {
 
 func TestIntegration_CwdRenderErrorFails(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:		"x",
-			Cwd:		`{{.broken`,
-			Command:	&Cmd{Shell: true, Template: `true`},
+			Name:    "x",
+			Cwd:     `{{.broken`,
+			Command: &Cmd{Shell: true, Template: `true`},
 		}},
 	}
 	// A broken cwd template surfaces as a RunE error from cobra; our
@@ -235,11 +235,11 @@ func TestIntegration_CwdRenderErrorFails(t *testing.T) {
 
 func TestIntegration_CwdMissingDirFails(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Commands: []Command{{
-			Name:		"x",
-			Cwd:		"/definitely/not/a/real/dir/xyz123",
-			Command:	&Cmd{Shell: true, Template: `true`},
+			Name:    "x",
+			Cwd:     "/definitely/not/a/real/dir/xyz123",
+			Command: &Cmd{Shell: true, Template: `true`},
 		}},
 	}
 	code, _, _ := execCmdFull(t, cfg, "x")
@@ -252,13 +252,13 @@ func TestIntegration_EntryFieldStillForbiddenOnGroup(t *testing.T) {
 	// Sanity: cwd on a group is fine; entry is still leaf-only. Just confirming
 	// we didn't accidentally regress group validation.
 	cfg := &Config{
-		Name:		"t",
-		Command:	&Cmd{Shell: true, Template: `true`},
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: `true`},
 		Commands: []Command{{
-			Name:		"outer",
-			Cwd:		"/tmp",
-			Entry:		json.RawMessage(`{"x":"y"}`),
-			Commands:	[]Command{{Name: "leaf"}},
+			Name:     "outer",
+			Cwd:      "/tmp",
+			Entry:    json.RawMessage(`{"x":"y"}`),
+			Commands: []Command{{Name: "leaf"}},
 		}},
 	}
 	err := validate(cfg)

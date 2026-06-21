@@ -66,8 +66,8 @@ func TestResolveFormat_NamedAndInline(t *testing.T) {
 
 func TestIsTruthy(t *testing.T) {
 	cases := []struct {
-		in	string
-		want	bool
+		in   string
+		want bool
 	}{
 		{"", false},
 		{"  ", false},
@@ -294,10 +294,10 @@ func TestStdoutTTY_NonFileWriter(t *testing.T) {
 
 func TestFormatContext_HasExpectedKeys(t *testing.T) {
 	data := map[string]any{
-		"arg":	map[string]any{"id": 1},
-		"flag":	map[string]any{"v": true},
-		"env":	map[string]string{},
-		"var":	map[string]any{},
+		"arg":  map[string]any{"id": 1},
+		"flag": map[string]any{"v": true},
+		"env":  map[string]string{},
+		"var":  map[string]any{},
 	}
 	ctx := formatContext("data here", data, true, 80)
 	assert.Equal(t, "data here", ctx["data"])
@@ -309,14 +309,14 @@ func TestFormatContext_HasExpectedKeys(t *testing.T) {
 
 func TestValidate_RejectsZeroViews(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Formats: map[string]*Format{
 			"f": {Views: []View{}},
 		},
-		Command:	&Cmd{Shell: true, Template: "true"},
+		Command: &Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name:	"x",
-			Format:	&FormatRef{Name: "f"},
+			Name:   "x",
+			Format: &FormatRef{Name: "f"},
 		}},
 	}
 	assert.Error(t, validate(cfg))
@@ -324,26 +324,26 @@ func TestValidate_RejectsZeroViews(t *testing.T) {
 
 func TestValidate_RejectsDuplicateViewNames(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Formats: map[string]*Format{
 			"f": {Views: []View{
 				{Name: "a", Template: "x"},
 				{Name: "a", Template: "y"},
 			}},
 		},
-		Command:	&Cmd{Shell: true, Template: "true"},
-		Commands:	[]Command{{Name: "x", Format: &FormatRef{Name: "f"}}},
+		Command:  &Cmd{Shell: true, Template: "true"},
+		Commands: []Command{{Name: "x", Format: &FormatRef{Name: "f"}}},
 	}
 	assert.Error(t, validate(cfg))
 }
 
 func TestValidate_RejectsUnknownNamedRef(t *testing.T) {
 	cfg := &Config{
-		Name:		"t",
-		Command:	&Cmd{Shell: true, Template: "true"},
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name:	"x",
-			Format:	&FormatRef{Name: "missing"},
+			Name:   "x",
+			Format: &FormatRef{Name: "missing"},
 		}},
 	}
 	assert.Error(t, validate(cfg))
@@ -351,22 +351,22 @@ func TestValidate_RejectsUnknownNamedRef(t *testing.T) {
 
 func TestValidate_RejectsInvalidInputEnum(t *testing.T) {
 	cfg := &Config{
-		Name:	"t",
+		Name: "t",
 		Formats: map[string]*Format{
 			"f": {Input: "yaml", Views: []View{{Name: "v", Template: "x"}}},
 		},
-		Command:	&Cmd{Shell: true, Template: "true"},
-		Commands:	[]Command{{Name: "x", Format: &FormatRef{Name: "f"}}},
+		Command:  &Cmd{Shell: true, Template: "true"},
+		Commands: []Command{{Name: "x", Format: &FormatRef{Name: "f"}}},
 	}
 	assert.Error(t, validate(cfg))
 }
 
 func TestValidate_AcceptsInlineFormat(t *testing.T) {
 	cfg := &Config{
-		Name:		"t",
-		Command:	&Cmd{Shell: true, Template: "true"},
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
-			Name:	"x",
+			Name: "x",
 			Format: &FormatRef{Inline: &Format{
 				Views: []View{{Name: "v", Template: "x"}},
 			}},

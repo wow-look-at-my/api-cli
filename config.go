@@ -273,13 +273,13 @@ func (c *Cmd) Defined() bool {
 // Every string field is a Go template rendered against the leaf's data context
 // (.arg, .flag, .env, .var, .entry, .result) at invocation time.
 type Request struct {
-	Method   string    `json:"method,omitempty"`   // template; defaults to GET
-	URL      string    `json:"url"`                // template
-	QueryFrom string   `json:"queryFrom,omitempty"` // context path to a map of params (<query from=>)
-	Query    []Param   `json:"query,omitempty"`    // explicit <param> children
-	Headers  []Header  `json:"headers,omitempty"`
-	Body     string    `json:"body,omitempty"`     // template; empty means no body
-	Response *Response `json:"response,omitempty"` // nil means stream the raw body
+	Method    string    `json:"method,omitempty"`    // template; defaults to GET
+	URL       string    `json:"url"`                 // template
+	QueryFrom string    `json:"queryFrom,omitempty"` // context path to a map of params (<query from=>)
+	Query     []Param   `json:"query,omitempty"`     // explicit <param> children
+	Headers   []Header  `json:"headers,omitempty"`
+	Body      string    `json:"body,omitempty"`     // template; empty means no body
+	Response  *Response `json:"response,omitempty"` // nil means stream the raw body
 }
 
 // Defined reports whether the request has anything to execute (a URL).

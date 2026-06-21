@@ -59,7 +59,7 @@ func TestBuildToolInputSchema_Flags(t *testing.T) {
 			{Name: "limit", Type: "int", Required: true},
 			{Name: "verbose", Type: "bool", Description: "enable verbose output"},
 			{Name: "tags", Type: "string-slice"},
-			{Name: "output"},	// empty type defaults to string
+			{Name: "output"}, // empty type defaults to string
 		},
 	}
 	schema := buildToolInputSchema(node)
@@ -81,12 +81,12 @@ func TestBuildToolInputSchema_Flags(t *testing.T) {
 func TestCollectMCPLeaves_Flat(t *testing.T) {
 	cmds := []Command{
 		{
-			Name:		"ping",
-			Command:	&Cmd{Shell: true, Template: "true"},
+			Name:    "ping",
+			Command: &Cmd{Shell: true, Template: "true"},
 		},
 		{
-			Name:		"pong",
-			Command:	&Cmd{Shell: true, Template: "true"},
+			Name:    "pong",
+			Command: &Cmd{Shell: true, Template: "true"},
 		},
 	}
 	leaves := collectMCPLeaves(cmds, mcpInherit{})
@@ -99,7 +99,7 @@ func TestCollectMCPLeaves_Nested(t *testing.T) {
 	cmd := &Cmd{Shell: true, Template: "true"}
 	cmds := []Command{
 		{
-			Name:	"users",
+			Name: "users",
 			Commands: []Command{
 				{Name: "get", Command: cmd},
 				{Name: "list", Command: cmd},
@@ -133,11 +133,11 @@ func TestCollectMCPLeaves_ChildOverrides(t *testing.T) {
 	childCmd := &Cmd{Shell: true, Template: "child"}
 	cmds := []Command{
 		{
-			Name:		"leaf",
-			Command:	childCmd,
-			Cwd:		"/child",
-			Stdin:		"child-stdin",
-			Vars:		map[string]any{"key": "child-val"},
+			Name:    "leaf",
+			Command: childCmd,
+			Cwd:     "/child",
+			Stdin:   "child-stdin",
+			Vars:    map[string]any{"key": "child-val"},
 		},
 	}
 	leaves := collectMCPLeaves(cmds, mcpInherit{vars: map[string]any{"key": "root-val"}, cmd: rootCmd, cwd: "/root", stdin: "root-stdin"})
@@ -216,10 +216,10 @@ func TestMcpGatherFlags_AllTypes(t *testing.T) {
 		},
 	}
 	got, err := mcpGatherFlags(node, map[string]any{
-		"s":	"hello",
-		"b":	true,
-		"n":	float64(5),
-		"ss":	[]any{"x", "y"},
+		"s":  "hello",
+		"b":  true,
+		"n":  float64(5),
+		"ss": []any{"x", "y"},
 	}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "hello", got["s"])
@@ -340,8 +340,8 @@ func TestMcpCombine(t *testing.T) {
 
 func TestMcpExecLeaf_Simple(t *testing.T) {
 	leaf := &mcpLeaf{
-		node:		Command{Args: []Arg{{Name: "msg", Required: true}}},
-		cmdTmpl:	&Cmd{Shell: true, Template: "printf '%s' {{.arg.msg | shellquote}}"},
+		node:    Command{Args: []Arg{{Name: "msg", Required: true}}},
+		cmdTmpl: &Cmd{Shell: true, Template: "printf '%s' {{.arg.msg | shellquote}}"},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{"msg": "hello"})
 	assert.False(t, isErr)
@@ -353,7 +353,7 @@ func TestMcpExecLeaf_Flags(t *testing.T) {
 		node: Command{
 			Flags: []Flag{{Name: "count", Type: "int", Default: float64(1)}},
 		},
-		cmdTmpl:	&Cmd{Shell: true, Template: "printf '%d' {{.flag.count}}"},
+		cmdTmpl: &Cmd{Shell: true, Template: "printf '%d' {{.flag.count}}"},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{"count": float64(7)})
 	assert.False(t, isErr)
@@ -362,8 +362,8 @@ func TestMcpExecLeaf_Flags(t *testing.T) {
 
 func TestMcpExecLeaf_FailingCommand(t *testing.T) {
 	leaf := &mcpLeaf{
-		node:		Command{},
-		cmdTmpl:	&Cmd{Shell: true, Template: "false"},
+		node:    Command{},
+		cmdTmpl: &Cmd{Shell: true, Template: "false"},
 	}
 	_, isErr := mcpExecLeaf(leaf, map[string]any{})
 	assert.True(t, isErr)
@@ -372,10 +372,10 @@ func TestMcpExecLeaf_FailingCommand(t *testing.T) {
 func TestMcpExecLeaf_Precondition(t *testing.T) {
 	leaf := &mcpLeaf{
 		node: Command{
-			Preconditions:	[]string{"{{if not .flag.ok}}not ok{{end}}"},
-			Flags:		[]Flag{{Name: "ok", Type: "bool"}},
+			Preconditions: []string{"{{if not .flag.ok}}not ok{{end}}"},
+			Flags:         []Flag{{Name: "ok", Type: "bool"}},
 		},
-		cmdTmpl:	&Cmd{Shell: true, Template: "true"},
+		cmdTmpl: &Cmd{Shell: true, Template: "true"},
 	}
 	_, isErr := mcpExecLeaf(leaf, map[string]any{"ok": false})
 	assert.True(t, isErr)
@@ -392,7 +392,7 @@ func TestMcpExecLeaf_WithStep(t *testing.T) {
 				{Name: "greeting", Command: &Cmd{Shell: true, Template: "printf 'hello'"}},
 			},
 		},
-		cmdTmpl:	&Cmd{Shell: true, Template: "printf '%s world' {{.result.greeting | shellquote}}"},
+		cmdTmpl: &Cmd{Shell: true, Template: "printf '%s world' {{.result.greeting | shellquote}}"},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{})
 	assert.False(t, isErr)
@@ -406,7 +406,7 @@ func TestMcpExecLeaf_StepFails(t *testing.T) {
 				{Name: "bad", Command: &Cmd{Shell: true, Template: "false"}},
 			},
 		},
-		cmdTmpl:	&Cmd{Shell: true, Template: "true"},
+		cmdTmpl: &Cmd{Shell: true, Template: "true"},
 	}
 	_, isErr := mcpExecLeaf(leaf, map[string]any{})
 	assert.True(t, isErr)
@@ -414,9 +414,9 @@ func TestMcpExecLeaf_StepFails(t *testing.T) {
 
 func TestMcpExecLeaf_Vars(t *testing.T) {
 	leaf := &mcpLeaf{
-		node:		Command{},
-		vars:		map[string]any{"greeting": "hi"},
-		cmdTmpl:	&Cmd{Shell: true, Template: "printf '%s' {{.var.greeting | shellquote}}"},
+		node:    Command{},
+		vars:    map[string]any{"greeting": "hi"},
+		cmdTmpl: &Cmd{Shell: true, Template: "printf '%s' {{.var.greeting | shellquote}}"},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{})
 	assert.False(t, isErr)
@@ -425,8 +425,8 @@ func TestMcpExecLeaf_Vars(t *testing.T) {
 
 func TestMcpExecLeaf_EmptyStdin(t *testing.T) {
 	leaf := &mcpLeaf{
-		node:		Command{},
-		cmdTmpl:	&Cmd{Shell: true, Template: "wc -c"},
+		node:    Command{},
+		cmdTmpl: &Cmd{Shell: true, Template: "wc -c"},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{})
 	assert.False(t, isErr)
@@ -435,9 +435,9 @@ func TestMcpExecLeaf_EmptyStdin(t *testing.T) {
 
 func TestMcpExecLeaf_Stdin(t *testing.T) {
 	leaf := &mcpLeaf{
-		node:		Command{},
-		stdinTmpl:	"hello\n",
-		cmdTmpl:	&Cmd{Shell: true, Template: "cat"},
+		node:      Command{},
+		stdinTmpl: "hello\n",
+		cmdTmpl:   &Cmd{Shell: true, Template: "cat"},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{})
 	assert.False(t, isErr)
@@ -500,8 +500,8 @@ func TestRunMCP_InvalidTransport(t *testing.T) {
 func TestBuildMCPServer_ToolCount(t *testing.T) {
 	cmd := &Cmd{Shell: true, Template: "true"}
 	cfg := &Config{
-		Name:		"testapi",
-		Command:	cmd,
+		Name:    "testapi",
+		Command: cmd,
 		Commands: []Command{
 			{Name: "a", Command: cmd},
 			{Name: "b", Commands: []Command{
@@ -535,8 +535,8 @@ func TestCollectMCPLeaves_ChildOverridesFormat(t *testing.T) {
 	parentFmt := &FormatRef{Name: "parent"}
 	childFmt := &FormatRef{Name: "child"}
 	formats := map[string]*Format{
-		"parent":	{Views: []View{{Name: "p", Template: "x"}}},
-		"child":	{Views: []View{{Name: "c", Template: "y"}}},
+		"parent": {Views: []View{{Name: "p", Template: "x"}}},
+		"child":  {Views: []View{{Name: "c", Template: "y"}}},
 	}
 	cmds := []Command{{Name: "leaf", Format: childFmt}}
 	leaves := collectMCPLeaves(cmds, mcpInherit{cmd: cmd, format: parentFmt, formats: formats})
@@ -555,8 +555,8 @@ func TestMcpFormat_NoFormat(t *testing.T) {
 func TestMcpFormat_InlineFormat(t *testing.T) {
 	leaf := &mcpLeaf{
 		formatRef: &FormatRef{Inline: &Format{
-			Input:	"json",
-			Views:	[]View{{Name: "v", Template: "ID={{.data.id}}"}},
+			Input: "json",
+			Views: []View{{Name: "v", Template: "ID={{.data.id}}"}},
 		}},
 	}
 	data := map[string]any{"arg": map[string]any{}}
@@ -568,13 +568,13 @@ func TestMcpFormat_InlineFormat(t *testing.T) {
 func TestMcpFormat_NamedFormat(t *testing.T) {
 	formats := map[string]*Format{
 		"item": {
-			Input:	"json",
-			Views:	[]View{{Name: "detail", Template: "name={{.data.name}}"}},
+			Input: "json",
+			Views: []View{{Name: "detail", Template: "name={{.data.name}}"}},
 		},
 	}
 	leaf := &mcpLeaf{
-		formatRef:	&FormatRef{Name: "item"},
-		formats:	formats,
+		formatRef: &FormatRef{Name: "item"},
+		formats:   formats,
 	}
 	out, ok := mcpFormat(leaf, `{"name":"alice"}`, map[string]any{})
 	assert.True(t, ok)
@@ -584,8 +584,8 @@ func TestMcpFormat_NamedFormat(t *testing.T) {
 func TestMcpFormat_LinesInput(t *testing.T) {
 	leaf := &mcpLeaf{
 		formatRef: &FormatRef{Inline: &Format{
-			Input:	"lines",
-			Views:	[]View{{Name: "v", Template: "{{len .data}} lines"}},
+			Input: "lines",
+			Views: []View{{Name: "v", Template: "{{len .data}} lines"}},
 		}},
 	}
 	out, ok := mcpFormat(leaf, "a\nb\nc\n", map[string]any{})
@@ -596,7 +596,7 @@ func TestMcpFormat_LinesInput(t *testing.T) {
 func TestMcpFormat_ViewSelection(t *testing.T) {
 	leaf := &mcpLeaf{
 		formatRef: &FormatRef{Inline: &Format{
-			Input:	"json",
+			Input: "json",
 			Views: []View{
 				{Name: "list", When: `{{ kindIs "slice" .data }}`, Template: "LIST"},
 				{Name: "detail", Default: true, Template: "DETAIL"},
@@ -615,8 +615,8 @@ func TestMcpFormat_ViewSelection(t *testing.T) {
 func TestMcpFormat_TTYIsTrue(t *testing.T) {
 	leaf := &mcpLeaf{
 		formatRef: &FormatRef{Inline: &Format{
-			Input:	"raw",
-			Views:	[]View{{Name: "v", Template: "tty={{.tty}}"}},
+			Input: "raw",
+			Views: []View{{Name: "v", Template: "tty={{.tty}}"}},
 		}},
 	}
 	out, ok := mcpFormat(leaf, "x", map[string]any{})
@@ -627,9 +627,9 @@ func TestMcpFormat_TTYIsTrue(t *testing.T) {
 func TestMcpFormat_RespectsAuthorWhenFalse(t *testing.T) {
 	leaf := &mcpLeaf{
 		formatRef: &FormatRef{Inline: &Format{
-			Input:	"raw",
-			When:	"false",
-			Views:	[]View{{Name: "v", Template: "formatted"}},
+			Input: "raw",
+			When:  "false",
+			Views: []View{{Name: "v", Template: "formatted"}},
 		}},
 	}
 	_, ok := mcpFormat(leaf, "raw", map[string]any{})
@@ -640,11 +640,11 @@ func TestMcpFormat_RespectsAuthorWhenFalse(t *testing.T) {
 
 func TestMcpExecLeaf_WithFormat(t *testing.T) {
 	leaf := &mcpLeaf{
-		node:		Command{},
-		cmdTmpl:	&Cmd{Shell: true, Template: `printf '{"count":3}'`},
+		node:    Command{},
+		cmdTmpl: &Cmd{Shell: true, Template: `printf '{"count":3}'`},
 		formatRef: &FormatRef{Inline: &Format{
-			Input:	"json",
-			Views:	[]View{{Name: "v", Template: "count={{.data.count}}"}},
+			Input: "json",
+			Views: []View{{Name: "v", Template: "count={{.data.count}}"}},
 		}},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{})
@@ -654,11 +654,11 @@ func TestMcpExecLeaf_WithFormat(t *testing.T) {
 
 func TestMcpExecLeaf_FormatNotAppliedOnError(t *testing.T) {
 	leaf := &mcpLeaf{
-		node:		Command{},
-		cmdTmpl:	&Cmd{Shell: true, Template: "echo bad; exit 1"},
+		node:    Command{},
+		cmdTmpl: &Cmd{Shell: true, Template: "echo bad; exit 1"},
 		formatRef: &FormatRef{Inline: &Format{
-			Input:	"raw",
-			Views:	[]View{{Name: "v", Template: "formatted"}},
+			Input: "raw",
+			Views: []View{{Name: "v", Template: "formatted"}},
 		}},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{})
