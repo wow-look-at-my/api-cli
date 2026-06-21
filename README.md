@@ -141,9 +141,10 @@ overrides it (e.g. a `POST`, or a raw-body download).
 
 A leaf can declare the *shape* of its output records once, via `<fields>`. The
 renderer then represents that one declaration automatically -- as a table, a
-`Label: value` list, JSON, Markdown, CSV, or plain lines -- choosing a default
-from the data's shape. You never write "table" anywhere; a runtime flag
-(`--as`) or a pipe can force any representation.
+`Label: value` list, JSON, Markdown, CSV, plain lines, or an
+[ASCII timeline](#timeline) -- choosing a default from the data's shape. You
+never write "table" anywhere; a runtime flag (`--as`) or a pipe can force any
+representation.
 
 ```xml
 <fields over="data.items" footer="{{.data.total_count}} total">
@@ -159,7 +160,7 @@ Automatic representation, by data shape:
 
 | Data | Default | Other sinks |
 |------|---------|-------------|
-| array of records | `table` | `json`, `markdown`, `csv` |
+| array of records | `table` | `json`, `markdown`, `csv`, `timeline` |
 | single record | `list` | `json` |
 | array of scalars | `lines` | `json` |
 | scalar / non-JSON | `raw` | -- |
@@ -184,10 +185,59 @@ add `--as=table` to project nothing and table the raw keys.
 
 ### Forcing a representation
 
-`--as=<sink>` forces `table | list | lines | raw | json | markdown | csv`.
-`--no-format` (or `--format=raw`, `NO_FORMAT=1`) returns the raw body. So
-`gh repo get x` is a list on a terminal, `gh repo get x --as=json | jq` is JSON,
-and `gh repo get x --no-format` is the unshaped response.
+`--as=<sink>` forces `table | list | lines | raw | json | markdown | csv |
+timeline`. `--no-format` (or `--format=raw`, `NO_FORMAT=1`) returns the raw
+body. So `gh repo get x` is a list on a terminal, `gh repo get x --as=json | jq`
+is JSON, and `gh repo get x --no-format` is the unshaped response.
+
+### Timeline
+
+`--as=timeline` renders the records as a horizontal, annotated ASCII timeline
+(via [`ascii-timeline`](https://github.com/wow-look-at-my/ascii-timeline)). Each
+record becomes one event, and the **field name** selects what it contributes:
+
+| Field name    | Event role                                              |
+|---------------|---------------------------------------------------------|
+| `date`        | A **point** event at this instant (a `●` marker).       |
+| `start`+`end` | A **duration** event spanning the range (a `█` bar).    |
+| `label`       | Text shown next to the marker/bar.                      |
+| `description` | Dim text appended after the date.                       |
+| `color`       | Style spec (e.g. `green`, `bold cyan`); auto-assigned otherwise. |
+
+Other field names are ignored, and `show_in=` still applies (use
+`show_in="timeline"` / `!timeline` to scope a field). Dates accept the many
+formats `ascii-timeline` understands (`2006-01-02`, `Jan 2, 2006`, RFC3339, ...).
+A record that resolves no `date` and no `start`+`end` pair is skipped, so partial
+data degrades gracefully. Color follows the terminal (off when piped or under
+`NO_COLOR`), and the axis uses the terminal width.
+
+```xml
+<fields>
+	<field name="label">name</field>
+	<field name="date">created_at</field>          <!-- point event -->
+	<field name="start">window.opened</field>      <!-- or a duration: start -->
+	<field name="end">window.closed</field>        <!--                + end   -->
+	<field name="description" default="-">title</field>
+</fields>
+```
+
+```text
+$ ghr repo releases golang/go --as=timeline
+# Timeline
+
+Feb 8, 2026  →  Sep 2, 2026   (7 months)
+ Mar 2026        May 2026        Jul 2026        Sep 2026
+├──┴───────────────┴───────────────┴───────────────┴──────────┤
+   ● go1.24.1 (Mar 4, 2026)
+            ● go1.24.2 (Apr 1, 2026)
+                            ● go1.25rc1 (Jun 10, 2026)
+                                              ● go1.25 (Sep 2, 2026)
+```
+
+The sample's `repo commits` command similarly maps `commit.author.date` to a
+timeline. If the upstream JSON already has keys named `label`/`date`/`start`/
+`end`, you can even skip the `<fields>` block: `... --as=timeline` derives them
+directly.
 
 ## Examples
 
@@ -491,7 +541,7 @@ hidden `--no-NAME` companion.
 | `--debug`         |       | false   | Full execution detail (implies `--verbose`). |
 | `--no-format`     |       | false   | Disable output formatting (= `--format=raw`). |
 | `--format <mode>` |       | `auto`  | `raw` / `auto` / `always`. |
-| `--as <sink>`     |       |         | Force a `<fields>` representation: `table|list|lines|json|markdown|csv`. |
+| `--as <sink>`     |       |         | Force a `<fields>` representation: `table|list|lines|json|markdown|csv|timeline`. |
 | `--view <name>`   |       |         | Pick a named legacy view, bypassing predicate selection. |
 | `--var KEY=VALUE` |       |         | Set an env var before evaluation (so `{{.env.KEY}}` sees it). Repeatable. |
 
