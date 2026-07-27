@@ -2,12 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"sort"
 	"strings"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRenderString_Namespaces(t *testing.T) {
@@ -128,6 +129,53 @@ func TestQueryString_RejectsNonMap(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestRepeatKey_Empty(t *testing.T) {
+	got, err := repeatKey("k", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "", got)
+
+	got, err = repeatKey("k", []string{})
+	require.NoError(t, err)
+	assert.Equal(t, "", got)
+}
+
+func TestRepeatKey_StringSlice(t *testing.T) {
+	got, err := repeatKey("tag", []string{"a", "b", "c"})
+	require.NoError(t, err)
+	assert.Equal(t, "tag=a&tag=b&tag=c", got)
+}
+
+func TestRepeatKey_AnySlice(t *testing.T) {
+	got, err := repeatKey("id", []any{"1", 2, true})
+	require.NoError(t, err)
+	assert.Equal(t, "id=1&id=2&id=true", got)
+}
+
+func TestRepeatKey_SpecialChars(t *testing.T) {
+	got, err := repeatKey("tags[]", []string{"hello world", "a&b"})
+	require.NoError(t, err)
+	assert.Equal(t, "tags%5B%5D=hello+world&tags%5B%5D=a%26b", got)
+}
+
+func TestRepeatKey_DropsEmpty(t *testing.T) {
+	got, err := repeatKey("k", []string{"a", "", "b"})
+	require.NoError(t, err)
+	assert.Equal(t, "k=a&k=b", got)
+}
+
+func TestRepeatKey_RejectsNonSlice(t *testing.T) {
+	_, err := repeatKey("k", "hello")
+	assert.Error(t, err)
+}
+
+func TestRepeatKeyViaTemplate(t *testing.T) {
+	got, err := renderString(`{{repeatkey "tag" .tags}}`, map[string]any{
+		"tags": []string{"x", "y"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "tag=x&tag=y", got)
+}
+
 func TestShellQuote(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"hello", `'hello'`},
@@ -207,4 +255,155 @@ func TestMergeVars(t *testing.T) {
 func TestEnvMap(t *testing.T) {
 	m := envMap()
 	assert.NotEmpty(t, m["PATH"])
+}
+
+func TestSpread_Empty(t *testing.T) {
+	got, err := spread(nil)
+	require.NoError(t, err)
+	assert.Equal(t, spreadSentinel+spreadEndSentinel, got)
+
+	got, err = spread([]string{})
+	require.NoError(t, err)
+	assert.Equal(t, spreadSentinel+spreadEndSentinel, got)
+}
+
+func TestSpread_StringSlice(t *testing.T) {
+	got, err := spread([]string{"a", "b", "c"})
+	require.NoError(t, err)
+	assert.Equal(t, "\x00a\x00b\x00c\x01", got)
+}
+
+func TestSpread_AnySlice(t *testing.T) {
+	got, err := spread([]any{"a", 1, true})
+	require.NoError(t, err)
+	assert.Equal(t, "\x00a\x001\x00true\x01", got)
+}
+
+func TestSpread_IntSlice(t *testing.T) {
+	got, err := spread([]int{1, 2, 3})
+	require.NoError(t, err)
+	assert.Equal(t, "\x001\x002\x003\x01", got)
+}
+
+func TestSpread_RejectsNonSlice(t *testing.T) {
+	_, err := spread("hello")
+	assert.Error(t, err)
+}
+
+func TestSpread_RejectsSentinelBytes(t *testing.T) {
+	_, err := spread([]string{"ok", "bad\x00val"})
+	assert.Error(t, err)
+
+	_, err = spread([]string{"bad\x01val"})
+	assert.Error(t, err)
+}
+
+func TestSpreadViaTemplate(t *testing.T) {
+	got, err := renderString(`{{spread .x}}`, map[string]any{"x": []string{"a", "b"}})
+	require.NoError(t, err)
+	assert.Equal(t, "\x00a\x00b\x01", got)
+}
+
+func TestFileExists(t *testing.T) {
+	dir := t.TempDir()
+	f := dir + "/file.txt"
+	require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
+	assert.True(t, fileExists(f))
+	assert.False(t, fileExists(dir))             // directory, not file
+	assert.False(t, fileExists(dir+"/nope.txt")) // missing
+}
+
+func TestDirExists(t *testing.T) {
+	dir := t.TempDir()
+	f := dir + "/file.txt"
+	require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
+	assert.True(t, dirExists(dir))
+	assert.False(t, dirExists(f)) // file, not dir
+	assert.False(t, dirExists(dir+"/nope"))
+}
+
+func TestFileExistsViaTemplate(t *testing.T) {
+	dir := t.TempDir()
+	f := dir + "/file.txt"
+	require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
+	got, err := renderString(`{{if fileExists .p}}YES{{else}}NO{{end}}`, map[string]any{"p": f})
+	require.NoError(t, err)
+	assert.Equal(t, "YES", got)
+
+	got, err = renderString(`{{if dirExists .p}}YES{{else}}NO{{end}}`, map[string]any{"p": dir})
+	require.NoError(t, err)
+	assert.Equal(t, "YES", got)
+}
+
+func TestTabwriter_StringSlice(t *testing.T) {
+	rows := []any{"ID\tNAME", "1\tAda", "42\tHopper"}
+	got, err := renderString(`{{ tabwriter . }}`, rows)
+	require.NoError(t, err)
+	want := "ID  NAME\n1   Ada\n42  Hopper\n"
+	assert.Equal(t, want, got)
+}
+
+func TestTabwriter_MalformedInput(t *testing.T) {
+	_, err := renderString(`{{ tabwriter . }}`, 42)
+	assert.Error(t, err)
+}
+
+func TestPadTemplateHelpers(t *testing.T) {
+	got, err := renderString(`[{{ padRight 6 "ab" }}]`, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "[ab    ]", got)
+
+	got, err = renderString(`[{{ padLeft 6 "ab" }}]`, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "[    ab]", got)
+}
+
+func TestDisplayWidthAndStripANSITemplateHelpers(t *testing.T) {
+	got, err := renderString(`{{ displayWidth . }}`, "\x1b[31mhi\x1b[0m")
+	require.NoError(t, err)
+	assert.Equal(t, "2", got)
+
+	got, err = renderString(`{{ stripANSI . }}`, "\x1b[31mhi\x1b[0m")
+	require.NoError(t, err)
+	assert.Equal(t, "hi", got)
+}
+
+func TestToRows_NilAndExoticShapes(t *testing.T) {
+	rows, err := toRows(nil)
+	assert.NoError(t, err)
+	assert.Nil(t, rows)
+
+	rows, err = toRows([][]string{{"a", "b"}, {"c", "d"}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a\tb", "c\td"}, rows)
+
+	rows, err = toRows([][]any{{"a", 1}, {"b", 2}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a\t1", "b\t2"}, rows)
+
+	rows, err = toRows([]any{[]any{"x", 1}, "y\tz"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"x\t1", "y\tz"}, rows)
+}
+
+func TestFilterSuffix(t *testing.T) {
+	data := map[string]any{
+		"items": []string{"foo.cpp1.ii", "bar.o", "baz.cpp1.ii", "other"},
+	}
+	got, err := renderString(`{{.items | filterSuffix ".cpp1.ii" | join ","}}`, data)
+	require.NoError(t, err)
+	assert.Equal(t, "foo.cpp1.ii,baz.cpp1.ii", got)
+
+	got, err = renderString(`{{.items | filterSuffix ".cpp1.ii" | first}}`, data)
+	require.NoError(t, err)
+	assert.Equal(t, "foo.cpp1.ii", got)
+}
+
+func TestFilterPrefix(t *testing.T) {
+	data := map[string]any{
+		"items": []string{"--flag1", "pos", "--flag2", "-short"},
+	}
+	got, err := renderString(`{{.items | filterPrefix "--" | join ","}}`, data)
+	require.NoError(t, err)
+	assert.Equal(t, "--flag1,--flag2", got)
 }

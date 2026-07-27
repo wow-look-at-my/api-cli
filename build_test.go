@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const miniConfig = `{
@@ -174,19 +174,110 @@ func TestValidate_DuplicateFlagShort(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestFindConfigFlag(t *testing.T) {
-	cases := []struct {
-		args []string
-		want string
-	}{
-		{[]string{"--config", "path.json", "foo"}, "path.json"},
-		{[]string{"--config=path.json", "foo"}, "path.json"},
-		{[]string{"foo", "--config", "path.json"}, "path.json"},
-		{[]string{"foo"}, ""},
-		{[]string{"--config"}, ""}, // dangling flag: no value
+func TestValidate_VariadicMustBeLast(t *testing.T) {
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
+		Commands: []Command{{
+			Name: "x",
+			Args: []Arg{
+				{Name: "rest", Variadic: true, Required: true},
+				{Name: "extra", Required: true},
+			},
+		}},
 	}
-	for _, c := range cases {
-		got := findConfigFlag(c.args)
-		assert.Equal(t, c.want, got)
+	err := validate(cfg)
+	assert.Error(t, err)
+}
+
+func TestValidate_ConflictsMustReferenceRealFlag(t *testing.T) {
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
+		Commands: []Command{{
+			Name: "x",
+			Flags: []Flag{
+				{Name: "a", Conflicts: []string{"ghost"}},
+			},
+		}},
 	}
+	err := validate(cfg)
+	assert.Error(t, err)
+}
+
+func TestValidate_ConflictsCannotReferenceSelf(t *testing.T) {
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
+		Commands: []Command{{
+			Name: "x",
+			Flags: []Flag{
+				{Name: "a", Conflicts: []string{"a"}},
+			},
+		}},
+	}
+	err := validate(cfg)
+	assert.Error(t, err)
+}
+
+func TestValidate_FlagNameNoNoPrefix(t *testing.T) {
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
+		Commands: []Command{{
+			Name: "x",
+			Flags: []Flag{
+				{Name: "no-cache", Type: "bool"},
+			},
+		}},
+	}
+	err := validate(cfg)
+	assert.Error(t, err)
+}
+
+func TestValidate_PreconditionsLeafOnly(t *testing.T) {
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
+		Commands: []Command{{
+			Name:          "x",
+			Preconditions: []string{"oops"},
+			Commands:      []Command{{Name: "y"}},
+		}},
+	}
+	err := validate(cfg)
+	assert.Error(t, err)
+}
+
+func TestValidate_ConfirmAllowedOnGroup(t *testing.T) {
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
+		Commands: []Command{{
+			Name:     "x",
+			Confirm:  "are you sure?",
+			Commands: []Command{{Name: "y"}},
+		}},
+	}
+	err := validate(cfg)
+	assert.NoError(t, err)
+}
+
+func TestVariadicArgUsesString(t *testing.T) {
+	cfg := &Config{
+		Name:    "t",
+		Command: &Cmd{Shell: true, Template: "true"},
+		Commands: []Command{{
+			Name: "x",
+			Args: []Arg{
+				{Name: "files", Variadic: true},
+			},
+		}},
+	}
+	require.NoError(t, validate(cfg))
+	root := newRoot(cfg)
+	cmd, _, err := root.Find([]string{"x"})
+	require.NoError(t, err)
+	// useStr ends with [files...]
+	assert.Contains(t, cmd.Use, "files...")
 }

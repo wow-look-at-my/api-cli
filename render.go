@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -25,6 +26,12 @@ func envMap() map[string]string {
 	return out
 }
 
+// spreadSentinel (NUL) delimits elements in spread output; spreadEndSentinel
+// (SOH) terminates a spread region. These are reserved internal markers —
+// spread() rejects elements containing either byte.
+const spreadSentinel = "\x00"
+const spreadEndSentinel = "\x01"
+
 // funcMap is the template function set available in every rendered template.
 // It combines sprig's text FuncMap (a broad library of string/list/math/json
 // helpers) with a few custom helpers specific to this tool.
@@ -33,7 +40,195 @@ func funcMap() template.FuncMap {
 	fm["querystring"] = queryString
 	fm["shellquote"] = shellQuote
 	fm["urlpath"] = url.PathEscape
+	fm["spread"] = spread
+	fm["fileExists"] = fileExists
+	fm["dirExists"] = dirExists
+	fm["repeatkey"] = repeatKey
+	fm["tabwriter"] = tabwriter
+	fm["padRight"] = padRight
+	fm["padLeft"] = padLeft
+	fm["displayWidth"] = displayWidth
+	fm["stripANSI"] = stripANSI
+	fm["filterSuffix"] = filterSuffix
+	fm["filterPrefix"] = filterPrefix
+	fm["truthy"] = templateTruthy
 	return fm
+}
+
+// templateTruthy reports whether v is truthy under the same rules as the format
+// `when` predicates (see isTruthy): nil and false are falsy; strings use
+// isTruthy ("", "false", "0", "no" falsy); other values are stringified first.
+// Used by <if test=> placeholders compiled from XML.
+func templateTruthy(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return false
+	case bool:
+		return x
+	case string:
+		return isTruthy(x)
+	default:
+		return isTruthy(fmt.Sprintf("%v", x))
+	}
+}
+
+// tabwriter formats rows with columns aligned by displayWidth. Accepts:
+//   - []string: one row per element, tab-separated columns.
+//   - [][]string or [][]any: explicit cells per row.
+//   - []any: each element is a row; either a string or a []any of cells.
+//
+// Default padding between columns is 2 spaces. ANSI escapes pass through.
+func tabwriter(v any) (string, error) {
+	rows, err := toRows(v)
+	if err != nil {
+		return "", fmt.Errorf("tabwriter: %w", err)
+	}
+	return alignColumns(rows, 2), nil
+}
+
+func toRows(v any) ([]string, error) {
+	switch x := v.(type) {
+	case nil:
+		return nil, nil
+	case []string:
+		return x, nil
+	case [][]string:
+		out := make([]string, len(x))
+		for i, row := range x {
+			out[i] = strings.Join(row, "\t")
+		}
+		return out, nil
+	case [][]any:
+		out := make([]string, len(x))
+		for i, row := range x {
+			cells := make([]string, len(row))
+			for j, cell := range row {
+				cells[j] = fmt.Sprintf("%v", cell)
+			}
+			out[i] = strings.Join(cells, "\t")
+		}
+		return out, nil
+	case []any:
+		out := make([]string, 0, len(x))
+		for _, row := range x {
+			switch r := row.(type) {
+			case string:
+				out = append(out, r)
+			case []any:
+				cells := make([]string, len(r))
+				for j, c := range r {
+					cells[j] = fmt.Sprintf("%v", c)
+				}
+				out = append(out, strings.Join(cells, "\t"))
+			case []string:
+				out = append(out, strings.Join(r, "\t"))
+			default:
+				return nil, fmt.Errorf("row %T not supported (string or []any expected)", row)
+			}
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("expected []string / [][]string / []any, got %T", v)
+	}
+}
+
+// spread expands a slice into multiple arguments. In argv-form commands, the
+// element "{{spread .arg.files}}" becomes N separate argv entries. In
+// shell-form commands, expandSpreadForShell (exec.go) replaces each sentinel
+// region with individually shell-quoted elements.
+//
+// Output format: \x00elem1\x00elem2\x01 (NUL-delimited, SOH-terminated).
+// Elements must not contain \x00 or \x01; spread returns an error if they do.
+//
+// Accepted shapes: nil, []string, []int, []any (each element stringified).
+func spread(v any) (string, error) {
+	parts, err := toStringSlice(v)
+	if err != nil {
+		return "", fmt.Errorf("spread: %w", err)
+	}
+	for _, p := range parts {
+		if strings.ContainsAny(p, spreadSentinel+spreadEndSentinel) {
+			return "", fmt.Errorf("spread: element contains reserved sentinel byte: %q", p)
+		}
+	}
+	if len(parts) == 0 {
+		return spreadSentinel + spreadEndSentinel, nil
+	}
+	return spreadSentinel + strings.Join(parts, spreadSentinel) + spreadEndSentinel, nil
+}
+
+func toStringSlice(v any) ([]string, error) {
+	switch x := v.(type) {
+	case nil:
+		return nil, nil
+	case []string:
+		return x, nil
+	case []int:
+		out := make([]string, len(x))
+		for i, n := range x {
+			out[i] = strconv.Itoa(n)
+		}
+		return out, nil
+	case []any:
+		out := make([]string, len(x))
+		for i, item := range x {
+			out[i] = fmt.Sprintf("%v", item)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("expected slice, got %T", v)
+	}
+}
+
+// fileExists reports whether path exists and is a regular file. Errors other
+// than "not exist" surface as false (template helpers shouldn't error on
+// permission issues during a precondition check).
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.Mode().IsRegular()
+}
+
+// dirExists reports whether path exists and is a directory.
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
+}
+
+// filterSuffix returns elements from list that end with the given suffix.
+// Used in passthrough mode to locate specific files: {{.rest | filterSuffix ".cpp1.ii" | first}}.
+func filterSuffix(suffix string, list any) ([]string, error) {
+	items, err := toStringSlice(list)
+	if err != nil {
+		return nil, fmt.Errorf("filterSuffix: %w", err)
+	}
+	var out []string
+	for _, s := range items {
+		if strings.HasSuffix(s, suffix) {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+// filterPrefix returns elements from list that start with the given prefix.
+func filterPrefix(prefix string, list any) ([]string, error) {
+	items, err := toStringSlice(list)
+	if err != nil {
+		return nil, fmt.Errorf("filterPrefix: %w", err)
+	}
+	var out []string
+	for _, s := range items {
+		if strings.HasPrefix(s, prefix) {
+			out = append(out, s)
+		}
+	}
+	return out, nil
 }
 
 // queryString renders a map (or struct) of parameters as a URL-encoded query
@@ -107,9 +302,27 @@ func addQueryValue(values url.Values, key string, v any) error {
 	return nil
 }
 
+// repeatKey emits repeated query-string parameters for a single key, one per
+// slice element: repeatkey "tag" ["a","b"] → "tag=a&tag=b" (URL-encoded, no
+// leading "?"). Empty string elements are dropped. Nil/empty slices yield "".
+func repeatKey(key string, v any) (string, error) {
+	parts, err := toStringSlice(v)
+	if err != nil {
+		return "", fmt.Errorf("repeatkey: %w", err)
+	}
+	values := url.Values{}
+	for _, p := range parts {
+		if p != "" {
+			values.Add(key, p)
+		}
+	}
+	enc := values.Encode()
+	return enc, nil
+}
+
 // shellQuote wraps s in single quotes for safe interpolation into a POSIX sh
-// command line. Embedded single quotes are escaped using the 'one single
-// quote per quote' dance: foo'bar becomes 'foo'\''bar'.
+// command line. Each embedded single quote is escaped by closing the quoted
+// run, emitting an escaped quote, and reopening (see the replacement below).
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
@@ -187,6 +400,25 @@ func walkEntry(v any, data any) (any, error) {
 	default:
 		return v, nil
 	}
+}
+
+// lookupPath walks a dotted context path ("var.filter", "data.items") into a
+// nested map structure. Returns nil if any segment is missing or a non-map is
+// traversed. An empty path returns the value unchanged.
+func lookupPath(data any, path string) any {
+	cur := data
+	for _, seg := range strings.Split(path, ".") {
+		seg = strings.TrimSpace(seg)
+		if seg == "" {
+			continue
+		}
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return nil
+		}
+		cur = m[seg]
+	}
+	return cur
 }
 
 // mergeVars merges `child` into a copy of `parent`, with the child winning on

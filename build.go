@@ -1,30 +1,57 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
+	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // exitCode is set by a leaf's RunE to the exit status of the child process.
 // main reads it after rootCmd.Execute() returns.
 var exitCode int
 
+var confirmYes = regexp.MustCompile(`^[yY]([eE][sS])?$`)
+
+var isInteractive = func() bool {
+	f, ok := execStdin.(*os.File)
+	return ok && term.IsTerminal(int(f.Fd()))
+}
+
 // buildCommand turns a Command node into a cobra.Command, wiring up args,
 // flags, and subcommands. inheritedVars flow down the tree (child overrides
 // parent on key collision). inheritedCmd is the closest-ancestor command
 // template; the node's own command, if set, overrides it for this subtree.
-func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd) *cobra.Command {
+// inheritedCwd is the closest-ancestor working-directory template; the node's
+// own cwd, if non-empty, overrides it for this subtree. inheritedStdin is the
+// closest-ancestor stdin template; the node's own stdin, if non-empty,
+// overrides it for this subtree. inheritedConfirm is the closest-ancestor
+// confirm template; the node's own confirm, if non-empty, overrides it.
+// inheritedFormat is the closest-ancestor format reference; the node's own
+// format, if set, overrides it. formats is the top-level format registry used
+// to resolve named references.
+func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd, inheritedRequest *Request, inheritedCwd, inheritedStdin, inheritedConfirm string, inheritedFormat *FormatRef, formats map[string]*Format) *cobra.Command {
 	useStr := node.Name
 	requiredArgs := 0
+	hasVariadic := false
 	for _, a := range node.Args {
+		token := a.Name
+		if a.Variadic {
+			token += "..."
+			hasVariadic = true
+		}
 		if a.Required {
-			useStr += " <" + a.Name + ">"
+			useStr += " <" + token + ">"
 			requiredArgs++
 		} else {
-			useStr += " [" + a.Name + "]"
+			useStr += " [" + token + "]"
 		}
 	}
 
@@ -34,23 +61,55 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd)
 		SilenceUsage: true,
 	}
 
-	if total := len(node.Args); total > 0 {
-		if requiredArgs == total {
-			cmd.Args = cobra.ExactArgs(total)
-		} else {
-			cmd.Args = cobra.RangeArgs(requiredArgs, total)
+	if node.Passthrough {
+		cmd.Args = cobra.ArbitraryArgs
+	} else {
+		if total := len(node.Args); total > 0 {
+			switch {
+			case hasVariadic:
+				cmd.Args = cobra.MinimumNArgs(requiredArgs)
+			case requiredArgs == total:
+				cmd.Args = cobra.ExactArgs(total)
+			default:
+				cmd.Args = cobra.RangeArgs(requiredArgs, total)
+			}
 		}
+
+		for _, f := range node.Flags {
+			registerFlag(cmd, f)
+		}
+		registerConflicts(cmd, node.Flags)
 	}
 
-	for _, f := range node.Flags {
-		registerFlag(cmd, f)
-	}
-
-	// Resolve effective vars and command for this subtree.
+	// Resolve effective vars, run (command or request), cwd, stdin, and format
+	// for this subtree. A node's <run> overrides the inherited one of either
+	// kind: defining a command clears an inherited request and vice versa, so
+	// the closest ancestor with any <run> wins.
 	effectiveVars := mergeVars(inheritedVars, node.Vars)
 	effectiveCmd := inheritedCmd
-	if node.Command.Defined() {
+	effectiveRequest := inheritedRequest
+	if node.Request.Defined() {
+		effectiveRequest = node.Request
+		effectiveCmd = nil
+	} else if node.Command.Defined() {
 		effectiveCmd = node.Command
+		effectiveRequest = nil
+	}
+	effectiveCwd := inheritedCwd
+	if node.Cwd != "" {
+		effectiveCwd = node.Cwd
+	}
+	effectiveStdin := inheritedStdin
+	if node.Stdin != "" {
+		effectiveStdin = node.Stdin
+	}
+	effectiveConfirm := inheritedConfirm
+	if node.Confirm != "" {
+		effectiveConfirm = node.Confirm
+	}
+	effectiveFormat := inheritedFormat
+	if node.Format.Defined() {
+		effectiveFormat = node.Format
 	}
 
 	// Leaves (no subcommands) execute.
@@ -58,13 +117,19 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd)
 		nodeCopy := node
 		leafVars := effectiveVars
 		leafCmd := effectiveCmd
+		leafRequest := effectiveRequest
+		leafCwd := effectiveCwd
+		leafStdin := effectiveStdin
+		leafConfirm := effectiveConfirm
+		leafFormat := effectiveFormat
+		leafFormats := formats
 		cmd.RunE = func(c *cobra.Command, args []string) error {
-			return runLeaf(c, nodeCopy, args, leafVars, leafCmd)
+			return runLeaf(c, nodeCopy, args, leafVars, leafCmd, leafRequest, leafCwd, leafStdin, leafConfirm, leafFormat, leafFormats)
 		}
 	}
 
 	for _, child := range node.Commands {
-		cmd.AddCommand(buildCommand(child, effectiveVars, effectiveCmd))
+		cmd.AddCommand(buildCommand(child, effectiveVars, effectiveCmd, effectiveRequest, effectiveCwd, effectiveStdin, effectiveConfirm, effectiveFormat, formats))
 	}
 
 	return cmd
@@ -82,6 +147,14 @@ func registerFlag(cmd *cobra.Command, f Flag) {
 	case "bool":
 		def, _ := f.Default.(bool)
 		cmd.Flags().BoolP(f.Name, f.Short, def, f.Description)
+		// Default-true bool: register a hidden --no-NAME companion that flips
+		// the flag back to false. Lets users say `--no-verbose` instead of the
+		// awkward `--verbose=false`.
+		if def {
+			neg := "no-" + f.Name
+			cmd.Flags().Bool(neg, false, "Disable --"+f.Name+".")
+			_ = cmd.Flags().MarkHidden(neg)
+		}
 	case "int":
 		var def int
 		switch v := f.Default.(type) {
@@ -108,11 +181,54 @@ func registerFlag(cmd *cobra.Command, f Flag) {
 	}
 }
 
+// registerConflicts wires per-flag `conflicts` lists into cobra's mutual
+// exclusion machinery. Each unordered pair is registered once.
+func registerConflicts(cmd *cobra.Command, flags []Flag) {
+	type pair struct{ a, b string }
+	seen := map[pair]bool{}
+	for _, f := range flags {
+		for _, peer := range f.Conflicts {
+			a, b := f.Name, peer
+			if a > b {
+				a, b = b, a
+			}
+			p := pair{a, b}
+			if seen[p] {
+				continue
+			}
+			seen[p] = true
+			cmd.MarkFlagsMutuallyExclusive(a, b)
+		}
+	}
+}
+
 // gatherArgs builds the .arg sub-map by converting positional args to their
-// declared types.
+// declared types. A variadic arg (always last) collects all remaining values
+// into a typed slice; an unsupplied optional variadic arg yields an empty
+// slice so templates can range over it without nil checks.
 func gatherArgs(node Command, args []string) (map[string]any, error) {
 	out := make(map[string]any, len(node.Args))
 	for i, a := range node.Args {
+		if a.Variadic {
+			rest := []string{}
+			if i < len(args) {
+				rest = args[i:]
+			}
+			if a.Type == "int" {
+				ints := make([]int, len(rest))
+				for j, v := range rest {
+					n, err := strconv.Atoi(v)
+					if err != nil {
+						return nil, fmt.Errorf("arg %q[%d]: %w", a.Name, j, err)
+					}
+					ints[j] = n
+				}
+				out[a.Name] = ints
+			} else {
+				out[a.Name] = rest
+			}
+			break
+		}
 		if i >= len(args) {
 			break
 		}
@@ -131,7 +247,14 @@ func gatherArgs(node Command, args []string) (map[string]any, error) {
 }
 
 // gatherFlags builds the .flag sub-map from the cobra-parsed flag set.
-func gatherFlags(cmd *cobra.Command, node Command) map[string]any {
+//
+// Two non-trivial cases:
+//  1. Bool flags with default=true register a hidden --no-NAME companion;
+//     when set, it flips the value to false.
+//  2. String flags whose configured default is itself a template (contains
+//     `{{`) are rendered against the current context — but only when the
+//     user did not explicitly set the flag.
+func gatherFlags(cmd *cobra.Command, node Command, data any) (map[string]any, error) {
 	out := make(map[string]any, len(node.Flags))
 	for _, f := range node.Flags {
 		typ := f.Type
@@ -141,9 +264,24 @@ func gatherFlags(cmd *cobra.Command, node Command) map[string]any {
 		switch typ {
 		case "string":
 			v, _ := cmd.Flags().GetString(f.Name)
+			if !cmd.Flags().Changed(f.Name) {
+				if def, ok := f.Default.(string); ok && strings.Contains(def, "{{") {
+					rendered, err := renderString(def, data)
+					if err != nil {
+						return nil, fmt.Errorf("flag %q default: %w", f.Name, err)
+					}
+					v = rendered
+				}
+			}
 			out[f.Name] = v
 		case "bool":
 			v, _ := cmd.Flags().GetBool(f.Name)
+			neg := "no-" + f.Name
+			if cmd.Flags().Lookup(neg) != nil && cmd.Flags().Changed(neg) {
+				if no, _ := cmd.Flags().GetBool(neg); no {
+					v = false
+				}
+			}
 			out[f.Name] = v
 		case "int":
 			v, _ := cmd.Flags().GetInt(f.Name)
@@ -153,7 +291,127 @@ func gatherFlags(cmd *cobra.Command, node Command) map[string]any {
 			out[f.Name] = v
 		}
 	}
-	return out
+	return out, nil
+}
+
+// passthroughParse extracts known flags from a raw arg list. Everything not
+// recognized as a known flag (or its value) goes into rest. Flags are matched
+// with either one or two leading dashes (to support tools like CUDA's cicc
+// that use single-dash long flags). A flag's short alias is also recognized.
+// A bare "--" in the args is forwarded into rest verbatim (along with
+// everything after it), since it may be meaningful to the wrapped command.
+func passthroughParse(rawArgs []string, flags []Flag) (flagMap map[string]any, rest []string) {
+	type flagDef struct {
+		name string
+		typ  string
+	}
+	lookup := map[string]*flagDef{}
+	for i := range flags {
+		f := &flags[i]
+		typ := f.Type
+		if typ == "" {
+			typ = "string"
+		}
+		def := &flagDef{name: f.Name, typ: typ}
+		lookup[f.Name] = def
+		if f.Short != "" {
+			lookup[f.Short] = def
+		}
+	}
+
+	flagMap = make(map[string]any, len(flags))
+	for _, f := range flags {
+		typ := f.Type
+		if typ == "" {
+			typ = "string"
+		}
+		switch typ {
+		case "string":
+			def, _ := f.Default.(string)
+			flagMap[f.Name] = def
+		case "bool":
+			def, _ := f.Default.(bool)
+			flagMap[f.Name] = def
+		case "int":
+			var def int
+			switch v := f.Default.(type) {
+			case float64:
+				def = int(v)
+			case int:
+				def = v
+			}
+			flagMap[f.Name] = def
+		case "string-slice":
+			flagMap[f.Name] = []string{}
+		}
+	}
+
+	rest = make([]string, 0, len(rawArgs))
+	for i := 0; i < len(rawArgs); i++ {
+		arg := rawArgs[i]
+
+		if arg == "--" {
+			rest = append(rest, rawArgs[i:]...)
+			break
+		}
+
+		if !strings.HasPrefix(arg, "-") {
+			rest = append(rest, arg)
+			continue
+		}
+
+		stripped := strings.TrimLeft(arg, "-")
+		name := stripped
+		value := ""
+		hasEquals := false
+		if idx := strings.IndexByte(stripped, '='); idx >= 0 {
+			name = stripped[:idx]
+			value = stripped[idx+1:]
+			hasEquals = true
+		}
+
+		def, known := lookup[name]
+		if !known {
+			rest = append(rest, arg)
+			continue
+		}
+
+		switch def.typ {
+		case "bool":
+			if hasEquals {
+				flagMap[def.name] = value == "true" || value == "1" || value == "yes"
+			} else {
+				flagMap[def.name] = true
+			}
+		case "int":
+			var raw string
+			if hasEquals {
+				raw = value
+			} else if i+1 < len(rawArgs) {
+				i++
+				raw = rawArgs[i]
+			}
+			n, _ := strconv.Atoi(raw)
+			flagMap[def.name] = n
+		case "string-slice":
+			var raw string
+			if hasEquals {
+				raw = value
+			} else if i+1 < len(rawArgs) {
+				i++
+				raw = rawArgs[i]
+			}
+			flagMap[def.name] = append(flagMap[def.name].([]string), raw)
+		default:
+			if hasEquals {
+				flagMap[def.name] = value
+			} else if i+1 < len(rawArgs) {
+				i++
+				flagMap[def.name] = rawArgs[i]
+			}
+		}
+	}
+	return flagMap, rest
 }
 
 // runLeaf is the per-invocation body for every leaf.
@@ -161,28 +419,202 @@ func gatherFlags(cmd *cobra.Command, node Command) map[string]any {
 // Stages:
 //  1. Assemble args, flags, env — the base template context.
 //  2. Render the merged vars against the base context to produce .var.
-//  3. Render the entry against the context (now including .var) to produce
-//     .entry.
-//  4. Render the effective command template against the full context and
-//     execute it.
-func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd) error {
-	argMap, err := gatherArgs(node, args)
-	if err != nil {
-		return err
+//  3. Execute each step in order, capturing its stdout into .result.<name>.
+//     Each step's entry template is rendered against the current context
+//     (including .result.* from prior steps) before the step runs.
+//  4. Render the leaf's own entry against the full context (including
+//     .result.*) to produce .entry.
+//  5. Render the effective command template against the full context and
+//     execute it, streaming output to the user.
+//  6. If more than one command was executed and --quiet is not set, print
+//     the execution count to stderr.
+//
+// cwdTmpl is the effective working-directory template for this leaf; an empty
+// string means "use the calling process's cwd". Each step inherits cwdTmpl
+// unless the step itself sets `cwd`. The cwd template is rendered fresh per
+// execution against the current data context (so .result and .entry are
+// available where appropriate).
+//
+// stdinTmpl is the effective stdin template for this leaf; an empty string
+// means "inherit the parent process's stdin". Each step inherits stdinTmpl
+// unless the step itself sets `stdin`. The stdin template is rendered fresh
+// per execution against the current data context.
+func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, request *Request, cwdTmpl, stdinTmpl, confirmTmpl string, formatRef *FormatRef, formats map[string]*Format) error {
+	verboseMode, _ = c.Root().PersistentFlags().GetBool("verbose")
+	dbg, _ := c.Root().PersistentFlags().GetBool("debug")
+	if dbg {
+		debugMode = true
+		verboseMode = true
 	}
-	flagMap := gatherFlags(c, node)
 
-	data := map[string]any{
-		"arg":  argMap,
-		"flag": flagMap,
-		"env":  envMap(),
+	var data map[string]any
+
+	if node.Passthrough {
+		flagMap, rest := passthroughParse(args, node.Flags)
+		envM := envMap()
+		preData := map[string]any{
+			"arg":  map[string]any{},
+			"flag": map[string]any{},
+			"env":  envM,
+			"rest": rest,
+		}
+		renderedVars, err := renderVars(vars, preData)
+		if err != nil {
+			return fmt.Errorf("render vars: %w", err)
+		}
+		data = map[string]any{
+			"arg":  map[string]any{},
+			"flag": flagMap,
+			"env":  envM,
+			"var":  renderedVars,
+			"rest": rest,
+		}
+	} else {
+		argMap, err := gatherArgs(node, args)
+		if err != nil {
+			return err
+		}
+
+		// Templated flag defaults render against {arg, env, var} — not other
+		// flags — so build vars from that partial context first, then resolve
+		// flags, then complete the data map.
+		envM := envMap()
+		preFlagData := map[string]any{
+			"arg":  argMap,
+			"flag": map[string]any{},
+			"env":  envM,
+		}
+		renderedVars, err := renderVars(vars, preFlagData)
+		if err != nil {
+			return fmt.Errorf("render vars: %w", err)
+		}
+		preFlagData["var"] = renderedVars
+
+		flagMap, err := gatherFlags(c, node, preFlagData)
+		if err != nil {
+			return err
+		}
+
+		data = map[string]any{
+			"arg":  argMap,
+			"flag": flagMap,
+			"env":  envM,
+			"var":  renderedVars,
+		}
 	}
 
-	renderedVars, err := renderVars(vars, data)
-	if err != nil {
-		return fmt.Errorf("render vars: %w", err)
+	logVerbose("leaf %q: starting", node.Name)
+	logDebug("leaf %q: data context: %s", node.Name, jsonCompact(data))
+
+	for i, p := range node.Preconditions {
+		msg, perr := renderString(p, data)
+		if perr != nil {
+			return fmt.Errorf("precondition[%d]: %w", i, perr)
+		}
+		msg = strings.TrimSpace(msg)
+		logVerbose("precondition[%d]: %q => %q (pass=%v)", i, p, msg, msg == "")
+		if msg != "" {
+			fmt.Fprintln(execStderr, "error:", msg)
+			exitCode = 1
+			return nil
+		}
 	}
-	data["var"] = renderedVars
+
+	if confirmTmpl != "" {
+		msg, cerr := renderString(confirmTmpl, data)
+		if cerr != nil {
+			return fmt.Errorf("render confirm: %w", cerr)
+		}
+		msg = strings.TrimSpace(msg)
+		logDebug("confirm: template=%q rendered=%q", confirmTmpl, msg)
+		if msg != "" {
+			yes, _ := c.Root().PersistentFlags().GetBool("yes")
+			if !yes {
+				if !isInteractive() {
+					fmt.Fprintln(execStderr, "error: refusing to run without confirmation; pass --yes")
+					exitCode = 1
+					return nil
+				}
+				fmt.Fprintf(execStderr, "%s [y/N] ", msg)
+				scanner := bufio.NewScanner(execStdin)
+				if !scanner.Scan() {
+					exitCode = 1
+					return nil
+				}
+				if !confirmYes.MatchString(strings.TrimSpace(scanner.Text())) {
+					exitCode = 1
+					return nil
+				}
+			}
+		}
+	}
+
+	resultMap := map[string]any{}
+	data["result"] = resultMap
+
+	executions := 0
+
+	for _, step := range node.Steps {
+		if step.When != "" {
+			whenOut, err := renderString(step.When, data)
+			if err != nil {
+				return fmt.Errorf("step %q: render when: %w", step.Name, err)
+			}
+			logVerbose("step %q: when %q => %q (truthy=%v)", step.Name, step.When, whenOut, isTruthy(whenOut))
+			if !isTruthy(whenOut) {
+				logVerbose("step %q: skipped", step.Name)
+				continue
+			}
+		}
+
+		stepCmd := cmdTmpl
+		if step.Command.Defined() {
+			stepCmd = step.Command
+		}
+		if !stepCmd.Defined() {
+			return fmt.Errorf("step %q: no command available", step.Name)
+		}
+
+		stepEntry, err := renderEntry(step.Entry, data)
+		if err != nil {
+			return fmt.Errorf("step %q: render entry: %w", step.Name, err)
+		}
+		if stepEntry == nil {
+			stepEntry = map[string]any{}
+		}
+		data["entry"] = stepEntry
+		logDebug("step %q: entry: %s", step.Name, jsonCompact(stepEntry))
+
+		stepCwdTmpl := cwdTmpl
+		if step.Cwd != "" {
+			stepCwdTmpl = step.Cwd
+		}
+		stepCwd, err := renderCwd(stepCwdTmpl, data)
+		if err != nil {
+			return fmt.Errorf("step %q: render cwd: %w", step.Name, err)
+		}
+
+		stepStdinTmpl := stdinTmpl
+		if step.Stdin != "" {
+			stepStdinTmpl = step.Stdin
+		}
+		stepStdin, err := renderStdin(stepStdinTmpl, data)
+		if err != nil {
+			return fmt.Errorf("step %q: render stdin: %w", step.Name, err)
+		}
+
+		logVerbose("step %q: executing", step.Name)
+		out, code := captureExec(stepCmd, stepCwd, stepStdin, data)
+		executions++
+		logVerbose("step %q: exit code %d", step.Name, code)
+		logDebugBlock(fmt.Sprintf("step %q: stdout", step.Name), out)
+		if code != 0 {
+			exitCode = code
+			reportExecutions(c, executions)
+			return nil
+		}
+		resultMap[step.Name] = parseResult(out)
+	}
 
 	entry, err := renderEntry(node.Entry, data)
 	if err != nil {
@@ -192,18 +624,76 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		entry = map[string]any{}
 	}
 	data["entry"] = entry
+	logDebug("leaf %q: entry: %s", node.Name, jsonCompact(entry))
 
-	if !cmdTmpl.Defined() {
-		return fmt.Errorf("no command available to run")
+	if !cmdTmpl.Defined() && !request.Defined() {
+		return fmt.Errorf("no command or request available to run")
 	}
 
-	exitCode = doExec(cmdTmpl, data)
+	leafCwd, err := renderCwd(cwdTmpl, data)
+	if err != nil {
+		return fmt.Errorf("render cwd: %w", err)
+	}
+
+	leafStdin, err := renderStdin(stdinTmpl, data)
+	if err != nil {
+		return fmt.Errorf("render stdin: %w", err)
+	}
+
+	logVerbose("leaf %q: executing", node.Name)
+	exitCode, err = execLeaf(c, cmdTmpl, request, leafCwd, leafStdin, data, node.Fields, formatRef, formats)
+	if err != nil {
+		return err
+	}
+	logVerbose("leaf %q: exit code %d", node.Name, exitCode)
+	executions++
+	logVerbose("leaf %q: %d executions total", node.Name, executions)
+	reportExecutions(c, executions)
 	return nil
 }
 
-// renderVars runs each string leaf of the merged vars map through the
-// template engine with the given context. Non-string values pass through.
-func renderVars(vars map[string]any, data any) (map[string]any, error) {
+// renderCwd renders a cwd template against data. An empty template short-
+// circuits to the empty string ("no override"), so we don't pay template
+// machinery on the common no-cwd path.
+func renderCwd(tmpl string, data any) (string, error) {
+	if tmpl == "" {
+		return "", nil
+	}
+	return renderString(tmpl, data)
+}
+
+// renderStdin renders a stdin template against data. An empty template short-
+// circuits to the empty string ("no override" — the child inherits the parent
+// process's stdin).
+func renderStdin(tmpl string, data any) (string, error) {
+	if tmpl == "" {
+		return "", nil
+	}
+	return renderString(tmpl, data)
+}
+
+// reportExecutions prints the number of commands run to stderr when n > 1
+// and --quiet is not set.
+func reportExecutions(c *cobra.Command, n int) {
+	if n <= 1 {
+		return
+	}
+	quiet, _ := c.Root().PersistentFlags().GetBool("quiet")
+	if !quiet {
+		fmt.Fprintf(execStderr, "%d executions\n", n)
+	}
+}
+
+// maxVarPasses caps the fixpoint iteration that resolves inter-var references.
+const maxVarPasses = 10
+
+// renderVars runs each string leaf of the merged vars map through the template
+// engine with the given context. Vars may reference other vars: each pass makes
+// the previous pass's resolved values available at `.var`, iterating to a
+// fixpoint (capped at maxVarPasses). The original templates are re-rendered each
+// pass, so already-resolved text is never double-processed. Non-string values
+// pass through.
+func renderVars(vars map[string]any, data map[string]any) (map[string]any, error) {
 	if len(vars) == 0 {
 		return map[string]any{}, nil
 	}
@@ -213,16 +703,38 @@ func renderVars(vars map[string]any, data any) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	v, err := renderEntry(raw, data)
-	if err != nil {
-		return nil, err
+	cur := map[string]any{}
+	for pass := 0; pass < maxVarPasses; pass++ {
+		ctx := make(map[string]any, len(data)+1)
+		for k, v := range data {
+			ctx[k] = v
+		}
+		ctx["var"] = cur
+		v, err := renderEntry(raw, ctx)
+		if err != nil {
+			return nil, err
+		}
+		next, ok := v.(map[string]any)
+		if !ok {
+			if v == nil {
+				return map[string]any{}, nil
+			}
+			return nil, fmt.Errorf("vars did not render to a map: got %T", v)
+		}
+		if pass > 0 && varsEqual(cur, next) {
+			return next, nil
+		}
+		cur = next
 	}
-	if v == nil {
-		return map[string]any{}, nil
+	return cur, nil
+}
+
+// varsEqual reports whether two rendered var maps are equal by JSON identity.
+func varsEqual(a, b map[string]any) bool {
+	ba, err1 := json.Marshal(a)
+	bb, err2 := json.Marshal(b)
+	if err1 != nil || err2 != nil {
+		return false
 	}
-	m, ok := v.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("vars did not render to a map: got %T", v)
-	}
-	return m, nil
+	return bytes.Equal(ba, bb)
 }
