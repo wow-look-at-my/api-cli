@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Tests for the per-command/step stdin field. Stdin inherits down the tree like
@@ -80,9 +80,9 @@ func TestIntegration_LeafStdinTemplated(t *testing.T) {
 	cfg := &Config{
 		Name: "t",
 		Commands: []Command{{
-			Name:  "echo",
-			Args:  []Arg{{Name: "msg", Required: true}},
-			Stdin: "{{.arg.msg}}",
+			Name:    "echo",
+			Args:    []Arg{{Name: "msg", Required: true}},
+			Stdin:   "{{.arg.msg}}",
 			Command: &Cmd{Argv: []string{"cat"}},
 		}},
 	}
@@ -93,9 +93,9 @@ func TestIntegration_LeafStdinTemplated(t *testing.T) {
 
 func TestIntegration_StdinInheritsFromConfig(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Stdin:   "from-root\n",
-		Command: &Cmd{Argv: []string{"cat"}},
+		Name:     "t",
+		Stdin:    "from-root\n",
+		Command:  &Cmd{Argv: []string{"cat"}},
 		Commands: []Command{{Name: "show"}},
 	}
 	code, out := execCmd(t, cfg, "show")
@@ -210,8 +210,8 @@ func TestIntegration_StdinEmptyPassesThrough(t *testing.T) {
 	t.Cleanup(func() { execStdin = prev })
 
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `cat`},
+		Name:     "t",
+		Command:  &Cmd{Shell: true, Template: `cat`},
 		Commands: []Command{{Name: "echo"}},
 	}
 	code, out := execCmd(t, cfg, "echo")
@@ -223,9 +223,9 @@ func TestIntegration_StdinWithJsonTemplate(t *testing.T) {
 	cfg := &Config{
 		Name: "t",
 		Commands: []Command{{
-			Name:  "run",
-			Flags: []Flag{{Name: "body", Required: true}},
-			Stdin: `{{.flag.body | toJson}}`,
+			Name:    "run",
+			Flags:   []Flag{{Name: "body", Required: true}},
+			Stdin:   `{{.flag.body | toJson}}`,
 			Command: &Cmd{Argv: []string{"cat"}},
 		}},
 	}

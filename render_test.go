@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRenderString_Namespaces(t *testing.T) {
@@ -309,8 +309,8 @@ func TestFileExists(t *testing.T) {
 	f := dir + "/file.txt"
 	require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
 	assert.True(t, fileExists(f))
-	assert.False(t, fileExists(dir))                // directory, not file
-	assert.False(t, fileExists(dir+"/nope.txt"))    // missing
+	assert.False(t, fileExists(dir))             // directory, not file
+	assert.False(t, fileExists(dir+"/nope.txt")) // missing
 }
 
 func TestDirExists(t *testing.T) {
@@ -318,7 +318,7 @@ func TestDirExists(t *testing.T) {
 	f := dir + "/file.txt"
 	require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
 	assert.True(t, dirExists(dir))
-	assert.False(t, dirExists(f))      // file, not dir
+	assert.False(t, dirExists(f)) // file, not dir
 	assert.False(t, dirExists(dir+"/nope"))
 }
 

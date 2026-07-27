@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Tests for the per-command/step cwd field. Cwd inherits down the tree like
@@ -98,9 +98,9 @@ func TestIntegration_CwdInheritsFromConfig(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "f"), []byte("inherited\n"), 0o600))
 	cfg := &Config{
-		Name:    "t",
-		Cwd:     dir,
-		Command: &Cmd{Shell: true, Template: `cat f`},
+		Name:     "t",
+		Cwd:      dir,
+		Command:  &Cmd{Shell: true, Template: `cat f`},
 		Commands: []Command{{Name: "show"}},
 	}
 	code, out := execCmd(t, cfg, "show")

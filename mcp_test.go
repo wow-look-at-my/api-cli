@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // --- buildToolInputSchema ---
@@ -59,7 +59,7 @@ func TestBuildToolInputSchema_Flags(t *testing.T) {
 			{Name: "limit", Type: "int", Required: true},
 			{Name: "verbose", Type: "bool", Description: "enable verbose output"},
 			{Name: "tags", Type: "string-slice"},
-			{Name: "output"},	// empty type defaults to string
+			{Name: "output"}, // empty type defaults to string
 		},
 	}
 	schema := buildToolInputSchema(node)
@@ -81,12 +81,12 @@ func TestBuildToolInputSchema_Flags(t *testing.T) {
 func TestCollectMCPLeaves_Flat(t *testing.T) {
 	cmds := []Command{
 		{
-			Name:		"ping",
-			Command:	&Cmd{Shell: true, Template: "true"},
+			Name:    "ping",
+			Command: &Cmd{Shell: true, Template: "true"},
 		},
 		{
-			Name:		"pong",
-			Command:	&Cmd{Shell: true, Template: "true"},
+			Name:    "pong",
+			Command: &Cmd{Shell: true, Template: "true"},
 		},
 	}
 	leaves := collectMCPLeaves(cmds, mcpInherit{})
@@ -99,7 +99,7 @@ func TestCollectMCPLeaves_Nested(t *testing.T) {
 	cmd := &Cmd{Shell: true, Template: "true"}
 	cmds := []Command{
 		{
-			Name:	"users",
+			Name: "users",
 			Commands: []Command{
 				{Name: "get", Command: cmd},
 				{Name: "list", Command: cmd},
@@ -133,11 +133,11 @@ func TestCollectMCPLeaves_ChildOverrides(t *testing.T) {
 	childCmd := &Cmd{Shell: true, Template: "child"}
 	cmds := []Command{
 		{
-			Name:		"leaf",
-			Command:	childCmd,
-			Cwd:		"/child",
-			Stdin:		"child-stdin",
-			Vars:		map[string]any{"key": "child-val"},
+			Name:    "leaf",
+			Command: childCmd,
+			Cwd:     "/child",
+			Stdin:   "child-stdin",
+			Vars:    map[string]any{"key": "child-val"},
 		},
 	}
 	leaves := collectMCPLeaves(cmds, mcpInherit{vars: map[string]any{"key": "root-val"}, cmd: rootCmd, cwd: "/root", stdin: "root-stdin"})
@@ -216,10 +216,10 @@ func TestMcpGatherFlags_AllTypes(t *testing.T) {
 		},
 	}
 	got, err := mcpGatherFlags(node, map[string]any{
-		"s":	"hello",
-		"b":	true,
-		"n":	float64(5),
-		"ss":	[]any{"x", "y"},
+		"s":  "hello",
+		"b":  true,
+		"n":  float64(5),
+		"ss": []any{"x", "y"},
 	}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "hello", got["s"])
@@ -340,8 +340,8 @@ func TestMcpCombine(t *testing.T) {
 
 func TestMcpExecLeaf_Simple(t *testing.T) {
 	leaf := &mcpLeaf{
-		node:		Command{Args: []Arg{{Name: "msg", Required: true}}},
-		cmdTmpl:	&Cmd{Shell: true, Template: "printf '%s' {{.arg.msg | shellquote}}"},
+		node:    Command{Args: []Arg{{Name: "msg", Required: true}}},
+		cmdTmpl: &Cmd{Shell: true, Template: "printf '%s' {{.arg.msg | shellquote}}"},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{"msg": "hello"})
 	assert.False(t, isErr)
@@ -353,7 +353,7 @@ func TestMcpExecLeaf_Flags(t *testing.T) {
 		node: Command{
 			Flags: []Flag{{Name: "count", Type: "int", Default: float64(1)}},
 		},
-		cmdTmpl:	&Cmd{Shell: true, Template: "printf '%d' {{.flag.count}}"},
+		cmdTmpl: &Cmd{Shell: true, Template: "printf '%d' {{.flag.count}}"},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{"count": float64(7)})
 	assert.False(t, isErr)
@@ -362,8 +362,8 @@ func TestMcpExecLeaf_Flags(t *testing.T) {
 
 func TestMcpExecLeaf_FailingCommand(t *testing.T) {
 	leaf := &mcpLeaf{
-		node:		Command{},
-		cmdTmpl:	&Cmd{Shell: true, Template: "false"},
+		node:    Command{},
+		cmdTmpl: &Cmd{Shell: true, Template: "false"},
 	}
 	_, isErr := mcpExecLeaf(leaf, map[string]any{})
 	assert.True(t, isErr)
@@ -372,10 +372,10 @@ func TestMcpExecLeaf_FailingCommand(t *testing.T) {
 func TestMcpExecLeaf_Precondition(t *testing.T) {
 	leaf := &mcpLeaf{
 		node: Command{
-			Preconditions:	[]string{"{{if not .flag.ok}}not ok{{end}}"},
-			Flags:		[]Flag{{Name: "ok", Type: "bool"}},
+			Preconditions: []string{"{{if not .flag.ok}}not ok{{end}}"},
+			Flags:         []Flag{{Name: "ok", Type: "bool"}},
 		},
-		cmdTmpl:	&Cmd{Shell: true, Template: "true"},
+		cmdTmpl: &Cmd{Shell: true, Template: "true"},
 	}
 	_, isErr := mcpExecLeaf(leaf, map[string]any{"ok": false})
 	assert.True(t, isErr)
@@ -392,7 +392,7 @@ func TestMcpExecLeaf_WithStep(t *testing.T) {
 				{Name: "greeting", Command: &Cmd{Shell: true, Template: "printf 'hello'"}},
 			},
 		},
-		cmdTmpl:	&Cmd{Shell: true, Template: "printf '%s world' {{.result.greeting | shellquote}}"},
+		cmdTmpl: &Cmd{Shell: true, Template: "printf '%s world' {{.result.greeting | shellquote}}"},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{})
 	assert.False(t, isErr)
@@ -406,7 +406,7 @@ func TestMcpExecLeaf_StepFails(t *testing.T) {
 				{Name: "bad", Command: &Cmd{Shell: true, Template: "false"}},
 			},
 		},
-		cmdTmpl:	&Cmd{Shell: true, Template: "true"},
+		cmdTmpl: &Cmd{Shell: true, Template: "true"},
 	}
 	_, isErr := mcpExecLeaf(leaf, map[string]any{})
 	assert.True(t, isErr)
@@ -414,9 +414,9 @@ func TestMcpExecLeaf_StepFails(t *testing.T) {
 
 func TestMcpExecLeaf_Vars(t *testing.T) {
 	leaf := &mcpLeaf{
-		node:		Command{},
-		vars:		map[string]any{"greeting": "hi"},
-		cmdTmpl:	&Cmd{Shell: true, Template: "printf '%s' {{.var.greeting | shellquote}}"},
+		node:    Command{},
+		vars:    map[string]any{"greeting": "hi"},
+		cmdTmpl: &Cmd{Shell: true, Template: "printf '%s' {{.var.greeting | shellquote}}"},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{})
 	assert.False(t, isErr)
@@ -425,8 +425,8 @@ func TestMcpExecLeaf_Vars(t *testing.T) {
 
 func TestMcpExecLeaf_EmptyStdin(t *testing.T) {
 	leaf := &mcpLeaf{
-		node:		Command{},
-		cmdTmpl:	&Cmd{Shell: true, Template: "wc -c"},
+		node:    Command{},
+		cmdTmpl: &Cmd{Shell: true, Template: "wc -c"},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{})
 	assert.False(t, isErr)
@@ -435,9 +435,9 @@ func TestMcpExecLeaf_EmptyStdin(t *testing.T) {
 
 func TestMcpExecLeaf_Stdin(t *testing.T) {
 	leaf := &mcpLeaf{
-		node:		Command{},
-		stdinTmpl:	"hello\n",
-		cmdTmpl:	&Cmd{Shell: true, Template: "cat"},
+		node:      Command{},
+		stdinTmpl: "hello\n",
+		cmdTmpl:   &Cmd{Shell: true, Template: "cat"},
 	}
 	out, isErr := mcpExecLeaf(leaf, map[string]any{})
 	assert.False(t, isErr)
@@ -500,8 +500,8 @@ func TestRunMCP_InvalidTransport(t *testing.T) {
 func TestBuildMCPServer_ToolCount(t *testing.T) {
 	cmd := &Cmd{Shell: true, Template: "true"}
 	cfg := &Config{
-		Name:		"testapi",
-		Command:	cmd,
+		Name:    "testapi",
+		Command: cmd,
 		Commands: []Command{
 			{Name: "a", Command: cmd},
 			{Name: "b", Commands: []Command{
