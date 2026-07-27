@@ -56,6 +56,15 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 	data["result"] = resultMap
 
 	for _, step := range leaf.node.Steps {
+		if step.When != "" {
+			whenOut, err := renderString(step.When, data)
+			if err != nil {
+				return fmt.Sprintf("step %q: render when: %v", step.Name, err), true
+			}
+			if !isTruthy(whenOut) {
+				continue
+			}
+		}
 		stepCmd := leaf.cmdTmpl
 		if step.Command.Defined() {
 			stepCmd = step.Command
@@ -118,9 +127,31 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 	}
 
 	var errBuf bytes.Buffer
-	out, code := mcpCapture(leaf.cmdTmpl, leafCwd, leafStdin, data, &errBuf)
+	var out string
+	var code int
+	if leaf.request.Defined() {
+		out, code = runRequest(leaf.request, data, &errBuf)
+	} else {
+		out, code = mcpCapture(leaf.cmdTmpl, leafCwd, leafStdin, data, &errBuf)
+	}
 	if code != 0 {
 		return mcpCombine(out, errBuf.String()), true
+	}
+
+	// The <fields> auto-formatter takes precedence. MCP behaves like
+	// --format=always: .tty is true, .width is 80, no width-based dropping.
+	if leaf.node.Fields != nil {
+		parsed := parseInput(out, "json")
+		ctx := formatContext(parsed, data, true, 80)
+		rendered, ferr := renderFields(leaf.node.Fields, parsed, ctx, "", 0)
+		if ferr != nil {
+			return "error: " + ferr.Error(), true
+		}
+		return rendered, false
+	}
+
+	if formatted, ok := mcpFormat(leaf, out, data); ok {
+		return formatted, false
 	}
 	return out, false
 }
@@ -328,4 +359,35 @@ func mcpGatherFlags(node Command, arguments map[string]any, preFlagData any) (ma
 		}
 	}
 	return out, nil
+}
+
+// mcpFormat applies the format system to raw command output in MCP mode.
+// Behaves like --format=always: .tty is true so the default when predicate
+// passes, but an author's explicit when: "false" is still respected.
+func mcpFormat(leaf *mcpLeaf, raw string, data map[string]any) (string, bool) {
+	effFmt := resolveFormat(leaf.formatRef, leaf.formats)
+	if effFmt == nil {
+		return "", false
+	}
+
+	cache := map[predicateKey]bool{}
+	preCtx := formatContext(nil, data, true, 80)
+	authorOK, err := renderPredicate(effFmt.When, preCtx, cache)
+	if err != nil || !authorOK {
+		return "", false
+	}
+
+	parsed := parseInput(raw, effFmt.Input)
+	ctx := formatContext(parsed, data, true, 80)
+
+	view, err := selectView(effFmt.Views, ctx, "", cache)
+	if err != nil {
+		return "", false
+	}
+
+	rendered, err := renderString(view.Template, ctx)
+	if err != nil {
+		return "", false
+	}
+	return rendered, true
 }

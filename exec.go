@@ -43,6 +43,8 @@ func doExec(c *Cmd, cwd, stdin string, data any) int {
 		return 1
 	}
 	cmd.Dir = cwd
+	logVerbose("exec: %s", cmdToString(cmd))
+	logDebug("exec: cwd=%q stdin=%q", cwd, truncate(stdin, 200))
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	} else {
@@ -53,11 +55,13 @@ func doExec(c *Cmd, cwd, stdin string, data any) int {
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
+			logVerbose("exec: exit code %d", exitErr.ExitCode())
 			return exitErr.ExitCode()
 		}
 		fmt.Fprintln(execStderr, "error:", err)
 		return 127
 	}
+	logVerbose("exec: exit code 0")
 	return 0
 }
 
@@ -75,6 +79,8 @@ func captureExec(c *Cmd, cwd, stdin string, data any) (string, int) {
 		return "", 1
 	}
 	cmd.Dir = cwd
+	logVerbose("capture: %s", cmdToString(cmd))
+	logDebug("capture: cwd=%q stdin=%q", cwd, truncate(stdin, 200))
 	var buf bytes.Buffer
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
@@ -86,11 +92,15 @@ func captureExec(c *Cmd, cwd, stdin string, data any) (string, int) {
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
+			logVerbose("capture: exit code %d", exitErr.ExitCode())
+			logDebugBlock("capture: stdout", buf.String())
 			return "", exitErr.ExitCode()
 		}
 		fmt.Fprintln(execStderr, "error:", err)
 		return "", 127
 	}
+	logVerbose("capture: exit code 0")
+	logDebugBlock("capture: stdout", buf.String())
 	return buf.String(), 0
 }
 
@@ -113,6 +123,8 @@ func captureExecCapped(c *Cmd, cwd, stdin string, data any, maxBytes int) (strin
 		return "", false, 1
 	}
 	cmd.Dir = cwd
+	logVerbose("capture-capped: %s", cmdToString(cmd))
+	logDebug("capture-capped: cwd=%q stdin=%q max=%d", cwd, truncate(stdin, 200), maxBytes)
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	} else {
@@ -124,6 +136,7 @@ func captureExecCapped(c *Cmd, cwd, stdin string, data any, maxBytes int) (strin
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
+			logVerbose("capture-capped: exit code %d overflowed=%v", exitErr.ExitCode(), tee.overflowed)
 			if tee.overflowed {
 				return "", true, exitErr.ExitCode()
 			}
@@ -132,6 +145,7 @@ func captureExecCapped(c *Cmd, cwd, stdin string, data any, maxBytes int) (strin
 		fmt.Fprintln(execStderr, "error:", err)
 		return "", false, 127
 	}
+	logVerbose("capture-capped: exit code 0 overflowed=%v", tee.overflowed)
 	if tee.overflowed {
 		return "", true, 0
 	}
@@ -180,6 +194,12 @@ func parseResult(s string) any {
 	if err := dec.Decode(&v); err != nil {
 		return s
 	}
+	if dec.More() {
+		return s
+	}
+	if strings.TrimSpace(s[dec.InputOffset():]) != "" {
+		return s
+	}
 	return normalizeNumbers(v)
 }
 
@@ -217,6 +237,7 @@ func buildExecCmd(c *Cmd, data any) (*exec.Cmd, error) {
 		if err != nil {
 			return nil, fmt.Errorf("render command: %w", err)
 		}
+		rendered = expandSpreadForShell(rendered)
 		return exec.Command("/bin/sh", "-c", rendered), nil
 	}
 	if len(c.Argv) == 0 {
@@ -228,10 +249,9 @@ func buildExecCmd(c *Cmd, data any) (*exec.Cmd, error) {
 		if err != nil {
 			return nil, fmt.Errorf("render argv[%d]: %w", i, err)
 		}
-		// `spread` output is recognised by a leading NUL; expand into
-		// zero or more argv slots.
 		if strings.HasPrefix(rendered, spreadSentinel) {
-			rest := strings.TrimPrefix(rendered, spreadSentinel)
+			rest := rendered[len(spreadSentinel):]
+			rest = strings.TrimSuffix(rest, spreadEndSentinel)
 			if rest == "" {
 				continue
 			}
@@ -244,4 +264,48 @@ func buildExecCmd(c *Cmd, data any) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("argv command rendered to no arguments")
 	}
 	return exec.Command(argv[0], argv[1:]...), nil
+}
+
+// expandSpreadForShell replaces spread sentinel regions in a rendered shell
+// command with shell-quoted elements. Each spread region is delimited by a
+// leading NUL (spreadSentinel) and a trailing SOH (spreadEndSentinel); elements
+// within the region are separated by NUL. Each element is individually
+// shell-quoted so metacharacters like brackets, spaces, and quotes are
+// preserved literally when passed to /bin/sh -c.
+func expandSpreadForShell(s string) string {
+	if strings.IndexByte(s, 0) < 0 {
+		return s
+	}
+	var b strings.Builder
+	for len(s) > 0 {
+		startIdx := strings.IndexByte(s, 0)
+		if startIdx < 0 {
+			b.WriteString(s)
+			break
+		}
+		b.WriteString(s[:startIdx])
+		s = s[startIdx:]
+
+		endIdx := strings.IndexByte(s, 1)
+		if endIdx < 0 {
+			b.WriteString(s)
+			break
+		}
+
+		region := s[1:endIdx]
+		s = s[endIdx+1:]
+
+		if region == "" {
+			continue
+		}
+
+		parts := strings.Split(region, spreadSentinel)
+		for i, p := range parts {
+			if i > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteString(shellQuote(p))
+		}
+	}
+	return b.String()
 }

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Tests for the post-1.0 feature additions: variadic args, preconditions,
@@ -102,8 +102,8 @@ func TestIntegration_PreconditionPasses(t *testing.T) {
 		Name:    "t",
 		Command: &Cmd{Shell: true, Template: `echo ran`},
 		Commands: []Command{{
-			Name: "go",
-			Args: []Arg{{Name: "n", Type: "int", Required: true}},
+			Name:          "go",
+			Args:          []Arg{{Name: "n", Type: "int", Required: true}},
 			Preconditions: []string{`{{if le .arg.n 0}}n must be positive{{end}}`},
 		}},
 	}
@@ -117,8 +117,8 @@ func TestIntegration_PreconditionFails(t *testing.T) {
 		Name:    "t",
 		Command: &Cmd{Shell: true, Template: `echo should-not-run`},
 		Commands: []Command{{
-			Name: "go",
-			Args: []Arg{{Name: "n", Type: "int", Required: true}},
+			Name:          "go",
+			Args:          []Arg{{Name: "n", Type: "int", Required: true}},
 			Preconditions: []string{`{{if le .arg.n 0}}n must be positive (got {{.arg.n}}){{end}}`},
 		}},
 	}

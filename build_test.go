@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const miniConfig = `{
@@ -280,21 +280,4 @@ func TestVariadicArgUsesString(t *testing.T) {
 	require.NoError(t, err)
 	// useStr ends with [files...]
 	assert.Contains(t, cmd.Use, "files...")
-}
-
-func TestFindConfigFlag(t *testing.T) {
-	cases := []struct {
-		args []string
-		want string
-	}{
-		{[]string{"--config", "path.json", "foo"}, "path.json"},
-		{[]string{"--config=path.json", "foo"}, "path.json"},
-		{[]string{"foo", "--config", "path.json"}, "path.json"},
-		{[]string{"foo"}, ""},
-		{[]string{"--config"}, ""}, // dangling flag: no value
-	}
-	for _, c := range cases {
-		got := findConfigFlag(c.args)
-		assert.Equal(t, c.want, got)
-	}
 }

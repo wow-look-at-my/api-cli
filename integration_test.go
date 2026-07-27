@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // execCmd builds the root from cfg, sets argv, executes, and returns the
@@ -36,6 +36,9 @@ func execCmdFull(t *testing.T, cfg *Config, argv ...string) (int, string, string
 	prevCode := exitCode
 	exitCode = 0
 	t.Cleanup(func() { exitCode = prevCode })
+	prevVerbose, prevDebug := verboseMode, debugMode
+	verboseMode, debugMode = false, false
+	t.Cleanup(func() { verboseMode = prevVerbose; debugMode = prevDebug })
 
 	root := newRoot(cfg)
 	root.SetOut(io.Discard) // suppress cobra's own output in tests
@@ -53,8 +56,8 @@ func TestIntegration_ShellFormRendersEntry(t *testing.T) {
 		Vars:    map[string]any{"greeting": "hello"},
 		Command: &Cmd{Shell: true, Template: `printf '%s %s %s' {{.var.greeting}} {{.entry.name}} {{.arg.id}}`},
 		Commands: []Command{{
-			Name: "greet",
-			Args: []Arg{{Name: "id", Type: "string", Required: true}},
+			Name:  "greet",
+			Args:  []Arg{{Name: "id", Type: "string", Required: true}},
 			Entry: json.RawMessage(`{"name":"ada"}`),
 		}},
 	}
@@ -84,8 +87,8 @@ func TestIntegration_LeafOverridesRootCommand(t *testing.T) {
 		Name:    "t",
 		Command: &Cmd{Shell: true, Template: `echo root`},
 		Commands: []Command{
-			{Name: "a"},                                                                 // inherits root
-			{Name: "b", Command: &Cmd{Shell: true, Template: `echo leaf-override`}},     // overrides
+			{Name: "a"}, // inherits root
+			{Name: "b", Command: &Cmd{Shell: true, Template: `echo leaf-override`}}, // overrides
 		},
 	}
 	code, out := execCmd(t, cfg, "a")
@@ -118,9 +121,9 @@ func TestIntegration_VarsInheritanceAndOverride(t *testing.T) {
 func TestIntegration_VarsCanBeTemplated(t *testing.T) {
 	t.Setenv("API_CLI_TEST_HOST", "example.internal")
 	cfg := &Config{
-		Name:    "t",
-		Vars:    map[string]any{"host": `{{.env.API_CLI_TEST_HOST}}`},
-		Command: &Cmd{Shell: true, Template: `echo {{.var.host}}`},
+		Name:     "t",
+		Vars:     map[string]any{"host": `{{.env.API_CLI_TEST_HOST}}`},
+		Command:  &Cmd{Shell: true, Template: `echo {{.var.host}}`},
 		Commands: []Command{{Name: "show"}},
 	}
 	code, out := execCmd(t, cfg, "show")
@@ -151,8 +154,8 @@ func TestIntegration_CurlExampleViaQuerystring(t *testing.T) {
 
 func TestIntegration_ExitCodePropagated(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `exit 9`},
+		Name:     "t",
+		Command:  &Cmd{Shell: true, Template: `exit 9`},
 		Commands: []Command{{Name: "fail"}},
 	}
 	code, _ := execCmd(t, cfg, "fail")
@@ -165,8 +168,8 @@ func TestIntegration_StdinPassthrough(t *testing.T) {
 	t.Cleanup(func() { execStdin = prev })
 
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `cat`},
+		Name:     "t",
+		Command:  &Cmd{Shell: true, Template: `cat`},
 		Commands: []Command{{Name: "echo"}},
 	}
 	code, out := execCmd(t, cfg, "echo")
@@ -176,7 +179,7 @@ func TestIntegration_StdinPassthrough(t *testing.T) {
 
 func TestIntegration_ExampleConfigLoads(t *testing.T) {
 	// Sanity check: the shipped example validates cleanly.
-	cfg, err := Load("api.example.json")
+	cfg, err := Load("api.example.xml")
 	require.NoError(t, err)
 	assert.NotEmpty(t, cfg.Name)
 }
@@ -294,6 +297,25 @@ func TestIntegration_StepNonJSONResultIsString(t *testing.T) {
 	assert.Equal(t, "not-json\n", out)
 }
 
+func TestIntegration_StepHexHashStaysString(t *testing.T) {
+	// A step whose stdout looks like a hex hash (starts with digits, contains
+	// a-f) must be stored as a string, not partially parsed as a JSON number.
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name: "run",
+			Steps: []Step{{
+				Name:    "hash",
+				Command: &Cmd{Shell: true, Template: `printf '3bf86b7e484a4c355f49b3e4c9d8a17c'`},
+			}},
+			Command: &Cmd{Shell: true, Template: `echo {{.result.hash}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "run")
+	require.Equal(t, 0, code)
+	assert.Equal(t, "3bf86b7e484a4c355f49b3e4c9d8a17c\n", out)
+}
+
 func TestIntegration_StepFailurePropagatesExitCode(t *testing.T) {
 	cfg := &Config{
 		Name: "t",
@@ -346,8 +368,8 @@ func TestIntegration_ExecutionCountSuppressedWithQuiet(t *testing.T) {
 func TestIntegration_NoCountWhenNoSteps(t *testing.T) {
 	// Single execution (no steps) → nothing printed to stderr.
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `true`},
+		Name:     "t",
+		Command:  &Cmd{Shell: true, Template: `true`},
 		Commands: []Command{{Name: "run"}},
 	}
 	_, _, errOut := execCmdFull(t, cfg, "run")
@@ -530,4 +552,180 @@ func TestIntegration_StepWhenBadTemplate_Errors(t *testing.T) {
 	}
 	code, _ := execCmd(t, cfg, "run")
 	assert.NotEqual(t, 0, code)
+}
+
+func TestIntegration_Passthrough_Basic(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:        "wrap",
+			Passthrough: true,
+			Flags: []Flag{
+				{Name: "o", Type: "string"},
+				{Name: "verbose", Type: "bool"},
+			},
+			Command: &Cmd{Shell: true, Template: `printf 'out=%s verbose=%s rest=%s' {{.flag.o}} {{.flag.verbose}} '{{join " " .rest}}'`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "wrap", "--", "--verbose", "--unknown-flag", "-o", "/tmp/out.ptx", "positional.ii")
+	assert.Equal(t, 0, code)
+	assert.Equal(t, "out=/tmp/out.ptx verbose=true rest=--unknown-flag positional.ii", out)
+}
+
+func TestIntegration_Passthrough_SpreadRest(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:        "wrap",
+			Passthrough: true,
+			Flags: []Flag{
+				{Name: "o", Type: "string"},
+			},
+			Command: &Cmd{Argv: []string{"echo", "{{spread .rest}}"}},
+		}},
+	}
+	code, out := execCmd(t, cfg, "wrap", "--", "--some-flag", "val", "-o", "/tmp/out", "input.ii")
+	assert.Equal(t, 0, code)
+	assert.Equal(t, "--some-flag val input.ii\n", out)
+}
+
+func TestIntegration_Passthrough_SpreadRest_ShellForm(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:        "wrap",
+			Passthrough: true,
+			Flags: []Flag{
+				{Name: "o", Type: "string"},
+			},
+			Command: &Cmd{Shell: true, Template: `printf '%s\n' {{spread .rest}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "wrap", "--", "--c++17", "-arch", "compute_80", "--generate-code=arch=compute_75,code=[compute_75]", "-o", "/tmp/output.ptx", "/tmp/input.cpp1.ii")
+	assert.Equal(t, 0, code)
+	assert.Equal(t, "--c++17\n-arch\ncompute_80\n--generate-code=arch=compute_75,code=[compute_75]\n/tmp/input.cpp1.ii\n", out)
+}
+
+func TestIntegration_Passthrough_SpreadRest_ShellStep(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:        "wrap",
+			Passthrough: true,
+			Flags: []Flag{
+				{Name: "o", Type: "string"},
+			},
+			Steps: []Step{{
+				Name:    "run",
+				Command: &Cmd{Shell: true, Template: `printf '%s\n' {{spread .rest}}`},
+			}},
+			Command: &Cmd{Shell: true, Template: `echo done`},
+		}},
+	}
+	code, _ := execCmd(t, cfg, "wrap", "--", "--flag=[val]", "-o", "/tmp/out", "file.txt")
+	assert.Equal(t, 0, code)
+}
+
+func TestIntegration_Passthrough_EqualsForm(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:        "wrap",
+			Passthrough: true,
+			Flags: []Flag{
+				{Name: "gen_c_file_name", Type: "string"},
+			},
+			Command: &Cmd{Shell: true, Template: `printf '%s' {{.flag.gen_c_file_name}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "wrap", "--", "--gen_c_file_name=/tmp/foo.c", "--other")
+	assert.Equal(t, 0, code)
+	assert.Equal(t, "/tmp/foo.c", out)
+}
+
+func TestIntegration_Passthrough_SingleDashLongFlag(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:        "wrap",
+			Passthrough: true,
+			Flags: []Flag{
+				{Name: "arch", Type: "string"},
+			},
+			Command: &Cmd{Shell: true, Template: `printf '%s' {{.flag.arch}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "wrap", "--", "-arch", "compute_80", "-m64")
+	assert.Equal(t, 0, code)
+	assert.Equal(t, "compute_80", out)
+}
+
+func TestIntegration_Passthrough_Steps(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:        "wrap",
+			Passthrough: true,
+			Flags: []Flag{
+				{Name: "o", Type: "string"},
+			},
+			Steps: []Step{{
+				Name:    "found",
+				Command: &Cmd{Shell: true, Template: `printf '%s' '{{.rest | filterSuffix ".ii" | first}}'`},
+			}},
+			Command: &Cmd{Shell: true, Template: `printf 'input=%s output=%s' {{.result.found}} {{.flag.o}}`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "wrap", "--", "--c++17", "-o", "/tmp/out.ptx", "/tmp/input.cpp1.ii")
+	assert.Equal(t, 0, code)
+	assert.Equal(t, "input=/tmp/input.cpp1.ii output=/tmp/out.ptx", out)
+}
+
+func TestIntegration_Passthrough_StringSlice(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:        "wrap",
+			Passthrough: true,
+			Flags: []Flag{
+				{Name: "include", Type: "string-slice"},
+			},
+			Command: &Cmd{Shell: true, Template: `printf '%s' '{{join "," .flag.include}}'`},
+		}},
+	}
+	code, out := execCmd(t, cfg, "wrap", "--", "--include", "a.h", "--include", "b.h", "other")
+	assert.Equal(t, 0, code)
+	assert.Equal(t, "a.h,b.h", out)
+}
+
+func TestIntegration_Passthrough_NoArgsAllowed(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:        "wrap",
+			Passthrough: true,
+			Args:        []Arg{{Name: "file", Required: true}},
+			Command:     &Cmd{Shell: true, Template: `true`},
+		}},
+	}
+	err := validate(cfg)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "passthrough commands cannot declare args")
+}
+
+func TestIntegration_Passthrough_OnlyOnLeaves(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:        "group",
+			Passthrough: true,
+			Commands: []Command{{
+				Name:    "child",
+				Command: &Cmd{Shell: true, Template: `true`},
+			}},
+		}},
+	}
+	err := validate(cfg)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "passthrough is only allowed on leaves")
 }

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRenderString_Namespaces(t *testing.T) {
@@ -260,29 +260,29 @@ func TestEnvMap(t *testing.T) {
 func TestSpread_Empty(t *testing.T) {
 	got, err := spread(nil)
 	require.NoError(t, err)
-	assert.Equal(t, spreadSentinel, got)
+	assert.Equal(t, spreadSentinel+spreadEndSentinel, got)
 
 	got, err = spread([]string{})
 	require.NoError(t, err)
-	assert.Equal(t, spreadSentinel, got)
+	assert.Equal(t, spreadSentinel+spreadEndSentinel, got)
 }
 
 func TestSpread_StringSlice(t *testing.T) {
 	got, err := spread([]string{"a", "b", "c"})
 	require.NoError(t, err)
-	assert.Equal(t, "\x00a\x00b\x00c", got)
+	assert.Equal(t, "\x00a\x00b\x00c\x01", got)
 }
 
 func TestSpread_AnySlice(t *testing.T) {
 	got, err := spread([]any{"a", 1, true})
 	require.NoError(t, err)
-	assert.Equal(t, "\x00a\x001\x00true", got)
+	assert.Equal(t, "\x00a\x001\x00true\x01", got)
 }
 
 func TestSpread_IntSlice(t *testing.T) {
 	got, err := spread([]int{1, 2, 3})
 	require.NoError(t, err)
-	assert.Equal(t, "\x001\x002\x003", got)
+	assert.Equal(t, "\x001\x002\x003\x01", got)
 }
 
 func TestSpread_RejectsNonSlice(t *testing.T) {
@@ -290,10 +290,18 @@ func TestSpread_RejectsNonSlice(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestSpread_RejectsSentinelBytes(t *testing.T) {
+	_, err := spread([]string{"ok", "bad\x00val"})
+	assert.Error(t, err)
+
+	_, err = spread([]string{"bad\x01val"})
+	assert.Error(t, err)
+}
+
 func TestSpreadViaTemplate(t *testing.T) {
 	got, err := renderString(`{{spread .x}}`, map[string]any{"x": []string{"a", "b"}})
 	require.NoError(t, err)
-	assert.Equal(t, "\x00a\x00b", got)
+	assert.Equal(t, "\x00a\x00b\x01", got)
 }
 
 func TestFileExists(t *testing.T) {
@@ -301,8 +309,8 @@ func TestFileExists(t *testing.T) {
 	f := dir + "/file.txt"
 	require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
 	assert.True(t, fileExists(f))
-	assert.False(t, fileExists(dir))                // directory, not file
-	assert.False(t, fileExists(dir+"/nope.txt"))    // missing
+	assert.False(t, fileExists(dir))             // directory, not file
+	assert.False(t, fileExists(dir+"/nope.txt")) // missing
 }
 
 func TestDirExists(t *testing.T) {
@@ -310,7 +318,7 @@ func TestDirExists(t *testing.T) {
 	f := dir + "/file.txt"
 	require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
 	assert.True(t, dirExists(dir))
-	assert.False(t, dirExists(f))      // file, not dir
+	assert.False(t, dirExists(f)) // file, not dir
 	assert.False(t, dirExists(dir+"/nope"))
 }
 
@@ -376,4 +384,26 @@ func TestToRows_NilAndExoticShapes(t *testing.T) {
 	rows, err = toRows([]any{[]any{"x", 1}, "y\tz"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"x\t1", "y\tz"}, rows)
+}
+
+func TestFilterSuffix(t *testing.T) {
+	data := map[string]any{
+		"items": []string{"foo.cpp1.ii", "bar.o", "baz.cpp1.ii", "other"},
+	}
+	got, err := renderString(`{{.items | filterSuffix ".cpp1.ii" | join ","}}`, data)
+	require.NoError(t, err)
+	assert.Equal(t, "foo.cpp1.ii,baz.cpp1.ii", got)
+
+	got, err = renderString(`{{.items | filterSuffix ".cpp1.ii" | first}}`, data)
+	require.NoError(t, err)
+	assert.Equal(t, "foo.cpp1.ii", got)
+}
+
+func TestFilterPrefix(t *testing.T) {
+	data := map[string]any{
+		"items": []string{"--flag1", "pos", "--flag2", "-short"},
+	}
+	got, err := renderString(`{{.items | filterPrefix "--" | join ","}}`, data)
+	require.NoError(t, err)
+	assert.Equal(t, "--flag1,--flag2", got)
 }

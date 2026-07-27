@@ -20,9 +20,9 @@ const defaultFormatCap = 32 << 20
 type userVerdict int
 
 const (
-	userYes     userVerdict = iota // user wants formatting (default)
-	userNo                         // user opted out (--no-format / NO_FORMAT / --format=raw)
-	userAlways                     // user wants formatting and asks us to "lie" about TTY
+	userYes    userVerdict = iota // user wants formatting (default)
+	userNo                        // user opted out (--no-format / NO_FORMAT / --format=raw)
+	userAlways                    // user wants formatting and asks us to "lie" about TTY
 )
 
 // resolveFormat returns the effective Format for a leaf, looking up named
@@ -182,6 +182,7 @@ func selectView(views []View, ctx map[string]any, viewFlag string, cache map[pre
 	if viewFlag != "" {
 		for i := range views {
 			if views[i].Name == viewFlag {
+				logVerbose("format: selected view %q (explicit --view flag)", views[i].Name)
 				return &views[i], nil
 			}
 		}
@@ -195,29 +196,61 @@ func selectView(views []View, ctx map[string]any, viewFlag string, cache map[pre
 		if err != nil {
 			return nil, fmt.Errorf("view %q: %w", views[i].Name, err)
 		}
+		logDebug("format: view %q when=%q => %v", views[i].Name, views[i].When, ok)
 		if ok {
+			logVerbose("format: selected view %q (when predicate)", views[i].Name)
 			return &views[i], nil
 		}
 	}
 	for i := range views {
 		if views[i].Default {
+			logVerbose("format: selected view %q (default)", views[i].Name)
 			return &views[i], nil
 		}
 	}
+	logVerbose("format: selected view %q (first)", views[0].Name)
 	return &views[0], nil
 }
 
-// execLeaf decides whether to run the leaf via the streaming fast path or the
-// captured-and-formatted path. AND semantics: format applies iff (effective
-// format exists) AND (user verdict != no) AND (author predicate truthy).
-func execLeaf(c *cobra.Command, cmdTmpl *Cmd, cwd, stdin string, data map[string]any, formatRef *FormatRef, formats map[string]*Format) (int, error) {
+// execLeaf decides how to run a leaf (shell/argv command or HTTP request) and
+// how to present its output (the <fields> auto-formatter, a legacy <format>
+// view, or raw streaming).
+//
+// Formatting is suppressed when the user opts out (--no-format / --format=raw /
+// NO_FORMAT). A <fields> declaration otherwise always formats. A legacy
+// <format> additionally requires its author `when` predicate to be truthy.
+func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, fields *Fields, formatRef *FormatRef, formats map[string]*Format) (int, error) {
+	verdict := userVerdictFromFlags(c)
+
+	streamRaw := func() int {
+		if request.Defined() {
+			return streamRequest(request, data)
+		}
+		return doExec(cmdTmpl, cwd, stdin, data)
+	}
+
+	if verdict == userNo {
+		logVerbose("format: user opted out, streaming raw")
+		return streamRaw(), nil
+	}
+
+	// --as forces a representation even when the leaf declared no <fields>:
+	// project nothing and let the data shape (or the chosen sink) decide.
+	if fields == nil {
+		if sink, _ := c.Root().PersistentFlags().GetString("as"); strings.TrimSpace(sink) != "" {
+			fields = &Fields{}
+		}
+	}
+
+	if fields != nil {
+		logVerbose("format: applying <fields> auto-formatter")
+		return runFieldsFormatted(c, cmdTmpl, request, cwd, stdin, data, fields, verdict), nil
+	}
+
 	effFmt := resolveFormat(formatRef, formats)
 	if effFmt == nil {
-		return doExec(cmdTmpl, cwd, stdin, data), nil
-	}
-	verdict := userVerdictFromFlags(c)
-	if verdict == userNo {
-		return doExec(cmdTmpl, cwd, stdin, data), nil
+		logDebug("format: none configured, streaming raw")
+		return streamRaw(), nil
 	}
 
 	isTTY, width := stdoutTTY()
@@ -233,27 +266,92 @@ func execLeaf(c *cobra.Command, cmdTmpl *Cmd, cwd, stdin string, data map[string
 	if err != nil {
 		return 1, fmt.Errorf("format when: %w", err)
 	}
+	logVerbose("format: author when=%q => %v", effFmt.When, authorOK)
 	if !authorOK {
-		return doExec(cmdTmpl, cwd, stdin, data), nil
+		logVerbose("format: author predicate false, streaming raw")
+		return streamRaw(), nil
 	}
 
-	return runFormatted(c, cmdTmpl, cwd, stdin, data, effFmt, verdict), nil
+	logVerbose("format: applying format with %d views", len(effFmt.Views))
+	return runFormatted(c, cmdTmpl, request, cwd, stdin, data, effFmt, verdict), nil
 }
 
-// runFormatted executes the leaf command via captureExecCapped and renders the
-// captured output through the selected view. AND semantics: must be called
-// only after both author and user sides have agreed.
+// captureRun captures a leaf's output. For a request it performs the HTTP call
+// (the body is always buffered); for a command it uses the capped capture path.
+func captureRun(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any) (out string, overflowed bool, code int) {
+	if request.Defined() {
+		o, c := runRequest(request, data, execStderr)
+		return o, false, c
+	}
+	return captureExecCapped(cmdTmpl, cwd, stdin, data, defaultFormatCap)
+}
+
+// streamRequest performs a request and writes its output straight to stdout.
+func streamRequest(request *Request, data map[string]any) int {
+	out, code := runRequest(request, data, execStderr)
+	if code != 0 {
+		return code
+	}
+	fmt.Fprint(execStdout, out)
+	if out != "" && !strings.HasSuffix(out, "\n") {
+		fmt.Fprintln(execStdout)
+	}
+	return 0
+}
+
+// runFieldsFormatted captures the leaf's JSON output and renders it through the
+// <fields> auto-formatter.
+func runFieldsFormatted(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, fields *Fields, verdict userVerdict) int {
+	out, overflowed, code := captureRun(cmdTmpl, request, cwd, stdin, data)
+	if overflowed {
+		logVerbose("format: output overflowed cap, streamed raw")
+		return code
+	}
+	if code != 0 {
+		if out != "" {
+			fmt.Fprint(execStderr, out)
+		}
+		return code
+	}
+
+	isTTY, width := stdoutTTY()
+	if verdict == userAlways {
+		isTTY = true
+		if width == 0 {
+			width = 80
+		}
+	}
+	parsed := parseInput(out, "json")
+	ctx := formatContext(parsed, data, isTTY, width)
+	sink, _ := c.Root().PersistentFlags().GetString("as")
+	dropWidth := 0
+	if isTTY {
+		dropWidth = width
+	}
+	rendered, err := renderFields(fields, parsed, ctx, strings.TrimSpace(sink), dropWidth)
+	if err != nil {
+		fmt.Fprintln(execStderr, "error:", err)
+		return 1
+	}
+	fmt.Fprint(execStdout, rendered)
+	return 0
+}
+
+// runFormatted executes the leaf via captureRun and renders the captured output
+// through the selected legacy view.
 func runFormatted(
 	c *cobra.Command,
 	cmdTmpl *Cmd,
+	request *Request,
 	cwd, stdin string,
 	data map[string]any,
 	f *Format,
 	verdict userVerdict,
 ) int {
-	out, overflowed, code := captureExecCapped(cmdTmpl, cwd, stdin, data, defaultFormatCap)
+	out, overflowed, code := captureRun(cmdTmpl, request, cwd, stdin, data)
+	logDebug("format: captured %d bytes, overflowed=%v, code=%d", len(out), overflowed, code)
 	if overflowed {
-		// Output already streamed transparently.
+		logVerbose("format: output overflowed cap, streamed raw")
 		return code
 	}
 	if code != 0 {
@@ -262,6 +360,7 @@ func runFormatted(
 	}
 
 	parsed := parseInput(out, f.Input)
+	logDebug("format: input mode=%q parsed type=%T", f.Input, parsed)
 	isTTY, width := stdoutTTY()
 	if verdict == userAlways {
 		isTTY = true
@@ -284,6 +383,7 @@ func runFormatted(
 		fmt.Fprintln(execStderr, "error: render view:", err)
 		return 1
 	}
+	logDebug("format: rendered view %q (%d bytes)", view.Name, len(rendered))
 	fmt.Fprint(execStdout, rendered)
 	return 0
 }

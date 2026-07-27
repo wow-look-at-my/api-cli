@@ -11,26 +11,15 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// findMcpFlag walks argv looking for --mcp=<value> or --mcp <value>.
-func findMcpFlag(args []string) string {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if strings.HasPrefix(a, "--mcp=") {
-			return strings.TrimPrefix(a, "--mcp=")
-		}
-		if a == "--mcp" && i+1 < len(args) {
-			return args[i+1]
-		}
-	}
-	return ""
-}
-
 // runMCP starts an MCP server using the given transport spec.
 // transport is one of:
 //   - "stdio"              MCP over stdin/stdout
 //   - "http://host:port"   MCP over Streamable HTTP (POST /)
 //   - "sse://host:port"    MCP over HTTP+SSE (GET /sse + POST /message)
-func runMCP(transport string, cfg *Config) int {
+//
+// corsLevel controls cross-origin handling for the HTTP and SSE
+// transports; it is ignored for stdio.
+func runMCP(transport string, cfg *Config, corsLevel CorsLevel) int {
 	srv := buildMCPServer(cfg)
 	ctx := context.Background()
 	switch {
@@ -46,14 +35,10 @@ func runMCP(transport string, cfg *Config) int {
 			fmt.Fprintln(execStderr, "error: --mcp http:// requires an address, e.g. http://127.0.0.1:8080")
 			return 2
 		}
-		fmt.Fprintf(execStderr, "MCP HTTP server listening on http://%s\n", addr)
-		cop := &http.CrossOriginProtection{}
-		cop.AddInsecureBypassPattern("/")
-		h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, &mcp.StreamableHTTPOptions{
-			DisableLocalhostProtection: true,
-			CrossOriginProtection:      cop,
-		})
-		srv2 := &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
+		fmt.Fprintf(execStderr, "MCP HTTP server listening on http://%s (cors=%s)\n", addr, corsLevel)
+		mcpH := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
+		handler := withCORS(withHealthEndpoint(mcpH), corsLevel, addr)
+		srv2 := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 		if err := srv2.ListenAndServe(); err != nil {
 			fmt.Fprintln(execStderr, "error:", err)
 			return 1
@@ -65,9 +50,10 @@ func runMCP(transport string, cfg *Config) int {
 			fmt.Fprintln(execStderr, "error: --mcp sse:// requires an address, e.g. sse://127.0.0.1:8080")
 			return 2
 		}
-		fmt.Fprintf(execStderr, "MCP SSE server listening on http://%s\n", addr)
-		h := mcp.NewSSEHandler(func(*http.Request) *mcp.Server { return srv }, nil)
-		srv2 := &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
+		fmt.Fprintf(execStderr, "MCP SSE server listening on http://%s (cors=%s)\n", addr, corsLevel)
+		mcpH := mcp.NewSSEHandler(func(*http.Request) *mcp.Server { return srv }, nil)
+		handler := withCORS(withHealthEndpoint(mcpH), corsLevel, addr)
+		srv2 := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 		if err := srv2.ListenAndServe(); err != nil {
 			fmt.Fprintln(execStderr, "error:", err)
 			return 1
@@ -79,20 +65,44 @@ func runMCP(transport string, cfg *Config) int {
 	}
 }
 
+// mcpInherit is the inherited context threaded down the command tree during
+// MCP leaf collection. Mirrors the inherited* parameters in buildCommand.
+type mcpInherit struct {
+	prefix  string
+	vars    map[string]any
+	cmd     *Cmd
+	request *Request
+	cwd     string
+	stdin   string
+	format  *FormatRef
+	// formats is the top-level registry; constant across the recursion.
+	formats map[string]*Format
+}
+
 // mcpLeaf is a leaf command with all inherited context fully resolved.
 type mcpLeaf struct {
 	name      string
 	node      Command
 	vars      map[string]any
 	cmdTmpl   *Cmd
+	request   *Request
 	cwdTmpl   string
 	stdinTmpl string
+	formatRef *FormatRef
+	formats   map[string]*Format
 }
 
 // buildMCPServer creates an MCP server with one tool per leaf command.
 func buildMCPServer(cfg *Config) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: cfg.Name, Version: "1.0.0"}, nil)
-	for _, leaf := range collectMCPLeaves(cfg.Commands, "", cfg.Vars, cfg.Command, cfg.Cwd, cfg.Stdin) {
+	for _, leaf := range collectMCPLeaves(cfg.Commands, mcpInherit{
+		vars:    cfg.Vars,
+		cmd:     cfg.Command,
+		request: cfg.Request,
+		cwd:     cfg.Cwd,
+		stdin:   cfg.Stdin,
+		formats: cfg.Formats,
+	}) {
 		l := leaf // capture for closure
 		srv.AddTool(
 			&mcp.Tool{
@@ -124,37 +134,70 @@ func buildMCPServer(cfg *Config) *mcp.Server {
 	return srv
 }
 
-func collectMCPLeaves(cmds []Command, prefix string, vars map[string]any, cmd *Cmd, cwd, stdin string) []mcpLeaf {
+// withHealthEndpoint wraps an HTTP handler to also serve GET /health.
+// The health response is always 200 OK with {"status":"ok"}.
+func withHealthEndpoint(h http.Handler) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"status":"ok"}`)
+	})
+	mux.Handle("/", h)
+	return mux
+}
+
+func collectMCPLeaves(cmds []Command, inh mcpInherit) []mcpLeaf {
 	var out []mcpLeaf
 	for _, c := range cmds {
 		name := c.Name
-		if prefix != "" {
-			name = prefix + "_" + c.Name
+		if inh.prefix != "" {
+			name = inh.prefix + "_" + c.Name
 		}
-		effVars := mergeVars(vars, c.Vars)
-		effCmd := cmd
-		if c.Command.Defined() {
-			effCmd = c.Command
+		child := mcpInherit{
+			prefix:  name,
+			vars:    mergeVars(inh.vars, c.Vars),
+			cmd:     inh.cmd,
+			request: inh.request,
+			cwd:     inh.cwd,
+			stdin:   inh.stdin,
+			format:  inh.format,
+			formats: inh.formats,
 		}
-		effCwd := cwd
+		if c.Request.Defined() {
+			child.request = c.Request
+			child.cmd = nil
+		} else if c.Command.Defined() {
+			child.cmd = c.Command
+			child.request = nil
+		}
 		if c.Cwd != "" {
-			effCwd = c.Cwd
+			child.cwd = c.Cwd
 		}
-		effStdin := stdin
 		if c.Stdin != "" {
-			effStdin = c.Stdin
+			child.stdin = c.Stdin
+		}
+		if c.Format.Defined() {
+			child.format = c.Format
 		}
 		if len(c.Commands) == 0 {
 			out = append(out, mcpLeaf{
 				name:      name,
 				node:      c,
-				vars:      effVars,
-				cmdTmpl:   effCmd,
-				cwdTmpl:   effCwd,
-				stdinTmpl: effStdin,
+				vars:      child.vars,
+				cmdTmpl:   child.cmd,
+				request:   child.request,
+				cwdTmpl:   child.cwd,
+				stdinTmpl: child.stdin,
+				formatRef: child.format,
+				formats:   child.formats,
 			})
 		} else {
-			out = append(out, collectMCPLeaves(c.Commands, name, effVars, effCmd, effCwd, effStdin)...)
+			out = append(out, collectMCPLeaves(c.Commands, child)...)
 		}
 	}
 	return out

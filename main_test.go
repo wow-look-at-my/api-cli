@@ -7,13 +7,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // chdir switches the working directory for the duration of the test and
 // restores it on cleanup. Used for config-discovery tests that need to
-// control ./api.json's existence.
+// control ./api.xml's existence.
 func chdir(t *testing.T, dir string) {
 	t.Helper()
 	prev, err := os.Getwd()
@@ -80,15 +80,11 @@ func TestRun_InvalidConfigReturns2(t *testing.T) {
 
 func TestRun_HappyPath(t *testing.T) {
 	dir := t.TempDir()
-	cfg := `{
-      "name": "t",
-      "command": "printf '%s' {{.arg.id}}",
-      "commands": [{
-        "name": "show",
-        "args": [{"name": "id", "type": "int", "required": true}]
-      }]
-    }`
-	p := filepath.Join(dir, "api.json")
+	cfg := `<config name="t">
+	<run>printf '%s' {{.arg.id}}</run>
+	<command name="show"><arg name="id" type="int" required="true"/></command>
+</config>`
+	p := filepath.Join(dir, "api.xml")
 	require.NoError(t, os.WriteFile(p, []byte(cfg), 0o600))
 
 	prevOut := execStdout
@@ -109,14 +105,13 @@ func TestRun_HappyPath(t *testing.T) {
 	assert.Equal(t, "42", buf.String())
 }
 
-func TestRun_PicksUpCwdAPIJson(t *testing.T) {
+func TestRun_PicksUpCwdAPIXml(t *testing.T) {
 	dir := t.TempDir()
-	cfg := `{
-      "name": "t",
-      "command": "true",
-      "commands": [{"name":"ping"}]
-    }`
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "api.json"), []byte(cfg), 0o600))
+	cfg := `<config name="t">
+	<run>true</run>
+	<command name="ping"/>
+</config>`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "api.xml"), []byte(cfg), 0o600))
 	chdir(t, dir)
 
 	prevOut := execStdout
@@ -157,6 +152,104 @@ func TestRegisterFlag_AllTypes(t *testing.T) {
 	assert.Equal(t, "7", cmd.Flags().Lookup("n").DefValue)
 	assert.Equal(t, "[a,b]", cmd.Flags().Lookup("tags").DefValue)
 	require.NotNil(t, cmd.Flags().Lookup("untyped"))
+}
+
+func TestPreparseGlobalFlags(t *testing.T) {
+	// --cors defaults to "strict"; --config and --mcp default to "".
+	cases := []struct {
+		name string
+		argv []string
+		cfg  string
+		mcp  string
+		cors string
+	}{
+		{"empty", nil, "", "", "strict"},
+		{"only positionals", []string{"foo", "bar"}, "", "", "strict"},
+
+		// --config
+		{"config space", []string{"--config", "path.json", "foo"}, "path.json", "", "strict"},
+		{"config equals", []string{"--config=path.json", "foo"}, "path.json", "", "strict"},
+		{"config after positional", []string{"foo", "--config", "path.json"}, "path.json", "", "strict"},
+		{"config dangling", []string{"--config"}, "", "", "strict"},
+
+		// --mcp
+		{"mcp space", []string{"--mcp", "stdio"}, "", "stdio", "strict"},
+		{"mcp equals", []string{"--mcp=stdio"}, "", "stdio", "strict"},
+		{"mcp sse", []string{"--mcp=sse://0.0.0.0:9000"}, "", "sse://0.0.0.0:9000", "strict"},
+		{"mcp dangling", []string{"--mcp"}, "", "", "strict"},
+		{"config + mcp", []string{"--config", "x", "--mcp", "http://localhost:8080"}, "x", "http://localhost:8080", "strict"},
+
+		// --cors
+		{"cors space", []string{"--cors", "disabled"}, "", "", "disabled"},
+		{"cors equals", []string{"--cors=enabled"}, "", "", "enabled"},
+		{"cors dangling", []string{"--cors"}, "", "", "strict"},
+		{"mcp + cors", []string{"--mcp=stdio", "--cors=permissive"}, "", "stdio", "permissive"},
+
+		// Tolerant of subcommand args / unknown flags / short flags.
+		{"unknown flag survives", []string{"--unknown", "v", "--mcp=stdio"}, "", "stdio", "strict"},
+		{"short flag survives", []string{"-q", "show", "--cors=disabled", "42"}, "", "", "disabled"},
+		{"combined short", []string{"-qy", "--mcp=stdio"}, "", "stdio", "strict"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, mcp, cors, _ := preparseGlobalFlags(tt.argv)
+			assert.Equal(t, tt.cfg, cfg, "config")
+			assert.Equal(t, tt.mcp, mcp, "mcp")
+			assert.Equal(t, tt.cors, cors, "cors")
+		})
+	}
+}
+
+func TestPreparseGlobalFlags_Var(t *testing.T) {
+	_, _, _, vars := preparseGlobalFlags([]string{"--var", "A=1", "--var", "B=hello", "sub"})
+	assert.Equal(t, []string{"A=1", "B=hello"}, vars)
+}
+
+func TestPreparseGlobalFlags_VarEquals(t *testing.T) {
+	_, _, _, vars := preparseGlobalFlags([]string{"--var=X=val=with=equals"})
+	assert.Equal(t, []string{"X=val=with=equals"}, vars)
+}
+
+func TestApplyEnvVars(t *testing.T) {
+	require.NoError(t, applyEnvVars([]string{"API_CLI_TEST_V1=hello", "API_CLI_TEST_V2=world"}))
+	assert.Equal(t, "hello", os.Getenv("API_CLI_TEST_V1"))
+	assert.Equal(t, "world", os.Getenv("API_CLI_TEST_V2"))
+	t.Cleanup(func() {
+		os.Unsetenv("API_CLI_TEST_V1")
+		os.Unsetenv("API_CLI_TEST_V2")
+	})
+}
+
+func TestApplyEnvVars_BadFormat(t *testing.T) {
+	assert.Error(t, applyEnvVars([]string{"NOEQUALS"}))
+}
+
+func TestRun_VarSetsEnv(t *testing.T) {
+	dir := t.TempDir()
+	cfg := `<config name="t">
+	<run>printf '%s' {{.env.API_CLI_TEST_TOKEN}}</run>
+	<command name="show"/>
+</config>`
+	p := filepath.Join(dir, "api.xml")
+	require.NoError(t, os.WriteFile(p, []byte(cfg), 0o600))
+
+	prevOut := execStdout
+	var buf bytes.Buffer
+	execStdout = &buf
+	execStderr = io.Discard
+	t.Cleanup(func() {
+		execStdout = prevOut
+		execStderr = os.Stderr
+		os.Unsetenv("API_CLI_TEST_TOKEN")
+	})
+	prevCode := exitCode
+	exitCode = 0
+	t.Cleanup(func() { exitCode = prevCode })
+
+	var errOut bytes.Buffer
+	code := run([]string{"--config", p, "--var", "API_CLI_TEST_TOKEN=secret123", "show"}, &errOut)
+	assert.Equal(t, 0, code)
+	assert.Equal(t, "secret123", buf.String())
 }
 
 func TestStringSlice_PreservesCommas(t *testing.T) {

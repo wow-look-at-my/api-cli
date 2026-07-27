@@ -5,8 +5,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func captureExecStreams(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
@@ -130,6 +130,115 @@ func TestDoExec_ArgvSpreadOnlyEmptyFails(t *testing.T) {
 	data := map[string]any{"arg": map[string]any{"files": []string{}}}
 	code := doExec(c, "", "", data)
 	assert.Equal(t, 1, code)
+}
+
+func TestDoExec_ShellSpread(t *testing.T) {
+	out, _ := captureExecStreams(t)
+	c := &Cmd{Shell: true, Template: `printf '%s\n' {{spread .rest}}`}
+	data := map[string]any{"rest": []string{"--foo=bar,[baz]", "-x", "file.txt"}}
+	code := doExec(c, "", "", data)
+	require.Equal(t, 0, code)
+	assert.Equal(t, "--foo=bar,[baz]\n-x\nfile.txt\n", out.String())
+}
+
+func TestDoExec_ShellSpreadEmpty(t *testing.T) {
+	out, _ := captureExecStreams(t)
+	c := &Cmd{Shell: true, Template: `echo prefix{{spread .rest}} suffix`}
+	data := map[string]any{"rest": []string{}}
+	code := doExec(c, "", "", data)
+	require.Equal(t, 0, code)
+	assert.Equal(t, "prefix suffix\n", out.String())
+}
+
+func TestDoExec_ShellSpreadSingleQuotesInArg(t *testing.T) {
+	out, _ := captureExecStreams(t)
+	c := &Cmd{Shell: true, Template: `printf '%s\n' {{spread .rest}}`}
+	data := map[string]any{"rest": []string{"it's", "a 'test'"}}
+	code := doExec(c, "", "", data)
+	require.Equal(t, 0, code)
+	assert.Equal(t, "it's\na 'test'\n", out.String())
+}
+
+func TestExpandSpreadForShell(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"no spread", "echo hello", "echo hello"},
+		{"single element", "cmd \x00arg\x01 tail", "cmd 'arg' tail"},
+		{"multiple elements", "cmd \x00a\x00b\x00c\x01", "cmd 'a' 'b' 'c'"},
+		{"empty spread", "cmd \x00\x01 tail", "cmd  tail"},
+		{"metacharacters", "cmd \x00--flag=val,[baz]\x00-x\x01", "cmd '--flag=val,[baz]' '-x'"},
+		{"two spreads", "cmd \x00a\x00b\x01 mid \x00c\x01", "cmd 'a' 'b' mid 'c'"},
+		{"embedded single quote", "cmd \x00it's\x01", "cmd 'it'\\''s'"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, expandSpreadForShell(tc.input))
+		})
+	}
+}
+
+func TestParseResult_HexHash(t *testing.T) {
+	// MD5/SHA hashes that start with digits must stay strings, not be
+	// partially parsed as JSON numbers.
+	hashes := []string{
+		"3bf86b7e484a4c355f49b3e4c9d8a17c",
+		"d41d8cd98f00b204e9800998ecf8427e",
+		"9f86d081884c7d659a2feaa0c55ad015",
+		"0e123456789abcdef0123456789abcdef",
+	}
+	for _, h := range hashes {
+		got := parseResult(h)
+		assert.Equal(t, h, got, "hash %q must stay a string", h)
+	}
+}
+
+func TestParseResult_ValidJSON(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  any
+	}{
+		{"object", `{"a":1}`, map[string]any{"a": int64(1)}},
+		{"array", `[1,2]`, []any{int64(1), int64(2)}},
+		{"bare int", `42`, int64(42)},
+		{"bare float", `3.14`, 3.14},
+		{"bare string", `"hello"`, "hello"},
+		{"bare true", `true`, true},
+		{"bare false", `false`, false},
+		{"null", `null`, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, parseResult(tc.input))
+		})
+	}
+}
+
+func TestParseResult_NonJSON(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+	}{
+		{"plain text", "hello world"},
+		{"hash starting with digit", "3bf86b7e484a4c355f49b3e4c9d8a17c"},
+		{"number followed by text", "42abc"},
+		{"scientific notation prefix", "0e123abcdef"},
+		{"number with trailing brace", "42}"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := parseResult(tc.input)
+			assert.Equal(t, tc.input, got)
+		})
+	}
+}
+
+func TestParseResult_TrailingWhitespace(t *testing.T) {
+	got := parseResult("  42  \n")
+	assert.Equal(t, int64(42), got)
 }
 
 var _ io.Reader = (*bytes.Buffer)(nil) // keep io import live if unused by coverage

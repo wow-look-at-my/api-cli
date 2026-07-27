@@ -26,11 +26,11 @@ func envMap() map[string]string {
 	return out
 }
 
-// spreadSentinel is a NUL byte used to mark and delimit the output of the
-// `spread` helper. NUL never appears in valid argv text, so it's safe to use
-// as an in-band signal that a rendered argv element should be split into
-// multiple slots.
+// spreadSentinel (NUL) delimits elements in spread output; spreadEndSentinel
+// (SOH) terminates a spread region. These are reserved internal markers —
+// spread() rejects elements containing either byte.
 const spreadSentinel = "\x00"
+const spreadEndSentinel = "\x01"
 
 // funcMap is the template function set available in every rendered template.
 // It combines sprig's text FuncMap (a broad library of string/list/math/json
@@ -49,7 +49,27 @@ func funcMap() template.FuncMap {
 	fm["padLeft"] = padLeft
 	fm["displayWidth"] = displayWidth
 	fm["stripANSI"] = stripANSI
+	fm["filterSuffix"] = filterSuffix
+	fm["filterPrefix"] = filterPrefix
+	fm["truthy"] = templateTruthy
 	return fm
+}
+
+// templateTruthy reports whether v is truthy under the same rules as the format
+// `when` predicates (see isTruthy): nil and false are falsy; strings use
+// isTruthy ("", "false", "0", "no" falsy); other values are stringified first.
+// Used by <if test=> placeholders compiled from XML.
+func templateTruthy(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return false
+	case bool:
+		return x
+	case string:
+		return isTruthy(x)
+	default:
+		return isTruthy(fmt.Sprintf("%v", x))
+	}
 }
 
 // tabwriter formats rows with columns aligned by displayWidth. Accepts:
@@ -112,13 +132,13 @@ func toRows(v any) ([]string, error) {
 	}
 }
 
-// spread expands a slice into multiple argv slots when used as the entire
-// content of an argv-form `command` element. It emits a NUL-prefixed,
-// NUL-separated string; the executor recognises the leading NUL and splits
-// the element into N slots (zero for an empty input).
+// spread expands a slice into multiple arguments. In argv-form commands, the
+// element "{{spread .arg.files}}" becomes N separate argv entries. In
+// shell-form commands, expandSpreadForShell (exec.go) replaces each sentinel
+// region with individually shell-quoted elements.
 //
-// Only meaningful in argv form. In shell form, NULs in the rendered command
-// would be passed through to /bin/sh — don't use spread there.
+// Output format: \x00elem1\x00elem2\x01 (NUL-delimited, SOH-terminated).
+// Elements must not contain \x00 or \x01; spread returns an error if they do.
 //
 // Accepted shapes: nil, []string, []int, []any (each element stringified).
 func spread(v any) (string, error) {
@@ -126,10 +146,15 @@ func spread(v any) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("spread: %w", err)
 	}
-	if len(parts) == 0 {
-		return spreadSentinel, nil
+	for _, p := range parts {
+		if strings.ContainsAny(p, spreadSentinel+spreadEndSentinel) {
+			return "", fmt.Errorf("spread: element contains reserved sentinel byte: %q", p)
+		}
 	}
-	return spreadSentinel + strings.Join(parts, spreadSentinel), nil
+	if len(parts) == 0 {
+		return spreadSentinel + spreadEndSentinel, nil
+	}
+	return spreadSentinel + strings.Join(parts, spreadSentinel) + spreadEndSentinel, nil
 }
 
 func toStringSlice(v any) ([]string, error) {
@@ -173,6 +198,37 @@ func dirExists(path string) bool {
 		return false
 	}
 	return info.IsDir()
+}
+
+// filterSuffix returns elements from list that end with the given suffix.
+// Used in passthrough mode to locate specific files: {{.rest | filterSuffix ".cpp1.ii" | first}}.
+func filterSuffix(suffix string, list any) ([]string, error) {
+	items, err := toStringSlice(list)
+	if err != nil {
+		return nil, fmt.Errorf("filterSuffix: %w", err)
+	}
+	var out []string
+	for _, s := range items {
+		if strings.HasSuffix(s, suffix) {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+// filterPrefix returns elements from list that start with the given prefix.
+func filterPrefix(prefix string, list any) ([]string, error) {
+	items, err := toStringSlice(list)
+	if err != nil {
+		return nil, fmt.Errorf("filterPrefix: %w", err)
+	}
+	var out []string
+	for _, s := range items {
+		if strings.HasPrefix(s, prefix) {
+			out = append(out, s)
+		}
+	}
+	return out, nil
 }
 
 // queryString renders a map (or struct) of parameters as a URL-encoded query
@@ -265,8 +321,8 @@ func repeatKey(key string, v any) (string, error) {
 }
 
 // shellQuote wraps s in single quotes for safe interpolation into a POSIX sh
-// command line. Embedded single quotes are escaped using the 'one single
-// quote per quote' dance: foo'bar becomes 'foo'\''bar'.
+// command line. Each embedded single quote is escaped by closing the quoted
+// run, emitting an escaped quote, and reopening (see the replacement below).
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
@@ -344,6 +400,25 @@ func walkEntry(v any, data any) (any, error) {
 	default:
 		return v, nil
 	}
+}
+
+// lookupPath walks a dotted context path ("var.filter", "data.items") into a
+// nested map structure. Returns nil if any segment is missing or a non-map is
+// traversed. An empty path returns the value unchanged.
+func lookupPath(data any, path string) any {
+	cur := data
+	for _, seg := range strings.Split(path, ".") {
+		seg = strings.TrimSpace(seg)
+		if seg == "" {
+			continue
+		}
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return nil
+		}
+		cur = m[seg]
+	}
+	return cur
 }
 
 // mergeVars merges `child` into a copy of `parent`, with the child winning on
