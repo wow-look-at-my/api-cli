@@ -5,8 +5,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func captureExecStreams(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
@@ -161,9 +161,9 @@ func TestDoExec_ShellSpreadSingleQuotesInArg(t *testing.T) {
 
 func TestExpandSpreadForShell(t *testing.T) {
 	cases := []struct {
-		name	string
-		input	string
-		want	string
+		name  string
+		input string
+		want  string
 	}{
 		{"no spread", "echo hello", "echo hello"},
 		{"single element", "cmd \x00arg\x01 tail", "cmd 'arg' tail"},
@@ -197,9 +197,9 @@ func TestParseResult_HexHash(t *testing.T) {
 
 func TestParseResult_ValidJSON(t *testing.T) {
 	cases := []struct {
-		name	string
-		input	string
-		want	any
+		name  string
+		input string
+		want  any
 	}{
 		{"object", `{"a":1}`, map[string]any{"a": int64(1)}},
 		{"array", `[1,2]`, []any{int64(1), int64(2)}},
@@ -219,8 +219,8 @@ func TestParseResult_ValidJSON(t *testing.T) {
 
 func TestParseResult_NonJSON(t *testing.T) {
 	cases := []struct {
-		name	string
-		input	string
+		name  string
+		input string
 	}{
 		{"plain text", "hello world"},
 		{"hash starting with digit", "3bf86b7e484a4c355f49b3e4c9d8a17c"},
@@ -241,4 +241,4 @@ func TestParseResult_TrailingWhitespace(t *testing.T) {
 	assert.Equal(t, int64(42), got)
 }
 
-var _ io.Reader = (*bytes.Buffer)(nil)	// keep io import live if unused by coverage
+var _ io.Reader = (*bytes.Buffer)(nil) // keep io import live if unused by coverage

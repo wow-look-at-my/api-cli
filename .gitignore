@@ -1,8 +1,8 @@
 # Compiled binary
 /api-cli
 
-# Runtime config (users may keep their api.json private)
-/api.json
+# Runtime config (users may keep their api.xml private)
+/api.xml
 
 # Go build/cache artifacts
 /coverage.out

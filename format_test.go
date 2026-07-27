@@ -7,8 +7,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFormatRef_UnmarshalString(t *testing.T) {
@@ -331,7 +331,7 @@ func TestValidate_RejectsDuplicateViewNames(t *testing.T) {
 				{Name: "a", Template: "y"},
 			}},
 		},
-		Command: &Cmd{Shell: true, Template: "true"},
+		Command:  &Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{Name: "x", Format: &FormatRef{Name: "f"}}},
 	}
 	assert.Error(t, validate(cfg))

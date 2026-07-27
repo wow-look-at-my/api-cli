@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // execCmd builds the root from cfg, sets argv, executes, and returns the
@@ -56,8 +56,8 @@ func TestIntegration_ShellFormRendersEntry(t *testing.T) {
 		Vars:    map[string]any{"greeting": "hello"},
 		Command: &Cmd{Shell: true, Template: `printf '%s %s %s' {{.var.greeting}} {{.entry.name}} {{.arg.id}}`},
 		Commands: []Command{{
-			Name: "greet",
-			Args: []Arg{{Name: "id", Type: "string", Required: true}},
+			Name:  "greet",
+			Args:  []Arg{{Name: "id", Type: "string", Required: true}},
 			Entry: json.RawMessage(`{"name":"ada"}`),
 		}},
 	}
@@ -87,8 +87,8 @@ func TestIntegration_LeafOverridesRootCommand(t *testing.T) {
 		Name:    "t",
 		Command: &Cmd{Shell: true, Template: `echo root`},
 		Commands: []Command{
-			{Name: "a"},                                                                 // inherits root
-			{Name: "b", Command: &Cmd{Shell: true, Template: `echo leaf-override`}},     // overrides
+			{Name: "a"}, // inherits root
+			{Name: "b", Command: &Cmd{Shell: true, Template: `echo leaf-override`}}, // overrides
 		},
 	}
 	code, out := execCmd(t, cfg, "a")
@@ -121,9 +121,9 @@ func TestIntegration_VarsInheritanceAndOverride(t *testing.T) {
 func TestIntegration_VarsCanBeTemplated(t *testing.T) {
 	t.Setenv("API_CLI_TEST_HOST", "example.internal")
 	cfg := &Config{
-		Name:    "t",
-		Vars:    map[string]any{"host": `{{.env.API_CLI_TEST_HOST}}`},
-		Command: &Cmd{Shell: true, Template: `echo {{.var.host}}`},
+		Name:     "t",
+		Vars:     map[string]any{"host": `{{.env.API_CLI_TEST_HOST}}`},
+		Command:  &Cmd{Shell: true, Template: `echo {{.var.host}}`},
 		Commands: []Command{{Name: "show"}},
 	}
 	code, out := execCmd(t, cfg, "show")
@@ -154,8 +154,8 @@ func TestIntegration_CurlExampleViaQuerystring(t *testing.T) {
 
 func TestIntegration_ExitCodePropagated(t *testing.T) {
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `exit 9`},
+		Name:     "t",
+		Command:  &Cmd{Shell: true, Template: `exit 9`},
 		Commands: []Command{{Name: "fail"}},
 	}
 	code, _ := execCmd(t, cfg, "fail")
@@ -168,8 +168,8 @@ func TestIntegration_StdinPassthrough(t *testing.T) {
 	t.Cleanup(func() { execStdin = prev })
 
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `cat`},
+		Name:     "t",
+		Command:  &Cmd{Shell: true, Template: `cat`},
 		Commands: []Command{{Name: "echo"}},
 	}
 	code, out := execCmd(t, cfg, "echo")
@@ -179,7 +179,7 @@ func TestIntegration_StdinPassthrough(t *testing.T) {
 
 func TestIntegration_ExampleConfigLoads(t *testing.T) {
 	// Sanity check: the shipped example validates cleanly.
-	cfg, err := Load("api.example.json")
+	cfg, err := Load("api.example.xml")
 	require.NoError(t, err)
 	assert.NotEmpty(t, cfg.Name)
 }
@@ -368,8 +368,8 @@ func TestIntegration_ExecutionCountSuppressedWithQuiet(t *testing.T) {
 func TestIntegration_NoCountWhenNoSteps(t *testing.T) {
 	// Single execution (no steps) → nothing printed to stderr.
 	cfg := &Config{
-		Name:    "t",
-		Command: &Cmd{Shell: true, Template: `true`},
+		Name:     "t",
+		Command:  &Cmd{Shell: true, Template: `true`},
 		Commands: []Command{{Name: "run"}},
 	}
 	_, _, errOut := execCmdFull(t, cfg, "run")

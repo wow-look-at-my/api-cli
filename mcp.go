@@ -68,12 +68,13 @@ func runMCP(transport string, cfg *Config, corsLevel CorsLevel) int {
 // mcpInherit is the inherited context threaded down the command tree during
 // MCP leaf collection. Mirrors the inherited* parameters in buildCommand.
 type mcpInherit struct {
-	prefix string
-	vars   map[string]any
-	cmd    *Cmd
-	cwd    string
-	stdin  string
-	format *FormatRef
+	prefix  string
+	vars    map[string]any
+	cmd     *Cmd
+	request *Request
+	cwd     string
+	stdin   string
+	format  *FormatRef
 	// formats is the top-level registry; constant across the recursion.
 	formats map[string]*Format
 }
@@ -84,6 +85,7 @@ type mcpLeaf struct {
 	node      Command
 	vars      map[string]any
 	cmdTmpl   *Cmd
+	request   *Request
 	cwdTmpl   string
 	stdinTmpl string
 	formatRef *FormatRef
@@ -96,6 +98,7 @@ func buildMCPServer(cfg *Config) *mcp.Server {
 	for _, leaf := range collectMCPLeaves(cfg.Commands, mcpInherit{
 		vars:    cfg.Vars,
 		cmd:     cfg.Command,
+		request: cfg.Request,
 		cwd:     cfg.Cwd,
 		stdin:   cfg.Stdin,
 		formats: cfg.Formats,
@@ -159,13 +162,18 @@ func collectMCPLeaves(cmds []Command, inh mcpInherit) []mcpLeaf {
 			prefix:  name,
 			vars:    mergeVars(inh.vars, c.Vars),
 			cmd:     inh.cmd,
+			request: inh.request,
 			cwd:     inh.cwd,
 			stdin:   inh.stdin,
 			format:  inh.format,
 			formats: inh.formats,
 		}
-		if c.Command.Defined() {
+		if c.Request.Defined() {
+			child.request = c.Request
+			child.cmd = nil
+		} else if c.Command.Defined() {
 			child.cmd = c.Command
+			child.request = nil
 		}
 		if c.Cwd != "" {
 			child.cwd = c.Cwd
@@ -182,6 +190,7 @@ func collectMCPLeaves(cmds []Command, inh mcpInherit) []mcpLeaf {
 				node:      c,
 				vars:      child.vars,
 				cmdTmpl:   child.cmd,
+				request:   child.request,
 				cwdTmpl:   child.cwd,
 				stdinTmpl: child.stdin,
 				formatRef: child.format,
