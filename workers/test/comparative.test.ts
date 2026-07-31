@@ -1,8 +1,13 @@
 // Comparative tests — verifies the TypeScript port produces identical
 // results to the Go implementation for shared functionality.
-// These tests load the actual example configs from the repo root and
+// These tests load the JSON example configs from test/fixtures/ and
 // exercise config parsing, template rendering, router resolution, and
 // format system behavior.
+//
+// The Go CLI migrated to XML configs, but the Workers port parses JSON.
+// The fixture files are the last JSON versions of the example configs,
+// preserved here so the Workers port's behavior can be verified against
+// the same config semantics.
 
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -14,10 +19,10 @@ import { isTruthy, parseInput, selectView, buildFormatContext, applyFormat } fro
 import { parseCurlCommand, parseCurlArgv } from "../src/curl-parser.ts";
 import { analyzeConfig } from "../src/warnings.ts";
 
-const repoRoot = resolve(import.meta.dirname!, "../..");
+const fixturesDir = resolve(import.meta.dirname!, "fixtures");
 
 function loadExample(name: string): Config {
-  const json = readFileSync(resolve(repoRoot, name), "utf-8");
+  const json = readFileSync(resolve(fixturesDir, name), "utf-8");
   return loadConfig(json);
 }
 
