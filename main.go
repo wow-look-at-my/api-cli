@@ -125,6 +125,7 @@ func isHelpInvocation(argv []string) bool {
 	for _, a := range argv {
 		if a == "--help" || a == "-h" || a == "help" {
 			return true
+
 		}
 	}
 	return false
