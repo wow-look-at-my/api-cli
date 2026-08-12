@@ -291,6 +291,38 @@ func TestValidate_TransportErrors(t *testing.T) {
 	}
 }
 
+// The curl transport shipped in api.example.xml is documentation users will
+// copy, so pin the argv it actually builds — in particular that a body reaches
+// curl rather than being dropped, and that a GET grows no stray empty
+// arguments from the conditional spread.
+func TestExampleCurlTransportArgv(t *testing.T) {
+	cfg, err := Load("api.example.xml")
+	require.NoError(t, err)
+	tr := cfg.Transports["curl"]
+	require.NotNil(t, tr)
+
+	build := func(p *preparedRequest) []string {
+		cmd, err := buildExecCmd(tr.Command, p.context(map[string]any{}))
+		require.NoError(t, err)
+		return cmd.Args
+	}
+
+	get := build(&preparedRequest{
+		Method:  "GET",
+		URL:     "https://api.example.com/users",
+		Headers: []renderedHeader{{Name: "Accept", Value: "application/json"}},
+	})
+	assert.Equal(t, []string{"curl", "-fsSL", "-X", "GET", "-H", "Accept: application/json", "https://api.example.com/users"}, get)
+
+	post := build(&preparedRequest{
+		Method: "POST",
+		URL:    "https://api.example.com/users",
+		Body:   `{"name":"ada"}`,
+	})
+	assert.Equal(t, []string{"curl", "-fsSL", "-X", "POST", "--data-binary", "@-", "https://api.example.com/users"}, post)
+	assert.False(t, tr.StdinSet, "the body must reach curl on stdin")
+}
+
 func TestValidate_TransportAcceptsBuiltinNameOnRequest(t *testing.T) {
 	_, err := loadStr(t, `<config name="x">
 	<transports><transport name="a" default="true"><run>x</run></transport></transports>

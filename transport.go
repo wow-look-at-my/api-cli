@@ -62,7 +62,7 @@ func buildTransport(n *xnode) (*Transport, error) {
 				return nil, err
 			}
 			if req != nil {
-				return nil, fmt.Errorf("<transport %q>: <run> must be a command — a transport is what performs a request, so it cannot be one", name)
+				return nil, fmt.Errorf("<transport %q>: <run> must be a command; a transport is what performs a request, so it cannot be one", name)
 			}
 			t.Command = cmd
 		case "cwd":
@@ -84,8 +84,9 @@ func buildTransport(n *xnode) (*Transport, error) {
 	return t, nil
 }
 
-// installTransports publishes a config's transport registry. Called once after
-// the config loads, before any leaf runs.
+// installTransports publishes a config's transport registry. Called by every
+// path that turns a config into runnable commands (newRoot, buildMCPServer),
+// before any leaf runs.
 func installTransports(cfg *Config) {
 	transports = map[string]*Transport{}
 	defaultTransport = ""

@@ -18,6 +18,31 @@
 		<var name="base_url">https://jsonplaceholder.typicode.com</var>
 	</vars>
 
+	<!--
+		A transport performs requests in place of the built-in HTTP client, for
+		APIs whose auth or wire format is easier to delegate to a program you
+		already have. This one is not the default, so it runs only when a
+		request names it or the transport flag selects it (needs curl on PATH).
+	-->
+	<transports>
+		<transport name="curl">
+			<run>
+				<argv>curl</argv>
+				<argv>-fsSL</argv>
+				<argv>-X</argv>
+				<argv><value name="request.method"/></argv>
+				<argv><value expr="{{ $h := list }}{{ range .request.header_lines }}{{ $h = concat $h (list &quot;-H&quot; .) }}{{ end }}{{ spread $h }}"/></argv>
+				<!--
+					The body arrives on stdin (the default), so tell curl to read
+					it from there. An empty spread contributes no argument at
+					all, which is why this is a spread and not an <if>.
+				-->
+				<argv><value expr="{{ spread (ternary (list &quot;--data-binary&quot; &quot;@-&quot;) (list) (ne .request.body &quot;&quot;)) }}"/></argv>
+				<argv><value name="request.url"/></argv>
+			</run>
+		</transport>
+	</transports>
+
 	<!-- Inherited by every leaf unless a leaf declares its own <run>. -->
 	<run>
 		<request method="GET">
@@ -95,6 +120,34 @@
 					<param name="userId"><if test="flag.user"><value name="flag.user"/></if></param>
 				</query>
 			</entry>
+		</command>
+		<!--
+			Two requests, one command: the step looks the user up by name and
+			the leaf uses the id it found. A step with no <run> of its own
+			reuses the inherited request, so all it needs is a new <entry>.
+		-->
+		<command name="by-user" description="List a user's posts, looked up by username.">
+			<arg name="username" required="true" description="Username, e.g. Bret."/>
+			<steps>
+				<step name="user">
+					<entry>
+						<path>/users</path>
+						<query>
+							<param name="username"><value name="arg.username"/></param>
+						</query>
+					</entry>
+				</step>
+			</steps>
+			<entry>
+				<path>/posts</path>
+				<query>
+					<param name="userId"><value expr="{{ (index .result.user 0).id }}"/></param>
+				</query>
+			</entry>
+			<fields footer="{{ len .data }} posts by {{ .arg.username }}">
+				<field name="id">id</field>
+				<field name="title">title</field>
+			</fields>
 		</command>
 	</command>
 

@@ -109,7 +109,8 @@ with `expr=` (or just type `{{ ... }}` in the text).
 
 A `<request>` is built entirely from templates and executed with the Go HTTP
 client -- no `curl`. JSON responses can be shaped with an embedded `jq` engine
-([gojq](https://github.com/itchyny/gojq)); no `jq` binary is required.
+([gojq](https://github.com/itchyny/gojq)); no `jq` binary is required. To send
+requests through your own program instead, see [Transports](#transports).
 
 ```xml
 <run>
@@ -136,6 +137,61 @@ client -- no `curl`. JSON responses can be shaped with an embedded `jq` engine
 A non-2xx/3xx status prints the body to stderr and exits non-zero (like
 `curl -f`). The root `<run>` is typically the shared request; per-leaf `<run>`
 overrides it (e.g. a `POST`, or a raw-body download).
+
+## Transports
+
+Some APIs authenticate in a way that is painful to reproduce -- a signing
+scheme, a session dance, an mTLS setup -- and you already have a program that
+does it. A `<transport>` is that program, wired in as the thing that *performs*
+requests. Everything else stays: the same `<request>` syntax, `<response jq=>`,
+`<fields>`, steps, MCP.
+
+```xml
+<transports>
+	<transport name="corp" default="true">
+		<run>
+			<argv>corp-http</argv>
+			<argv><value name="request.method"/></argv>
+			<argv><value name="request.url"/></argv>
+		</run>
+	</transport>
+</transports>
+```
+
+The program receives the fully rendered request on top of the leaf's usual
+context, and its **stdout is the response body**:
+
+| Placeholder | Value |
+|-------------|-------|
+| `.request.method` | `GET`, `POST`, ... |
+| `.request.url` | Full URL, query string included. |
+| `.request.body` | Rendered body (empty when there is none). |
+| `.request.headers` | Map of rendered header name -> value. |
+| `.request.header_lines` | `["Accept: application/json", ...]`, for splatting. |
+
+- **The body goes to the program's stdin** unless the transport declares its own
+  `<stdin>`. Either way stdin is explicit -- a transport never inherits your
+  terminal, so a program that reads stdin cannot hang waiting for one.
+- **A non-zero exit fails the request**, like a 4xx from the built-in client.
+  The program's stderr passes through untouched.
+- **Which transport runs**: `--transport=<name>`, else the request's
+  `transport=` attribute, else the registry's `default="true"` entry, else the
+  built-in client. The name `http` is reserved for the built-in client, so
+  `--transport=http` bypasses a default transport for one invocation.
+- `<cwd>` sets the program's working directory. A transport's `<run>` must be a
+  command -- it is what performs a request, so it cannot be one.
+
+To build repeated flags, assemble a list and `spread` it:
+
+```xml
+<argv><value expr="{{ $h := list }}{{ range .request.header_lines }}{{ $h = concat $h (list &quot;-H&quot; .) }}{{ end }}{{ spread $h }}"/></argv>
+```
+
+An empty `spread` contributes no argument at all, so it is also how you make an
+argument conditional -- `{{ spread (ternary (list "--data-binary" "@-") (list) (ne .request.body "")) }}`
+adds two arguments only when there is a body. A plain `<if>` would leave an
+empty string in the argv instead. See the `curl` transport in
+[`api.example.xml`](./api.example.xml) for both together.
 
 ## Output: fields
 
@@ -362,24 +418,40 @@ Flags support `=` and next-arg syntax; `bool` flags consume no value;
 ## Result reuse across calls (steps)
 
 A leaf can declare `<steps>` -- pre-execution stages that run before the leaf's
-own command. Each step's stdout is captured and exposed under `.result.<name>`
-for later steps and the leaf's own `entry`/command. This enables indirection
-(resolve a name to an ID, then use it), joins, and fan-out pipelines. Steps run
-shell/argv commands (not requests).
+own run. Each step's output is captured and exposed under `.result.<name>` for
+later steps and the leaf's own `entry`/run. This enables indirection (resolve a
+name to an ID, then use it), joins, and fan-out pipelines.
+
+A step runs a command or a request -- the same fork as `<run>`. A step that
+declares neither inherits the leaf's effective run, so chaining two calls
+against an inherited `<request>` needs nothing but a second `<entry>`:
 
 ```xml
 <command name="user-posts" description="List posts for a user looked up by username.">
 	<arg name="username" required="true"/>
 	<steps>
-		<step name="user"><run>curl -fsSL "https://api.example.com/users?username={{.arg.username}}"</run></step>
+		<step name="user">
+			<entry>
+				<path>/users</path>
+				<query><param name="username"><value name="arg.username"/></param></query>
+			</entry>
+		</step>
 	</steps>
-	<run>curl -fsSL "https://api.example.com/posts?userId={{(index .result.user 0).id}}"</run>
+	<entry>
+		<path>/posts</path>
+		<query><param name="userId"><value expr="{{ (index .result.user 0).id }}"/></param></query>
+	</entry>
 </command>
 ```
 
+Mix freely: a `<step><run>` may be a shell command while the leaf performs a
+request, or the reverse.
+
 - Steps run in declaration order; each `entry` is rendered against the current
   context including `.result.*` from prior steps.
-- Step stdout is parsed as JSON (with `UseNumber`); non-JSON is kept as a string.
+- Step output is parsed as JSON (with `UseNumber`); non-JSON is kept as a string.
+  A request step stores what the leaf would have printed, `<response jq=>`
+  shaping included.
 - A non-zero step aborts the run with that exit code.
 - A `when` attribute (a Go-template predicate) skips a step when falsy (empty,
   `false`, `0`, `no`); `.result.<name>` is then unset.
@@ -499,6 +571,7 @@ XSD validator cannot represent the recursive `<command>` grammar.
 | `<run>` | Default executable (request / argv / shell). Inherited. |
 | `<cwd>` / `<stdin>` | Default working directory / stdin templates. Inherited. |
 | `<formats>` | Named, reusable legacy formats. |
+| `<transports>` | Named programs that perform requests. See [Transports](#transports). |
 | `<command>` | Top-level subcommands. |
 
 ### `<command>`
@@ -512,7 +585,7 @@ XSD validator cannot represent the recursive `<command>` grammar.
 | `<arg>` / `<flag>` | Positional args / named flags. |
 | `<vars>` | Merged with ancestor vars (this node wins). |
 | `<run>` / `<cwd>` / `<stdin>` | Override the inherited executable / cwd / stdin. |
-| `<steps>` | Leaf-only. Pre-execution stages. |
+| `<steps>` | Leaf-only. Pre-execution stages, each a command or a request. |
 | `<entry>` | Leaf-only. `<path>`, `<query>`, or user-defined keys -> `.entry`. |
 | `<preconditions><precondition>` | Leaf-only. A non-empty render is a fatal error message (exit 1). |
 | `<fields>` / `<format>` | Output shape (auto) / legacy format. Leaf-only; not both. |
@@ -542,6 +615,7 @@ hidden `--no-NAME` companion.
 | `--no-format`     |       | false   | Disable output formatting (= `--format=raw`). |
 | `--format <mode>` |       | `auto`  | `raw` / `auto` / `always`. |
 | `--as <sink>`     |       |         | Force a `<fields>` representation: `table|list|lines|json|markdown|csv|timeline`. |
+| `--transport <name>` |    |         | Override the [transport](#transports) performing requests. `http` forces the built-in client. |
 | `--view <name>`   |       |         | Pick a named legacy view, bypassing predicate selection. |
 | `--var KEY=VALUE` |       |         | Set an env var before evaluation (so `{{.env.KEY}}` sees it). Repeatable. |
 
