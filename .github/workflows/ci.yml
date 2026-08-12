@@ -64,3 +64,10 @@ jobs:
             ${tags} \
             --push \
             .
+      - name: Verify each platform carries its own binary
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          branch_tag="$(echo "${{ github.ref_name }}" | tr '/' '-')"
+          ./.github/scripts/verify-image-arch.sh \
+            "ghcr.io/${{ github.repository_owner }}/github" "${branch_tag}"

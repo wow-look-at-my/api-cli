@@ -1,5 +1,7 @@
 FROM alpine:3.21
-ARG TARGETARCH=amd64
+# Declared bare so buildx supplies the target platform's value. A default here
+# wins over it, which is how every arm64 image so far shipped the amd64 binary.
+ARG TARGETARCH
 COPY api-cli_linux_${TARGETARCH} /usr/local/bin/api-cli
 RUN chmod +x /usr/local/bin/api-cli
 COPY samples/github/github.xml /github.xml

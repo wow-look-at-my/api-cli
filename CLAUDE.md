@@ -61,7 +61,7 @@ Do not add new third-party deps without a clear reason.
 | `api.schema.xsd`                | XSD reference for the XML grammar (editor aid + `docs schema`). NOT enforced at runtime; the loader is authoritative. |
 | `api.example.xml`              | Reference config (jsonplaceholder); loaded by `TestExampleConfigsLoad`. Exercises the grammar end to end, including a non-default `curl` transport and a request-step chain (`posts by-user`). |
 | `samples/github/github.xml`     | Read-only GitHub REST API wrapper in XML: first-class requests, jq noise-trimming, fields views. Used by the Docker image and CI demo; loaded by `TestGithubSampleLoads`. |
-| `samples/github/Dockerfile.github` | Alpine image: ships `api-cli` + `github.xml`; ENTRYPOINT runs `--mcp`. No curl/jq (requests + gojq built in). |
+| `samples/github/Dockerfile.github` | Alpine image: ships `api-cli` + `github.xml`; ENTRYPOINT runs `--mcp`. No curl/jq (requests + gojq built in). `ARG TARGETARCH` must stay bare — a default silently ships the amd64 binary to every platform, which `.github/scripts/verify-image-arch.sh` now catches in CI. |
 | `*_test.go`                     | Unit + integration tests. `integration_test.go` has `execCmd`/`execCmdFull`; `request_test.go`/`request_integration_test.go` use httptest via `swapHTTPClient`. |
 
 ## The XML config model
