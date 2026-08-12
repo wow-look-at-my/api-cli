@@ -152,8 +152,9 @@ func TestTransport_PerRequestSelection(t *testing.T) {
 	assert.Equal(t, "from-b\n", out)
 }
 
-// --transport=http forces the built-in client past a default transport.
-func TestTransport_FlagForcesBuiltinClient(t *testing.T) {
+// transport="http" opts one request out of the config's default transport —
+// the public endpoint in an otherwise internal API.
+func TestTransport_RequestOptsOutToBuiltinClient(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`from-http`))
 	}))
@@ -164,29 +165,44 @@ func TestTransport_FlagForcesBuiltinClient(t *testing.T) {
 		Name:       "t",
 		Transports: map[string]*Transport{"fake": shellTransport("fake", `printf 'from-transport'`, true)},
 		Request:    &Request{Method: "GET", URL: srv.URL},
-		Commands:   []Command{{Name: "go"}},
+		Commands: []Command{
+			{Name: "internal"},
+			{Name: "public", Request: &Request{Method: "GET", URL: srv.URL, Transport: builtinTransportName}},
+		},
 	}
-	code, out := execCmd(t, cfg, "go")
+	code, out := execCmd(t, cfg, "internal")
 	require.Equal(t, 0, code)
 	assert.Equal(t, "from-transport\n", out)
 
-	code, out = execCmd(t, cfg, "--transport", "http", "go")
+	code, out = execCmd(t, cfg, "public")
 	require.Equal(t, 0, code)
 	assert.Equal(t, "from-http\n", out)
 }
 
-func TestTransport_UnknownOverrideFailsLoud(t *testing.T) {
+// Nothing can select a transport at runtime: how a request reaches its
+// endpoint is fixed by the config.
+func TestTransport_NoRuntimeOverrideFlag(t *testing.T) {
 	cfg := &Config{
 		Name:       "t",
 		Transports: map[string]*Transport{"fake": shellTransport("fake", `printf 'x'`, true)},
 		Request:    &Request{Method: "GET", URL: "https://internal.example/x"},
 		Commands:   []Command{{Name: "go"}},
 	}
-	code, out, errOut := execCmdFull(t, cfg, "--transport", "nope", "go")
-	assert.Equal(t, 1, code)
-	assert.Empty(t, out)
-	assert.Contains(t, errOut, `unknown transport "nope"`)
-	assert.Contains(t, errOut, "known: fake, http")
+	assert.Nil(t, newRoot(cfg).PersistentFlags().Lookup("transport"))
+}
+
+// An unregistered transport fails the request instead of quietly falling back
+// to the built-in client. validate() rejects this at load time, so this covers
+// the guard for a config whose registry was never published.
+func TestTransport_UnregisteredFailsLoud(t *testing.T) {
+	prevTransports, prevDefault := transports, defaultTransport
+	transports, defaultTransport = map[string]*Transport{"fake": shellTransport("fake", `printf 'x'`, false)}, ""
+	t.Cleanup(func() { transports, defaultTransport = prevTransports, prevDefault })
+
+	_, err := resolveTransport(&Request{URL: "https://internal.example/x", Transport: "ghost"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `transport "ghost" is not registered`)
+	assert.Contains(t, err.Error(), "known: fake, http")
 }
 
 func TestTransport_HeaderLinesSpreadIntoArgv(t *testing.T) {

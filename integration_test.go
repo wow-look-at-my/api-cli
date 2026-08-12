@@ -42,10 +42,8 @@ func execCmdFull(t *testing.T, cfg *Config, argv ...string) (int, string, string
 	// newRoot installs cfg's transports into package state; put back whatever
 	// was there so a config with a default transport can't leak into the next
 	// test's requests.
-	prevTransports, prevDefault, prevOverride := transports, defaultTransport, transportOverride
-	t.Cleanup(func() {
-		transports, defaultTransport, transportOverride = prevTransports, prevDefault, prevOverride
-	})
+	prevTransports, prevDefault := transports, defaultTransport
+	t.Cleanup(func() { transports, defaultTransport = prevTransports, prevDefault })
 
 	root := newRoot(cfg)
 	root.SetOut(io.Discard) // suppress cobra's own output in tests

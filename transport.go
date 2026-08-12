@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
-// builtinTransportName selects the built-in net/http client. Reserved: a
-// <transport> may not take this name, and --transport=http forces the built-in
-// client even when the config declares a default transport.
+// builtinTransportName selects the built-in net/http client. Reserved as a
+// <transport> name so a single request can opt out of a default transport with
+// transport="http" — for the public endpoint in an otherwise internal API.
 const builtinTransportName = "http"
 
 // The active transport registry. Config data rather than state, but a process
@@ -17,9 +17,8 @@ const builtinTransportName = "http"
 // held — and spares every call site between runLeaf and runRequest a parameter
 // it would only pass along.
 var (
-	transports        = map[string]*Transport{}
-	defaultTransport  string
-	transportOverride string // --transport, captured per invocation in runLeaf
+	transports       = map[string]*Transport{}
+	defaultTransport string
 )
 
 // buildTransports parses the <transports> registry. Kept here rather than in
@@ -90,7 +89,6 @@ func buildTransport(n *xnode) (*Transport, error) {
 func installTransports(cfg *Config) {
 	transports = map[string]*Transport{}
 	defaultTransport = ""
-	transportOverride = "" // runLeaf re-reads --transport per invocation
 	if cfg == nil {
 		return
 	}
@@ -103,14 +101,14 @@ func installTransports(cfg *Config) {
 	}
 }
 
-// resolveTransport picks the transport for a request. Precedence: --transport,
-// then the request's own transport=, then the registry default, then the
-// built-in client (a nil return).
+// resolveTransport picks the transport for a request: its own transport=, else
+// the registry default, else the built-in client (a nil return).
+//
+// There is deliberately no runtime override. How a request reaches its endpoint
+// is a property of that endpoint, not a user preference — sending an internal
+// API's request over the built-in client would just fetch an SSO page.
 func resolveTransport(req *Request) (*Transport, error) {
 	name := strings.TrimSpace(req.Transport)
-	if transportOverride != "" {
-		name = transportOverride
-	}
 	if name == "" {
 		name = defaultTransport
 	}
@@ -119,7 +117,10 @@ func resolveTransport(req *Request) (*Transport, error) {
 	}
 	t := transports[name]
 	if t == nil {
-		return nil, fmt.Errorf("unknown transport %q (known: %s)", name, knownTransports())
+		// validate() rejects an unknown transport= at load time, so reaching
+		// this means the registry was never published for this config. Fail
+		// rather than quietly sending the request over the built-in client.
+		return nil, fmt.Errorf("transport %q is not registered (known: %s)", name, knownTransports())
 	}
 	return t, nil
 }

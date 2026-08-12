@@ -446,7 +446,6 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		debugMode = true
 		verboseMode = true
 	}
-	transportOverride, _ = c.Root().PersistentFlags().GetString("transport")
 
 	var data map[string]any
 

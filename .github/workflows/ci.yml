@@ -28,16 +28,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
       - name: Validate XML configs and schema (well-formedness, XML 1.1)
         run: |
-          go install github.com/wow-look-at-my/xml-validator@latest
-          xv="$(go env GOPATH)/bin/xml-validator"
-          "$xv" api.example.xml
-          "$xv" api.schema.xsd
-          "$xv" samples/github/github.xml
+          curl -fsSL --compressed -o /usr/local/bin/xml-validator \
+            "https://dl.pazer.build/xml-validator?os=linux&arch=amd64"
+          chmod +x /usr/local/bin/xml-validator
+          xml-validator api.example.xml
+          xml-validator api.schema.xsd
+          xml-validator samples/github/github.xml
 
   docker:
     needs: test

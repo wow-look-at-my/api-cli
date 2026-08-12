@@ -21,8 +21,10 @@
 	<!--
 		A transport performs requests in place of the built-in HTTP client, for
 		APIs whose auth or wire format is easier to delegate to a program you
-		already have. This one is not the default, so it runs only when a
-		request names it or the transport flag selects it (needs curl on PATH).
+		already have. This one is not the default, so only the request that
+		names it (`users list-via-curl`) goes through it. There is no runtime
+		override: which transport carries a request is fixed here, because it
+		is a property of the endpoint rather than a user preference.
 	-->
 	<transports>
 		<transport name="curl">
@@ -81,6 +83,21 @@
 					<param name="_limit"><value name="flag.limit"/></param>
 				</query>
 			</entry>
+		</command>
+		<command name="list-via-curl" description="List users, performed by the curl transport instead of the built-in client. Needs curl on PATH.">
+			<run>
+				<request transport="curl">
+					<url><value name="var.base_url"/>/users</url>
+					<query>
+						<param name="_limit">5</param>
+					</query>
+					<header name="Accept">application/json</header>
+				</request>
+			</run>
+			<fields>
+				<field name="id">id</field>
+				<field name="name">name</field>
+			</fields>
 		</command>
 		<command name="create" description="Create a user. Overrides the inherited GET with a POST + JSON body.">
 			<flag name="name" type="string" required="true" description="Full name."/>

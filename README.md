@@ -174,10 +174,12 @@ context, and its **stdout is the response body**:
   terminal, so a program that reads stdin cannot hang waiting for one.
 - **A non-zero exit fails the request**, like a 4xx from the built-in client.
   The program's stderr passes through untouched.
-- **Which transport runs**: `--transport=<name>`, else the request's
-  `transport=` attribute, else the registry's `default="true"` entry, else the
-  built-in client. The name `http` is reserved for the built-in client, so
-  `--transport=http` bypasses a default transport for one invocation.
+- **Which transport runs**: the request's `transport=` attribute, else the
+  registry's `default="true"` entry, else the built-in client. There is no
+  runtime override -- how a request reaches its endpoint is a property of that
+  endpoint, not a user preference. The name `http` is reserved for the built-in
+  client, so `transport="http"` on one request opts it out of a default
+  transport (the public endpoint in an otherwise internal API).
 - `<cwd>` sets the program's working directory. A transport's `<run>` must be a
   command -- it is what performs a request, so it cannot be one.
 
@@ -615,7 +617,6 @@ hidden `--no-NAME` companion.
 | `--no-format`     |       | false   | Disable output formatting (= `--format=raw`). |
 | `--format <mode>` |       | `auto`  | `raw` / `auto` / `always`. |
 | `--as <sink>`     |       |         | Force a `<fields>` representation: `table|list|lines|json|markdown|csv|timeline`. |
-| `--transport <name>` |    |         | Override the [transport](#transports) performing requests. `http` forces the built-in client. |
 | `--view <name>`   |       |         | Pick a named legacy view, bypassing predicate selection. |
 | `--var KEY=VALUE` |       |         | Set an env var before evaluation (so `{{.env.KEY}}` sees it). Repeatable. |
 

@@ -64,8 +64,9 @@
       <xs:element name="response" type="response" minOccurs="0"/>
     </xs:sequence>
     <xs:attribute name="method" type="xs:string"/>
-    <!-- Name of a <transport>; "http" forces the built-in client. Omit to use
-         the registry's default transport, if any. -->
+    <!-- Name of a <transport>; "http" selects the built-in client, opting this
+         request out of a default transport. Omit to use the registry's
+         default, if any. -->
     <xs:attribute name="transport" type="xs:string"/>
   </xs:complexType>
 
