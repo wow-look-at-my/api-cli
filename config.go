@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -14,16 +15,17 @@ import (
 // context composed of args, flags, environment, vars, and the leaf's entry
 // variables. The rendered command is then executed.
 type Config struct {
-	Schema      string             `json:"$schema,omitempty"`
-	Name        string             `json:"name"`
-	Description string             `json:"description,omitempty"`
-	Vars        map[string]any     `json:"vars,omitempty"`
-	Command     *Cmd               `json:"command,omitempty"`
-	Request     *Request           `json:"request,omitempty"`
-	Cwd         string             `json:"cwd,omitempty"`
-	Stdin       string             `json:"stdin,omitempty"`
-	Formats     map[string]*Format `json:"formats,omitempty"`
-	Commands    []Command          `json:"commands,omitempty"`
+	Schema      string                `json:"$schema,omitempty"`
+	Name        string                `json:"name"`
+	Description string                `json:"description,omitempty"`
+	Vars        map[string]any        `json:"vars,omitempty"`
+	Command     *Cmd                  `json:"command,omitempty"`
+	Request     *Request              `json:"request,omitempty"`
+	Cwd         string                `json:"cwd,omitempty"`
+	Stdin       string                `json:"stdin,omitempty"`
+	Formats     map[string]*Format    `json:"formats,omitempty"`
+	Transports  map[string]*Transport `json:"transports,omitempty"`
+	Commands    []Command             `json:"commands,omitempty"`
 }
 
 // Command is a node in the CLI tree. A node is a leaf iff it has no
@@ -47,10 +49,11 @@ type Config struct {
 // The rendered string is fed to the child process's stdin. When empty/unset,
 // the child inherits the parent process's stdin.
 //
-// `steps` run sequentially before the leaf's own command. Each step's stdout
-// is captured and parsed as JSON (or kept as a raw string if not valid JSON),
-// then stored in `.result.<name>` for use by subsequent steps and the final
-// command template.
+// `steps` run sequentially before the leaf's own run. A step runs a command or
+// a request — the same fork as `<run>` — and defaults to the leaf's effective
+// run when it declares neither. Each step's output is captured and parsed as
+// JSON (or kept as a raw string if not valid JSON), then stored in
+// `.result.<name>` for use by subsequent steps and the final run.
 type Command struct {
 	Name          string          `json:"name"`
 	Description   string          `json:"description,omitempty"`
@@ -167,6 +170,7 @@ type Step struct {
 	When    string          `json:"when,omitempty"`
 	Entry   json.RawMessage `json:"entry,omitempty"`
 	Command *Cmd            `json:"command,omitempty"`
+	Request *Request        `json:"request,omitempty"`
 	Cwd     string          `json:"cwd,omitempty"`
 	Stdin   string          `json:"stdin,omitempty"`
 }
@@ -278,8 +282,31 @@ type Request struct {
 	QueryFrom string    `json:"queryFrom,omitempty"` // context path to a map of params (<query from=>)
 	Query     []Param   `json:"query,omitempty"`     // explicit <param> children
 	Headers   []Header  `json:"headers,omitempty"`
-	Body      string    `json:"body,omitempty"`     // template; empty means no body
-	Response  *Response `json:"response,omitempty"` // nil means stream the raw body
+	Body      string    `json:"body,omitempty"`      // template; empty means no body
+	Response  *Response `json:"response,omitempty"`  // nil means stream the raw body
+	Transport string    `json:"transport,omitempty"` // registry name; empty means the config default
+}
+
+// Transport is a user-supplied program that performs requests in place of the
+// built-in net/http client — for APIs whose authentication or wire format is
+// easier to delegate to an existing tool than to reproduce here.
+//
+// The program receives the fully-rendered request at `.request` (method, url,
+// body, headers, header_lines) on top of the leaf's own data context, so its
+// argv is written with the same placeholders as any other command. Its stdout
+// is the response body and feeds `<response jq=>` exactly like a built-in
+// response; a non-zero exit fails the request.
+//
+// Stdin is the request body unless the transport declares its own `<stdin>`.
+// Either way it is explicit: a transport never inherits the user's terminal,
+// so a program that reads stdin cannot hang waiting for one.
+type Transport struct {
+	Name     string `json:"name"`
+	Command  *Cmd   `json:"command,omitempty"`
+	Cwd      string `json:"cwd,omitempty"`
+	Stdin    string `json:"stdin,omitempty"`
+	StdinSet bool   `json:"stdinSet,omitempty"` // distinguishes <stdin/> (send nothing) from no <stdin> (send the body)
+	Default  bool   `json:"default,omitempty"`
 }
 
 // Defined reports whether the request has anything to execute (a URL).
@@ -405,31 +432,74 @@ func validate(cfg *Config) error {
 			return err
 		}
 	}
+	if err := validateTransports(cfg.Transports); err != nil {
+		return err
+	}
 	if cfg.Command.Defined() && cfg.Request.Defined() {
 		return fmt.Errorf("top-level: a <run> is either a command or a request, not both")
 	}
-	if err := validateRequest(cfg.Request, "request"); err != nil {
+	if err := validateRequest(cfg.Request, "request", cfg.Transports); err != nil {
 		return err
 	}
 	seen := map[string]bool{}
 	hasRootRun := cfg.Command.Defined() || cfg.Request.Defined()
 	for i, c := range cfg.Commands {
 		where := fmt.Sprintf("commands[%d]", i)
-		if err := validateCommand(&c, where, seen, hasRootRun, cfg.Formats); err != nil {
+		if err := validateCommand(&c, where, seen, hasRootRun, cfg.Formats, cfg.Transports); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+// validateTransports checks the transport registry: every entry needs a
+// command to run, and at most one may claim the default.
+func validateTransports(transports map[string]*Transport) error {
+	names := make([]string, 0, len(transports))
+	for name := range transports {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	defaulted := ""
+	for _, name := range names {
+		where := fmt.Sprintf("transports[%q]", name)
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("transports: empty name")
+		}
+		if name == builtinTransportName {
+			return fmt.Errorf("%s: %q is reserved for the built-in HTTP client", where, builtinTransportName)
+		}
+		t := transports[name]
+		if t == nil || !t.Command.Defined() {
+			return fmt.Errorf("%s: <transport> requires a <run> command", where)
+		}
+		if !t.Default {
+			continue
+		}
+		if defaulted != "" {
+			return fmt.Errorf("%s: transport %q is already the default; only one may be", where, defaulted)
+		}
+		defaulted = name
+	}
+	return nil
+}
+
 // validateRequest checks a request's invariants. A nil request is fine
 // (no request configured at this node).
-func validateRequest(r *Request, where string) error {
+func validateRequest(r *Request, where string, transports map[string]*Transport) error {
 	if r == nil {
 		return nil
 	}
 	if strings.TrimSpace(r.URL) == "" {
 		return fmt.Errorf("%s: <request> requires a <url>", where)
+	}
+	name := strings.TrimSpace(r.Transport)
+	if name == "" || name == builtinTransportName {
+		return nil
+	}
+	if _, ok := transports[name]; !ok {
+		return fmt.Errorf("%s: references unknown transport %q", where, name)
 	}
 	return nil
 }
@@ -465,7 +535,7 @@ func validateFormat(f *Format, where string) error {
 // an ancestor has a command template available (we need at least one to reach
 // a leaf). formats is the top-level format registry; named refs resolve into
 // it.
-func validateCommand(c *Command, where string, siblings map[string]bool, inheritedRun bool, formats map[string]*Format) error {
+func validateCommand(c *Command, where string, siblings map[string]bool, inheritedRun bool, formats map[string]*Format, transports map[string]*Transport) error {
 	if strings.TrimSpace(c.Name) == "" {
 		return fmt.Errorf("%s: \"name\" is required", where)
 	}
@@ -553,7 +623,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	if c.Command.Defined() && c.Request.Defined() {
 		return fmt.Errorf("%s: a <run> is either a command or a request, not both", where)
 	}
-	if err := validateRequest(c.Request, where+".request"); err != nil {
+	if err := validateRequest(c.Request, where+".request", transports); err != nil {
 		return err
 	}
 	if c.Fields != nil && c.Format.Defined() {
@@ -592,6 +662,12 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 			return fmt.Errorf("%s: duplicate step name %q", sw, s.Name)
 		}
 		stepNames[s.Name] = true
+		if s.Command.Defined() && s.Request.Defined() {
+			return fmt.Errorf("%s: a <run> is either a command or a request, not both", sw)
+		}
+		if err := validateRequest(s.Request, sw+".request", transports); err != nil {
+			return err
+		}
 	}
 
 	if c.Format.Defined() {
@@ -610,7 +686,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	childSeen := map[string]bool{}
 	for i, child := range c.Commands {
 		cw := fmt.Sprintf("%s.commands[%d]", where, i)
-		if err := validateCommand(&child, cw, childSeen, haveRun, formats); err != nil {
+		if err := validateCommand(&child, cw, childSeen, haveRun, formats, transports); err != nil {
 			return err
 		}
 	}

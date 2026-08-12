@@ -77,6 +77,12 @@ func newRoot(cfg *Config) *cobra.Command {
 		}
 	}
 
+	// Installed here rather than at load time so every path that turns a
+	// config into runnable commands publishes the registry — a request whose
+	// transport went missing would otherwise fall back to the built-in client
+	// without saying so.
+	installTransports(cfg)
+
 	root := &cobra.Command{
 		Use:          name,
 		Short:        short,

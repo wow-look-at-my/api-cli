@@ -48,7 +48,9 @@ Do not add new third-party deps without a clear reason.
 | `xmlsource.go`                  | `parseConfigXML` + config builders (`buildConfig`, `buildCommandNode`/`addCommandChild`, `buildRun`, `buildRequest`, `buildFields`, `buildEntry`, ...). `<entry>` is converted to a `json.RawMessage`. |
 | `build.go`                      | Builds the `cobra.Command` tree. Threads inheritance for run (`*Cmd`/`*Request`), `cwd`/`stdin`/`confirm`/`format`. `runLeaf`, `passthroughParse`, `renderVars` (fixpoint — vars may reference other vars). |
 | `exec.go`                       | Shell/argv execution: `doExec` (streaming), `captureExec` (steps), `captureExecCapped` (format path, 32 MiB cap), `parseResult`, `cappedTee`. |
-| `request.go`                    | First-class HTTP: `runRequest` (net/http) builds URL/query/headers/body from templates; `applyJQ` (embedded gojq) for `<response jq=>`. `httpClient` is a package var (tests swap it for httptest). |
+| `request.go`                    | First-class HTTP: `prepareRequest` renders URL/query/headers/body into a `preparedRequest`; `runRequest` sends it via `doHTTP` (net/http) or a transport, then `applyJQ` (embedded gojq) for `<response jq=>`. `httpClient` is a package var (tests swap it for httptest). |
+| `transport.go`                  | `<transports>`: parsing (`buildTransports`), the package-level registry (`installTransports`, published by `newRoot`/`buildMCPServer`), selection (`resolveTransport`: `transport=` > registry default > built-in; no runtime override by design), and `runViaTransport`. `preparedRequest.context` exposes `.request` to the program's argv. |
+| `steps.go`                      | `runSteps`: the one step loop, shared by the CLI and MCP paths (they take a `stepCapture` and an errOut). A step runs its own command/request or inherits the leaf's. |
 | `fields.go`                     | The `<fields>` auto-formatter: `renderFields` represents one declaration as table / list / lines / raw / json / markdown / csv / timeline, with `show_in` gating, `@key`/`@value` map walking, and priority-based column dropping. Reuses `align.go`. |
 | `timeline.go`                    | The `timeline` sink (`--as=timeline`): maps each record to an `ascii-timeline` event by field name (`label`/`date`/`start`/`end`/`description`/`color`), then renders via the `timeline` library. Color/width come from the format context (`.tty`/`.width`). |
 | `format.go`                     | Execution + presentation dispatch: `execLeaf` picks command-vs-request execution and fields-vs-legacy-format-vs-raw output. `captureRun`, `streamRequest`, `runFieldsFormatted`, `runFormatted`, `resolveFormat`, `selectView`. |
@@ -57,7 +59,7 @@ Do not add new third-party deps without a clear reason.
 | `mcp.go` / `mcp_exec.go`        | MCP server: one tool per leaf. Threads run (`*Cmd`/`*Request`) + format inheritance; `mcpExecLeaf` runs the leaf and applies `<fields>` (like `--format=always`: `.tty` true, width 80) or a legacy format. |
 | `cors.go` / `debug.go` / `docs.go` | CORS middleware for MCP HTTP/SSE; verbose/debug logging; the `docs` subcommand (embeds `README.md`, `api.schema.xsd`, `api.example.xml`). |
 | `api.schema.xsd`                | XSD reference for the XML grammar (editor aid + `docs schema`). NOT enforced at runtime; the loader is authoritative. |
-| `api.example.xml`              | Reference config (jsonplaceholder); loaded by `TestExampleConfigsLoad`. |
+| `api.example.xml`              | Reference config (jsonplaceholder); loaded by `TestExampleConfigsLoad`. Exercises the grammar end to end, including a non-default `curl` transport and a request-step chain (`posts by-user`). |
 | `samples/github/github.xml`     | Read-only GitHub REST API wrapper in XML: first-class requests, jq noise-trimming, fields views. Used by the Docker image and CI demo; loaded by `TestGithubSampleLoads`. |
 | `samples/github/Dockerfile.github` | Alpine image: ships `api-cli` + `github.xml`; ENTRYPOINT runs `--mcp`. No curl/jq (requests + gojq built in). |
 | `*_test.go`                     | Unit + integration tests. `integration_test.go` has `execCmd`/`execCmdFull`; `request_test.go`/`request_integration_test.go` use httptest via `swapHTTPClient`. |
@@ -75,7 +77,8 @@ interleave text with **placeholders** that compile to Go templates:
 
 `<run>` is the executable (inherited): a `<request>`, an `<argv>` list, or shell
 text. `<entry>` (path/query/arbitrary) becomes `.entry`. `<fields>` declares
-output shape; `<vars>/<var>` define `.var` (fixpoint resolution).
+output shape; `<vars>/<var>` define `.var` (fixpoint resolution). Top-level
+`<transports>` names programs that perform requests instead of net/http.
 
 ## Key design rules
 
@@ -87,7 +90,12 @@ output shape; `<vars>/<var>` define `.var` (fixpoint resolution).
 2. **Placeholders compile to templates.** The node language is sugar over
    `text/template`; everything funnels through `renderString`.
 3. **Execution is command OR request.** `execLeaf` streams raw (`doExec` /
-   `streamRequest`) unless a formatter applies. Steps are command-only.
+   `streamRequest`) unless a formatter applies. Steps take the same fork, and a
+   step declaring neither inherits the leaf's effective run.
+   3b. **A request travels over net/http or a `<transport>` program**, chosen in
+   `resolveTransport`. Both consume the same `preparedRequest`, and the response
+   path (`<response jq=>`, `<fields>`) is identical either way — so a transport
+   is never a second code path to keep in sync.
 4. **Formatting precedence.** `<fields>` (always, unless the user opts out) >
    legacy `<format>` (author `when` AND user verdict) > raw. `--no-format` /
    `--format=raw` / `NO_FORMAT` veto. `--as=<sink>` forces a fields

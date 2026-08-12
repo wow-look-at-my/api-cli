@@ -64,6 +64,32 @@
       <xs:element name="response" type="response" minOccurs="0"/>
     </xs:sequence>
     <xs:attribute name="method" type="xs:string"/>
+    <!-- Name of a <transport>; "http" selects the built-in client, opting this
+         request out of a default transport. Omit to use the registry's
+         default, if any. -->
+    <xs:attribute name="transport" type="xs:string"/>
+  </xs:complexType>
+
+  <!-- ===== Transports: programs that perform requests ===== -->
+  <xs:complexType name="transports">
+    <xs:sequence>
+      <xs:element name="transport" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:sequence>
+            <!-- Must be a command (argv or shell), never a <request>. Sees the
+                 rendered request at .request.{method,url,body,headers,
+                 header_lines}; its stdout is the response body. -->
+            <xs:element name="run" type="run"/>
+            <xs:element name="cwd" type="content" minOccurs="0"/>
+            <!-- Omit to send the request body on stdin; declare it (even
+                 empty) to send something else. -->
+            <xs:element name="stdin" type="content" minOccurs="0"/>
+          </xs:sequence>
+          <xs:attribute name="name" type="xs:string" use="required"/>
+          <xs:attribute name="default" type="xs:boolean"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
   </xs:complexType>
 
   <xs:complexType name="header" mixed="true">
@@ -184,6 +210,8 @@
       <xs:element name="step" maxOccurs="unbounded">
         <xs:complexType>
           <xs:sequence>
+            <!-- A command or a request, same as a leaf's <run>. Omit it to
+                 reuse the leaf's effective run with this step's <entry>. -->
             <xs:element name="run" type="run" minOccurs="0"/>
             <xs:element name="entry" type="entry" minOccurs="0"/>
             <xs:element name="cwd" type="content" minOccurs="0"/>
@@ -241,6 +269,7 @@
       <xs:sequence>
         <xs:element name="description" type="xs:string" minOccurs="0"/>
         <xs:element name="vars" type="vars" minOccurs="0"/>
+        <xs:element name="transports" type="transports" minOccurs="0"/>
         <xs:element name="run" type="run" minOccurs="0"/>
         <xs:element name="cwd" type="content" minOccurs="0"/>
         <xs:element name="stdin" type="content" minOccurs="0"/>
