@@ -446,6 +446,7 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		debugMode = true
 		verboseMode = true
 	}
+	transportOverride, _ = c.Root().PersistentFlags().GetString("transport")
 
 	var data map[string]any
 
@@ -552,68 +553,15 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 	resultMap := map[string]any{}
 	data["result"] = resultMap
 
-	executions := 0
-
-	for _, step := range node.Steps {
-		if step.When != "" {
-			whenOut, err := renderString(step.When, data)
-			if err != nil {
-				return fmt.Errorf("step %q: render when: %w", step.Name, err)
-			}
-			logVerbose("step %q: when %q => %q (truthy=%v)", step.Name, step.When, whenOut, isTruthy(whenOut))
-			if !isTruthy(whenOut) {
-				logVerbose("step %q: skipped", step.Name)
-				continue
-			}
-		}
-
-		stepCmd := cmdTmpl
-		if step.Command.Defined() {
-			stepCmd = step.Command
-		}
-		if !stepCmd.Defined() {
-			return fmt.Errorf("step %q: no command available", step.Name)
-		}
-
-		stepEntry, err := renderEntry(step.Entry, data)
-		if err != nil {
-			return fmt.Errorf("step %q: render entry: %w", step.Name, err)
-		}
-		if stepEntry == nil {
-			stepEntry = map[string]any{}
-		}
-		data["entry"] = stepEntry
-		logDebug("step %q: entry: %s", step.Name, jsonCompact(stepEntry))
-
-		stepCwdTmpl := cwdTmpl
-		if step.Cwd != "" {
-			stepCwdTmpl = step.Cwd
-		}
-		stepCwd, err := renderCwd(stepCwdTmpl, data)
-		if err != nil {
-			return fmt.Errorf("step %q: render cwd: %w", step.Name, err)
-		}
-
-		stepStdinTmpl := stdinTmpl
-		if step.Stdin != "" {
-			stepStdinTmpl = step.Stdin
-		}
-		stepStdin, err := renderStdin(stepStdinTmpl, data)
-		if err != nil {
-			return fmt.Errorf("step %q: render stdin: %w", step.Name, err)
-		}
-
-		logVerbose("step %q: executing", step.Name)
-		out, code := captureExec(stepCmd, stepCwd, stepStdin, data)
-		executions++
-		logVerbose("step %q: exit code %d", step.Name, code)
-		logDebugBlock(fmt.Sprintf("step %q: stdout", step.Name), out)
-		if code != 0 {
-			exitCode = code
-			reportExecutions(c, executions)
-			return nil
-		}
-		resultMap[step.Name] = parseResult(out)
+	oc, err := runSteps(node.Steps, data, resultMap, cmdTmpl, request, cwdTmpl, stdinTmpl, captureExec, execStderr)
+	if err != nil {
+		return err
+	}
+	executions := oc.executions
+	if oc.code != 0 {
+		exitCode = oc.code
+		reportExecutions(c, executions)
+		return nil
 	}
 
 	entry, err := renderEntry(node.Entry, data)

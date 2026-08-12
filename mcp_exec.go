@@ -3,9 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"math"
-	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -55,57 +53,16 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 	resultMap := map[string]any{}
 	data["result"] = resultMap
 
-	for _, step := range leaf.node.Steps {
-		if step.When != "" {
-			whenOut, err := renderString(step.When, data)
-			if err != nil {
-				return fmt.Sprintf("step %q: render when: %v", step.Name, err), true
-			}
-			if !isTruthy(whenOut) {
-				continue
-			}
-		}
-		stepCmd := leaf.cmdTmpl
-		if step.Command.Defined() {
-			stepCmd = step.Command
-		}
-		if !stepCmd.Defined() {
-			return fmt.Sprintf("step %q: no command available", step.Name), true
-		}
-
-		stepEntry, err := renderEntry(step.Entry, data)
-		if err != nil {
-			return fmt.Sprintf("step %q: render entry: %v", step.Name, err), true
-		}
-		if stepEntry == nil {
-			stepEntry = map[string]any{}
-		}
-		data["entry"] = stepEntry
-
-		stepCwd := leaf.cwdTmpl
-		if step.Cwd != "" {
-			stepCwd = step.Cwd
-		}
-		renderedCwd, err := renderCwd(stepCwd, data)
-		if err != nil {
-			return fmt.Sprintf("step %q: render cwd: %v", step.Name, err), true
-		}
-
-		stepStdin := leaf.stdinTmpl
-		if step.Stdin != "" {
-			stepStdin = step.Stdin
-		}
-		renderedStdin, err := renderStdin(stepStdin, data)
-		if err != nil {
-			return fmt.Sprintf("step %q: render stdin: %v", step.Name, err), true
-		}
-
-		var errBuf bytes.Buffer
-		out, code := mcpCapture(stepCmd, renderedCwd, renderedStdin, data, &errBuf)
-		if code != 0 {
-			return mcpCombine(out, errBuf.String()), true
-		}
-		resultMap[step.Name] = parseResult(out)
+	var stepErrBuf bytes.Buffer
+	stepCap := func(c *Cmd, cwd, stdin string, d any) (string, int) {
+		return captureExecTo(c, cwd, stdin, d, &stepErrBuf)
+	}
+	oc, err := runSteps(leaf.node.Steps, data, resultMap, leaf.cmdTmpl, leaf.request, leaf.cwdTmpl, leaf.stdinTmpl, stepCap, &stepErrBuf)
+	if err != nil {
+		return "error: " + err.Error(), true
+	}
+	if oc.code != 0 {
+		return mcpCombine(oc.output, stepErrBuf.String()), true
 	}
 
 	entry, err := renderEntry(leaf.node.Entry, data)
@@ -132,7 +89,7 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 	if leaf.request.Defined() {
 		out, code = runRequest(leaf.request, data, &errBuf)
 	} else {
-		out, code = mcpCapture(leaf.cmdTmpl, leafCwd, leafStdin, data, &errBuf)
+		out, code = captureExecTo(leaf.cmdTmpl, leafCwd, leafStdin, data, &errBuf)
 	}
 	if code != 0 {
 		return mcpCombine(out, errBuf.String()), true
@@ -167,38 +124,6 @@ func mcpCombine(stdout, stderr string) string {
 	default:
 		return stderr
 	}
-}
-
-// mcpCapture runs a command capturing stdout; stderr goes to errBuf.
-// Child stdin is always explicit — never inherited from the process — because
-// in stdio MCP mode the process stdin is the protocol channel.
-func mcpCapture(c *Cmd, cwd, stdin string, data any, errBuf io.Writer) (string, int) {
-	if !c.Defined() {
-		fmt.Fprintln(errBuf, "error: command is empty")
-		return "", 1
-	}
-	cmd, err := buildExecCmd(c, data)
-	if err != nil {
-		fmt.Fprintln(errBuf, "error:", err)
-		return "", 1
-	}
-	cmd.Dir = cwd
-	if stdin != "" {
-		cmd.Stdin = strings.NewReader(stdin)
-	} else {
-		cmd.Stdin = strings.NewReader("")
-	}
-	var outBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = errBuf
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return outBuf.String(), exitErr.ExitCode()
-		}
-		fmt.Fprintln(errBuf, "error:", err)
-		return outBuf.String(), 127
-	}
-	return outBuf.String(), 0
 }
 
 // mcpGatherArgs converts the JSON-decoded arguments map to a typed arg map.

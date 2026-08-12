@@ -77,6 +77,12 @@ func newRoot(cfg *Config) *cobra.Command {
 		}
 	}
 
+	// Installed here rather than at load time so every path that turns a
+	// config into runnable commands publishes the registry — a request whose
+	// transport went missing would otherwise fall back to the built-in client
+	// without saying so.
+	installTransports(cfg)
+
 	root := &cobra.Command{
 		Use:          name,
 		Short:        short,
@@ -97,6 +103,7 @@ func newRoot(cfg *Config) *cobra.Command {
 	root.PersistentFlags().String("format", "auto", "Output formatting mode: raw|auto|always.")
 	root.PersistentFlags().String("view", "", "Select a named view from the active format (overrides selectors).")
 	root.PersistentFlags().String("as", "", "Force a <fields> representation: table|list|lines|json|markdown|csv|timeline (default: auto).")
+	root.PersistentFlags().String("transport", "", `Override the <transport> performing requests; "http" forces the built-in client.`)
 
 	if cfg != nil {
 		for _, c := range cfg.Commands {

@@ -72,6 +72,12 @@ func buildConfig(root *xnode) (*Config, error) {
 				return nil, err
 			}
 			cfg.Formats = f
+		case "transports":
+			t, err := buildTransports(child)
+			if err != nil {
+				return nil, err
+			}
+			cfg.Transports = t
 		case "command":
 			c, err := buildCommandNode(child)
 			if err != nil {
@@ -152,10 +158,13 @@ func buildRun(n *xnode) (*Cmd, *Request, error) {
 }
 
 func buildRequest(n *xnode) (*Request, error) {
-	if err := checkAttrs(n, "method"); err != nil {
+	if err := checkAttrs(n, "method", "transport"); err != nil {
 		return nil, err
 	}
-	req := &Request{Method: strings.TrimSpace(n.attr("method"))}
+	req := &Request{
+		Method:    strings.TrimSpace(n.attr("method")),
+		Transport: strings.TrimSpace(n.attr("transport")),
+	}
 	if req.Method == "" {
 		req.Method = "GET"
 	}
@@ -565,10 +574,7 @@ func buildStep(n *xnode) (Step, error) {
 			if err != nil {
 				return Step{}, err
 			}
-			if req != nil {
-				return Step{}, fmt.Errorf("<step %q>: <request> is not supported in steps; use a command", s.Name)
-			}
-			s.Command = cmd
+			s.Command, s.Request = cmd, req
 		case "entry":
 			raw, err := buildEntry(child)
 			if err != nil {
