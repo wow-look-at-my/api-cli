@@ -30,6 +30,9 @@ type Downloads struct {
 	Retries     int    `json:"retries,omitempty"`
 	Dir         string `json:"dir,omitempty"`
 	LogLines    int    `json:"logLines,omitempty"`
+	// RetriesSet distinguishes retries="0" -- a config that wants a failure
+	// reported immediately -- from an absent attribute, which takes the default.
+	RetriesSet bool `json:"retriesSet,omitempty"`
 }
 
 // Download is one hand-off on a leaf: the URL a step worked out, where to put
@@ -97,7 +100,7 @@ func resolveDownloadSettings(c *cobra.Command) downloadSettings {
 		if d.Concurrency > 0 {
 			s.Concurrency = d.Concurrency
 		}
-		if d.Retries > 0 {
+		if d.RetriesSet || d.Retries > 0 {
 			s.Retries = d.Retries
 		}
 		if d.Dir != "" {
@@ -155,6 +158,7 @@ func buildDownloads(n *xnode) (*Downloads, error) {
 		}
 		*f.dst = v
 	}
+	d.RetriesSet = n.hasAttr("retries")
 	return d, nil
 }
 

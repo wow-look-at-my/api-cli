@@ -171,7 +171,8 @@ func TestDownloadTransport_FailingProgramFailsTheDownload(t *testing.T) {
 		Transports: map[string]*Transport{
 			"corp": shellTransport("corp", `echo "corp-http: no such object" >&2; exit 22`, true),
 		},
-		Downloads: &Downloads{Retries: 0},
+		// retries="0" means report the failure now, and is distinct from unset.
+		Downloads: &Downloads{Retries: 0, RetriesSet: true},
 		Commands: []Command{{
 			Name:      "grab",
 			Downloads: []Download{{URL: "https://internal.example/gone", To: "f.bin"}},
