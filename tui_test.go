@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -128,6 +129,30 @@ func TestTUI_StopIsIdempotentAndRestoresTheCursor(t *testing.T) {
 	out := buf.String()
 	assert.Contains(t, out, ansiHideCur)
 	assert.Equal(t, 1, strings.Count(out, ansiShowCur), "a second Stop must not repaint")
+}
+
+func TestTUI_InterruptRestoresTheTerminal(t *testing.T) {
+	var buf bytes.Buffer
+	tu := newTUI(&buf, 60, 24, 3, staticItems())
+
+	exited := make(chan int, 1)
+	prev := tuiExit
+	tuiExit = func(code int) { exited <- code }
+	t.Cleanup(func() { tuiExit = prev })
+
+	tu.Start()
+	t.Cleanup(tu.Stop)
+	require.NoError(t, syscall.Kill(syscall.Getpid(), syscall.SIGINT))
+
+	select {
+	case code := <-exited:
+		assert.Equal(t, interruptExitCode, code)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the interrupt never reached the handler")
+	}
+	out := buf.String()
+	assert.Contains(t, out, ansiShowCur, "a cut-short run must not leave the cursor hidden")
+	assert.Contains(t, out, "left as .part files")
 }
 
 func TestProgressLine_DropsColumnsAsTheTerminalNarrows(t *testing.T) {

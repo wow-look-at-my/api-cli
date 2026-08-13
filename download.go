@@ -245,6 +245,7 @@ func validateDownloads(c *Command, where string) error {
 // needs the config again.
 func planDownloads(dls []Download, data map[string]any, dir string) ([]downloadSpec, error) {
 	var out []downloadSpec
+	claimed := map[string]string{}
 	for i := range dls {
 		d := &dls[i]
 		if d.When != "" {
@@ -266,7 +267,19 @@ func planDownloads(dls []Download, data map[string]any, dir string) ([]downloadS
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, specs...)
+			for _, spec := range specs {
+				// Two records rendering one file name is a <to> that forgot to
+				// vary — caught here rather than after N transfers have
+				// overwritten each other into one file.
+				if !spec.DestIsDir {
+					if prev, dup := claimed[spec.Dest]; dup {
+						return nil, fmt.Errorf("download[%d]: %s and %s would both write %s; give <to> something that varies per record",
+							i, prev, spec.URL, spec.Dest)
+					}
+					claimed[spec.Dest] = spec.URL
+				}
+				out = append(out, spec)
+			}
 		}
 	}
 	return out, nil

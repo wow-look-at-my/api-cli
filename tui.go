@@ -3,8 +3,11 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -72,6 +75,7 @@ func newTUI(out io.Writer, width, height, logLines int, snapshot func() []*downl
 // frame consistent while workers mutate progress underneath it.
 func (t *tui) Start() {
 	fmt.Fprint(t.out, ansiHideCur)
+	t.watchInterrupt()
 	go func() {
 		defer close(t.done)
 		ticker := time.NewTicker(frameInterval)
@@ -83,6 +87,33 @@ func (t *tui) Start() {
 			case <-ticker.C:
 				t.paint()
 			}
+		}
+	}()
+}
+
+// tuiExit ends the process after an interrupt. A var so the signal path is
+// testable without taking the test binary down with it.
+var tuiExit = os.Exit
+
+// interruptExitCode is the conventional 128+SIGINT status for a run the user
+// cut short.
+const interruptExitCode = 130
+
+// watchInterrupt puts the terminal back if the run is cut short. Without it a
+// Ctrl-C leaves the cursor hidden, and the user's next shell prompt is invisible
+// until they run `reset`.
+func (t *tui) watchInterrupt() {
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		select {
+		case <-t.stop:
+			signal.Stop(sig)
+		case <-sig:
+			signal.Stop(sig)
+			t.Stop()
+			fmt.Fprintln(t.out, "interrupted; partial transfers left as .part files")
+			tuiExit(interruptExitCode)
 		}
 	}()
 }

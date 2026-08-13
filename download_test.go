@@ -200,6 +200,20 @@ func TestPlanDownloads_MultiLineURLBecomesManyDownloads(t *testing.T) {
 	}
 }
 
+func TestPlanDownloads_ColLidingDestinationsAreAnError(t *testing.T) {
+	// The <to> here forgot to vary, so every record would land on one file.
+	_, err := planDownloads([]Download{{
+		Over: "result.list.assets",
+		URL:  "{{.url}}",
+		To:   "asset.zip",
+	}}, planData(), "dl")
+	assert.ErrorContains(t, err, "would both write")
+
+	// A shared directory is not a collision: the server names each file.
+	_, err = planDownloads([]Download{{Over: "result.list.assets", URL: "{{.url}}", To: "into/"}}, planData(), "dl")
+	assert.NoError(t, err)
+}
+
 func TestPlanDownloads_EmptyURLIsAnError(t *testing.T) {
 	_, err := planDownloads([]Download{{URL: "{{.var.blank}}"}}, planData(), ".")
 	assert.ErrorContains(t, err, "rendered empty")
