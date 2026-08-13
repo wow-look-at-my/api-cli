@@ -549,6 +549,15 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		}
 	}
 
+	// A <download> leaf takes over the output channels before its steps run:
+	// the steps are what work the URL out, so their output belongs in the same
+	// log region as the transfers they feed.
+	var session *downloadSession
+	if len(node.Downloads) > 0 {
+		session = startDownloadSession(c)
+		defer session.close()
+	}
+
 	resultMap := map[string]any{}
 	data["result"] = resultMap
 
@@ -572,6 +581,16 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 	}
 	data["entry"] = entry
 	logDebug("leaf %q: entry: %s", node.Name, jsonCompact(entry))
+
+	// The hand-off is the leaf's action: a <download> leaf never runs a command
+	// of its own, so an ancestor's <run> stays where it is instead of firing an
+	// unrelated request on the way to the queue.
+	if session != nil {
+		logVerbose("leaf %q: handing %d download declaration(s) to the queue", node.Name, len(node.Downloads))
+		exitCode = session.run(node.Downloads, data)
+		reportExecutions(c, executions+1)
+		return nil
+	}
 
 	if !cmdTmpl.Defined() && !request.Defined() {
 		return fmt.Errorf("no command or request available to run")

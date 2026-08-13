@@ -74,6 +74,12 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 	}
 	data["entry"] = entry
 
+	// Same rule as the CLI: a <download> leaf's action is the hand-off, so no
+	// command runs here either.
+	if len(leaf.node.Downloads) > 0 {
+		return mcpRunDownloads(leaf.node.Downloads, data)
+	}
+
 	leafCwd, err := renderCwd(leaf.cwdTmpl, data)
 	if err != nil {
 		return fmt.Sprintf("render cwd: %v", err), true

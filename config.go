@@ -25,6 +25,7 @@ type Config struct {
 	Stdin       string                `json:"stdin,omitempty"`
 	Formats     map[string]*Format    `json:"formats,omitempty"`
 	Transports  map[string]*Transport `json:"transports,omitempty"`
+	Downloads   *Downloads            `json:"downloads,omitempty"`
 	Commands    []Command             `json:"commands,omitempty"`
 }
 
@@ -71,6 +72,7 @@ type Command struct {
 	Confirm       string          `json:"confirm,omitempty"`
 	Format        *FormatRef      `json:"format,omitempty"`
 	Fields        *Fields         `json:"fields,omitempty"`
+	Downloads     []Download      `json:"downloads,omitempty"`
 	Commands      []Command       `json:"commands,omitempty"`
 }
 
@@ -435,6 +437,9 @@ func validate(cfg *Config) error {
 	if err := validateTransports(cfg.Transports); err != nil {
 		return err
 	}
+	if err := validateDownloadSettings(cfg.Downloads); err != nil {
+		return err
+	}
 	if cfg.Command.Defined() && cfg.Request.Defined() {
 		return fmt.Errorf("top-level: a <run> is either a command or a request, not both")
 	}
@@ -633,12 +638,17 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		return fmt.Errorf("%s: <fields> is only allowed on leaves (nodes with no subcommands)", where)
 	}
 
+	if err := validateDownloads(c, where); err != nil {
+		return err
+	}
+
 	haveRun := inheritedRun || c.Command.Defined() || c.Request.Defined()
 
-	// Leaf: must have something to run available.
+	// Leaf: must have something to do. A <download> leaf is that something —
+	// the hand-off is the action, so it needs no run of its own.
 	if len(c.Commands) == 0 {
-		if !haveRun {
-			return fmt.Errorf("%s: leaf has no command/request and no ancestor defines one", where)
+		if !haveRun && len(c.Downloads) == 0 {
+			return fmt.Errorf("%s: leaf has no command/request/download and no ancestor defines one", where)
 		}
 	}
 

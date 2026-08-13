@@ -44,6 +44,11 @@ func execCmdFull(t *testing.T, cfg *Config, argv ...string) (int, string, string
 	// test's requests.
 	prevTransports, prevDefault := transports, defaultTransport
 	t.Cleanup(func() { transports, defaultTransport = prevTransports, prevDefault })
+	// Same for the <downloads> settings newRoot publishes, and for the shared
+	// queue: a queue built for one test's concurrency must not serve the next.
+	prevDownloads := downloadDefaults
+	resetSharedQueue()
+	t.Cleanup(func() { downloadDefaults = prevDownloads; resetSharedQueue() })
 
 	root := newRoot(cfg)
 	root.SetOut(io.Discard) // suppress cobra's own output in tests
