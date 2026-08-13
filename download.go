@@ -30,6 +30,9 @@ type Downloads struct {
 	Retries     int    `json:"retries,omitempty"`
 	Dir         string `json:"dir,omitempty"`
 	LogLines    int    `json:"logLines,omitempty"`
+	// RetriesSet distinguishes retries="0" -- a config that wants a failure
+	// reported immediately -- from an absent attribute, which takes the default.
+	RetriesSet bool `json:"retriesSet,omitempty"`
 }
 
 // Download is one hand-off on a leaf: the URL a step worked out, where to put
@@ -41,14 +44,15 @@ type Downloads struct {
 // keys are promoted to the top level (like a <field expr=>) and the record
 // itself is available as `.item`.
 type Download struct {
-	Over     string   `json:"over,omitempty"`
-	When     string   `json:"when,omitempty"`
-	URL      string   `json:"url"`
-	To       string   `json:"to,omitempty"`
-	Headers  []Header `json:"headers,omitempty"`
-	Cookies  []Header `json:"cookies,omitempty"`
-	Hash     string   `json:"hash,omitempty"`     // template for the expected digest
-	HashAlgo string   `json:"hashAlgo,omitempty"` // md5 | sha1 | sha256 (default) | sha512
+	Over      string   `json:"over,omitempty"`
+	When      string   `json:"when,omitempty"`
+	URL       string   `json:"url"`
+	To        string   `json:"to,omitempty"`
+	Headers   []Header `json:"headers,omitempty"`
+	Cookies   []Header `json:"cookies,omitempty"`
+	Hash      string   `json:"hash,omitempty"`      // template for the expected digest
+	HashAlgo  string   `json:"hashAlgo,omitempty"`  // md5 | sha1 | sha256 (default) | sha512
+	Transport string   `json:"transport,omitempty"` // registry name; empty means the config default
 }
 
 // hashAlgos maps a <hash algo=> to the length of its digest in hex characters.
@@ -96,7 +100,7 @@ func resolveDownloadSettings(c *cobra.Command) downloadSettings {
 		if d.Concurrency > 0 {
 			s.Concurrency = d.Concurrency
 		}
-		if d.Retries > 0 {
+		if d.RetriesSet || d.Retries > 0 {
 			s.Retries = d.Retries
 		}
 		if d.Dir != "" {
@@ -154,15 +158,20 @@ func buildDownloads(n *xnode) (*Downloads, error) {
 		}
 		*f.dst = v
 	}
+	d.RetriesSet = n.hasAttr("retries")
 	return d, nil
 }
 
 // buildDownload parses one <download> hand-off on a leaf.
 func buildDownload(n *xnode) (Download, error) {
-	if err := checkAttrs(n, "over", "when"); err != nil {
+	if err := checkAttrs(n, "over", "when", "transport"); err != nil {
 		return Download{}, err
 	}
-	d := Download{Over: strings.TrimSpace(n.attr("over")), When: n.attr("when")}
+	d := Download{
+		Over:      strings.TrimSpace(n.attr("over")),
+		When:      n.attr("when"),
+		Transport: strings.TrimSpace(n.attr("transport")),
+	}
 	for _, child := range n.children() {
 		switch child.name {
 		case "url":
@@ -253,7 +262,7 @@ func validateDownloadSettings(d *Downloads) error {
 // validateDownloads checks a command's <download> declarations: they are the
 // leaf's action, so they cannot sit on a group node, and their output is file
 // paths rather than records for a formatter to shape.
-func validateDownloads(c *Command, where string) error {
+func validateDownloads(c *Command, where string, transports map[string]*Transport) error {
 	if len(c.Downloads) == 0 {
 		return nil
 	}
@@ -272,6 +281,13 @@ func validateDownloads(c *Command, where string) error {
 			if _, ok := hashAlgos[d.HashAlgo]; !ok {
 				return fmt.Errorf("%s.downloads[%d]: <hash algo=%q> must be one of %s", where, i, d.HashAlgo, knownHashAlgos())
 			}
+		}
+		name := strings.TrimSpace(d.Transport)
+		if name == "" || name == builtinTransportName {
+			continue
+		}
+		if _, ok := transports[name]; !ok {
+			return fmt.Errorf("%s.downloads[%d]: references unknown transport %q", where, i, name)
 		}
 	}
 	return nil
@@ -421,9 +437,15 @@ func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSp
 	out := make([]downloadSpec, 0, len(urls))
 	for _, u := range urls {
 		dest, isDir := downloadDest(dir, to, len(urls) > 1)
+		// Resolved per URL: the program's argv sees .request.url, so each file
+		// gets its own rendered command.
+		transport, err := prepareDownloadTransport(d.Transport, u, headers, ctx)
+		if err != nil {
+			return nil, fmt.Errorf("download[%d]: %w", idx, err)
+		}
 		out = append(out, downloadSpec{
 			URL: u, Dest: dest, DestIsDir: isDir, Headers: headers,
-			Hash: digest, HashAlgo: d.HashAlgo,
+			Hash: digest, HashAlgo: d.HashAlgo, Transport: transport,
 		})
 	}
 	return out, nil

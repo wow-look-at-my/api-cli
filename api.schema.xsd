@@ -97,6 +97,7 @@
        no-tui flags override them per invocation. -->
   <xs:complexType name="downloads">
     <xs:attribute name="concurrency" type="xs:positiveInteger"/>
+    <!-- 0 is meaningful: report a failure immediately rather than retrying. -->
     <xs:attribute name="retries" type="xs:nonNegativeInteger"/>
     <xs:attribute name="dir" type="xs:string"/>
     <xs:attribute name="log_lines" type="xs:nonNegativeInteger"/>
@@ -126,6 +127,10 @@
     </xs:sequence>
     <xs:attribute name="over" type="xs:string"/>
     <xs:attribute name="when" type="xs:string"/>
+    <!-- A <transport> name, as on <request>: the program fetches the file and
+         its stdout is streamed to disk. Empty takes the registry default;
+         "http" opts back to the built-in client. -->
+    <xs:attribute name="transport" type="xs:string"/>
   </xs:complexType>
 
   <xs:complexType name="hash" mixed="true">

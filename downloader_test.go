@@ -36,7 +36,7 @@ func testQueue(t *testing.T, srv *httptest.Server, concurrency, retries int) *do
 // collect runs specs through a fresh batch and returns the finished items.
 func collect(t *testing.T, q *downloadQueue, specs ...downloadSpec) []*downloadItem {
 	t.Helper()
-	batch := q.batch(nil)
+	batch := q.batch(nil, nil)
 	for _, s := range specs {
 		batch.add(s)
 	}
@@ -290,7 +290,7 @@ func TestSharedQueue_IsReusedAcrossBatches(t *testing.T) {
 
 	dir := t.TempDir()
 	for i := 0; i < 2; i++ {
-		batch := first.batch(nil)
+		batch := first.batch(nil, nil)
 		batch.add(downloadSpec{URL: srv.URL + "/a", Dest: filepath.Join(dir, fmt.Sprintf("a%d", i))})
 		items := batch.wait()
 		require.Len(t, items, 1, "a batch only ever sees its own items")

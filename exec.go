@@ -261,13 +261,28 @@ func normalizeNumbers(v any) any {
 }
 
 func buildExecCmd(c *Cmd, data any) (*exec.Cmd, error) {
+	argv, err := resolveArgv(c, data)
+	if err != nil {
+		return nil, err
+	}
+	return exec.Command(argv[0], argv[1:]...), nil
+}
+
+// resolveArgv renders a command into the exact argv that will run it: the shell
+// form becomes ["/bin/sh", "-c", <rendered>], the argv form its rendered
+// elements.
+//
+// Split out of buildExecCmd for the caller that cannot execute where it
+// renders: a <download> resolves its transport while the leaf's data context
+// still exists, and the queue runs the result later, on a worker, with no
+// context in reach. Rendering stays in one place either way.
+func resolveArgv(c *Cmd, data any) ([]string, error) {
 	if c.Shell {
 		rendered, err := renderString(c.Template, data)
 		if err != nil {
 			return nil, fmt.Errorf("render command: %w", err)
 		}
-		rendered = expandSpreadForShell(rendered)
-		return exec.Command("/bin/sh", "-c", rendered), nil
+		return []string{"/bin/sh", "-c", expandSpreadForShell(rendered)}, nil
 	}
 	if len(c.Argv) == 0 {
 		return nil, fmt.Errorf("argv command is empty")
@@ -292,7 +307,7 @@ func buildExecCmd(c *Cmd, data any) (*exec.Cmd, error) {
 	if len(argv) == 0 {
 		return nil, fmt.Errorf("argv command rendered to no arguments")
 	}
-	return exec.Command(argv[0], argv[1:]...), nil
+	return argv, nil
 }
 
 // expandSpreadForShell replaces spread sentinel regions in a rendered shell

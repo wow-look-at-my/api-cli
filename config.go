@@ -638,7 +638,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		return fmt.Errorf("%s: <fields> is only allowed on leaves (nodes with no subcommands)", where)
 	}
 
-	if err := validateDownloads(c, where); err != nil {
+	if err := validateDownloads(c, where, transports); err != nil {
 		return err
 	}
 
