@@ -92,6 +92,64 @@
     </xs:sequence>
   </xs:complexType>
 
+  <!-- Settings for the process-wide download queue. One queue serves the whole
+       run, so these are set once; the concurrency, download-dir, log-lines and
+       no-tui flags override them per invocation. -->
+  <xs:complexType name="downloads">
+    <xs:attribute name="concurrency" type="xs:positiveInteger"/>
+    <xs:attribute name="retries" type="xs:nonNegativeInteger"/>
+    <xs:attribute name="dir" type="xs:string"/>
+    <xs:attribute name="log_lines" type="xs:nonNegativeInteger"/>
+  </xs:complexType>
+
+  <!-- A hand-off to the download queue. Leaf-only and repeatable: it runs after
+       the steps and stands in for the leaf's <run>. With over=, it repeats per
+       record of that list, with the record's keys promoted and the record at
+       .item. A <url> rendering several lines yields one download per line. -->
+  <xs:complexType name="download">
+    <xs:sequence>
+      <xs:element name="url" type="content"/>
+      <!-- A file path; a directory when it ends in "/", names an existing one,
+           or serves several URLs. Omit for the download directory, named by the
+           URL or the response's Content-Disposition. -->
+      <xs:element name="to" type="content" minOccurs="0"/>
+      <!-- Optional. The file is verified as it streams and deleted rather than
+           renamed if it does not match. Render the body empty to skip the check
+           for one record of an over= list. -->
+      <xs:element name="hash" type="hash" minOccurs="0"/>
+      <xs:choice minOccurs="0" maxOccurs="unbounded">
+        <xs:element name="header" type="header"/>
+        <!-- Folded into one Cookie header. -->
+        <xs:element name="cookie" type="header"/>
+        <xs:element name="if" type="downloadAuthIf"/>
+      </xs:choice>
+    </xs:sequence>
+    <xs:attribute name="over" type="xs:string"/>
+    <xs:attribute name="when" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="hash" mixed="true">
+    <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+    <xs:attribute name="algo" type="hashAlgo"/>
+  </xs:complexType>
+
+  <xs:simpleType name="hashAlgo">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="md5"/>
+      <xs:enumeration value="sha1"/>
+      <xs:enumeration value="sha256"/>
+      <xs:enumeration value="sha512"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="downloadAuthIf">
+    <xs:choice maxOccurs="unbounded">
+      <xs:element name="header" type="header"/>
+      <xs:element name="cookie" type="header"/>
+    </xs:choice>
+    <xs:attribute name="test" type="xs:string" use="required"/>
+  </xs:complexType>
+
   <xs:complexType name="header" mixed="true">
     <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
     <xs:attribute name="name" type="xs:string" use="required"/>
@@ -255,6 +313,7 @@
       <xs:element name="entry" type="entry" minOccurs="0"/>
       <xs:element name="fields" type="fields" minOccurs="0"/>
       <xs:element name="format" type="formatRef" minOccurs="0"/>
+      <xs:element name="download" type="download" minOccurs="0" maxOccurs="unbounded"/>
       <xs:element name="command" type="command" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>
@@ -270,6 +329,7 @@
         <xs:element name="description" type="xs:string" minOccurs="0"/>
         <xs:element name="vars" type="vars" minOccurs="0"/>
         <xs:element name="transports" type="transports" minOccurs="0"/>
+        <xs:element name="downloads" type="downloads" minOccurs="0"/>
         <xs:element name="run" type="run" minOccurs="0"/>
         <xs:element name="cwd" type="content" minOccurs="0"/>
         <xs:element name="stdin" type="content" minOccurs="0"/>

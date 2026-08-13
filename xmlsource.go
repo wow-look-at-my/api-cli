@@ -78,6 +78,12 @@ func buildConfig(root *xnode) (*Config, error) {
 				return nil, err
 			}
 			cfg.Transports = t
+		case "downloads":
+			d, err := buildDownloads(child)
+			if err != nil {
+				return nil, err
+			}
+			cfg.Downloads = d
 		case "command":
 			c, err := buildCommandNode(child)
 			if err != nil {
@@ -493,6 +499,12 @@ func addCommandChild(c *Command, child *xnode) error {
 			return err
 		}
 		c.Format = ref
+	case "download":
+		d, err := buildDownload(child)
+		if err != nil {
+			return err
+		}
+		c.Downloads = append(c.Downloads, d)
 	case "command":
 		sub, err := buildCommandNode(child)
 		if err != nil {
