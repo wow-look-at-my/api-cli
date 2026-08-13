@@ -163,6 +163,58 @@ func TestIntegration_DownloadVerifiesDigestsFromTheStep(t *testing.T) {
 	assert.NotContains(t, out, "two.txt")
 }
 
+// binaryBody is 64 KiB covering every byte value, including sequences that are
+// not valid UTF-8. Anything that treats a payload as text mangles it.
+func binaryBody() []byte {
+	body := make([]byte, 65536)
+	for i := range body {
+		body[i] = byte(i % 256)
+	}
+	return body
+}
+
+func TestIntegration_DownloadIsByteExact(t *testing.T) {
+	body := binaryBody()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+	swapDownloadClient(t, srv)
+	dir := t.TempDir()
+
+	cfg, err := loadStr(t, `<config name="dl"><command name="grab">
+		<download><url>`+srv.URL+`/blob</url><to>blob.bin</to></download>
+	</command></config>`)
+	require.NoError(t, err)
+
+	code, _, errOut := execCmdFull(t, cfg, "grab", "--download-dir", dir)
+	require.Equal(t, 0, code, "stderr: %s", errOut)
+
+	got, err := os.ReadFile(filepath.Join(dir, "blob.bin"))
+	require.NoError(t, err)
+	assert.Equal(t, body, got, "a download is bytes, not text")
+}
+
+// The same guarantee for a request streamed to a redirect: the body is the
+// caller's file, so not one byte is added to it.
+func TestIntegration_RedirectedRequestIsByteExact(t *testing.T) {
+	body := binaryBody()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+	swapHTTPClient(t, srv)
+
+	cfg, err := loadStr(t, `<config name="dl"><command name="cat">
+		<run><request><url>`+srv.URL+`/blob</url></request></run>
+	</command></config>`)
+	require.NoError(t, err)
+
+	code, out, _ := execCmdFull(t, cfg, "cat")
+	require.Equal(t, 0, code)
+	assert.Equal(t, body, []byte(out), "no trailing newline into a redirect")
+}
+
 func TestIntegration_DownloadPlanErrorStopsBeforeFetching(t *testing.T) {
 	cfg, err := loadStr(t, `<config name="dl"><command name="grab">
 		<download over="result.nothing"><url><value name="item"/></url></download>

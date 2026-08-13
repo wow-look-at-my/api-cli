@@ -70,7 +70,7 @@ func TestTransport_ExplicitStdinOverridesBody(t *testing.T) {
 	}
 	code, out := execCmd(t, cfg, "go")
 	require.Equal(t, 0, code)
-	assert.Equal(t, "overrideend\n", out) // streamRequest terminates output
+	assert.Equal(t, "overrideend", out) // captured, so byte-exact: no cosmetic newline
 }
 
 // A transport never inherits the process's stdin: a program that reads stdin
@@ -88,7 +88,7 @@ func TestTransport_EmptyStdinIsClosedNotInherited(t *testing.T) {
 
 	code, out := execCmd(t, cfg, "go")
 	require.Equal(t, 0, code)
-	assert.Equal(t, "body=[]\n", out)
+	assert.Equal(t, "body=[]", out)
 }
 
 // failingReader fails the test if anything reads it.
@@ -145,11 +145,11 @@ func TestTransport_PerRequestSelection(t *testing.T) {
 	}
 	code, out := execCmd(t, cfg, "go")
 	require.Equal(t, 0, code)
-	assert.Equal(t, "from-a\n", out)
+	assert.Equal(t, "from-a", out)
 
 	code, out = execCmd(t, cfg, "viab")
 	require.Equal(t, 0, code)
-	assert.Equal(t, "from-b\n", out)
+	assert.Equal(t, "from-b", out)
 }
 
 // transport="http" opts one request out of the config's default transport —
@@ -172,11 +172,11 @@ func TestTransport_RequestOptsOutToBuiltinClient(t *testing.T) {
 	}
 	code, out := execCmd(t, cfg, "internal")
 	require.Equal(t, 0, code)
-	assert.Equal(t, "from-transport\n", out)
+	assert.Equal(t, "from-transport", out)
 
 	code, out = execCmd(t, cfg, "public")
 	require.Equal(t, 0, code)
-	assert.Equal(t, "from-http\n", out)
+	assert.Equal(t, "from-http", out)
 }
 
 // Nothing can select a transport at runtime: how a request reaches its

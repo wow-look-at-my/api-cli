@@ -40,14 +40,16 @@ func startDownloadSession(c *cobra.Command) *downloadSession {
 		errOut := execStderr
 		s.batch = q.batch(func(format string, args ...any) {
 			fmt.Fprintf(errOut, format+"\n", args...)
-		})
+		}, errOut)
 		return s
 	}
 
 	s.prevOut, s.prevErr = execStdout, execStderr
-	s.batch = q.batch(nil)
+	s.batch = q.batch(nil, nil)
 	s.tui = newTUI(s.prevOut, width, height, s.settings.LogLines, s.batch.snapshot)
 	s.batch.log = s.tui.logf
+	// A transport program's stderr belongs in the log region too.
+	s.batch.errOut = s.tui
 	// Steps and the downloader write into the log region rather than over the
 	// progress display.
 	execStdout, execStderr = s.tui, s.tui
@@ -135,7 +137,7 @@ func mcpRunDownloads(dls []Download, data map[string]any) (string, bool) {
 	var log strings.Builder
 	batch := sharedQueue(settings.Concurrency, settings.Retries).batch(func(format string, args ...any) {
 		fmt.Fprintf(&log, format+"\n", args...)
-	})
+	}, &log)
 
 	specs, err := planDownloads(dls, data, settings.Dir)
 	if err != nil {

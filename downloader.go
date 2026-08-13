@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -63,6 +64,9 @@ type downloadSpec struct {
 	// supplied none. HashAlgo names the algorithm that produced it.
 	Hash     string
 	HashAlgo string
+	// Transport is the resolved program that fetches this file in place of the
+	// built-in client, or nil for the built-in client.
+	Transport *downloadTransport
 }
 
 // downloadItem is a spec plus its live progress. Every mutable field is atomic
@@ -125,6 +129,10 @@ type downloadQueue struct {
 type downloadBatch struct {
 	q   *downloadQueue
 	log func(format string, args ...any)
+	// errOut receives a <transport> program's stderr. Held per batch rather
+	// than read from execStderr on a worker, so the display can swap the
+	// process's channels without a worker reading them mid-swap.
+	errOut io.Writer
 
 	wg    sync.WaitGroup
 	mu    sync.Mutex
@@ -170,12 +178,16 @@ func newDownloadQueue(concurrency, retries int) *downloadQueue {
 }
 
 // batch opens a unit of work on the queue. log receives one line per state
-// change; pass a no-op only where nothing is watching.
-func (q *downloadQueue) batch(log func(string, ...any)) *downloadBatch {
+// change and errOut a transport program's stderr; pass nil for either only
+// where nothing is watching.
+func (q *downloadQueue) batch(log func(string, ...any), errOut io.Writer) *downloadBatch {
 	if log == nil {
 		log = func(string, ...any) {}
 	}
-	return &downloadBatch{q: q, log: log}
+	if errOut == nil {
+		errOut = io.Discard
+	}
+	return &downloadBatch{q: q, log: log, errOut: errOut}
 }
 
 func (q *downloadQueue) worker() {
@@ -265,6 +277,9 @@ func (q *downloadQueue) run(item *downloadItem) {
 // fetch performs one attempt. The second return reports whether retrying could
 // plausibly help: a 404 is the answer, not a hiccup.
 func (q *downloadQueue) fetch(item *downloadItem) (error, bool) {
+	if item.spec.Transport != nil {
+		return q.fetchViaTransport(item)
+	}
 	req, err := http.NewRequest(http.MethodGet, item.spec.URL, nil)
 	if err != nil {
 		return err, false
@@ -286,55 +301,119 @@ func (q *downloadQueue) fetch(item *downloadItem) (error, bool) {
 		item.total.Store(resp.ContentLength)
 	}
 
+	pf, err := openPart(item, responseFilename(resp, item.spec.URL))
+	if err != nil {
+		return err, false
+	}
+	if _, err := io.Copy(pf.sink, resp.Body); err != nil {
+		pf.abort()
+		return err, true
+	}
+	return pf.commit()
+}
+
+// fetchViaTransport runs the download over a <transport> program, streaming its
+// stdout straight into the destination.
+//
+// Buffering it as a string the way a request-form transport does would put the
+// whole file in memory, so this is the one place the two paths differ. What the
+// program is handed is identical, and what happens to the bytes afterwards --
+// the .part sibling, the byte count, the digest -- is the same code.
+func (q *downloadQueue) fetchViaTransport(item *downloadItem) (error, bool) {
+	tr := item.spec.Transport
+	pf, err := openPart(item, urlFilename(item.spec.URL))
+	if err != nil {
+		return err, false
+	}
+
+	cmd := exec.Command(tr.Argv[0], tr.Argv[1:]...)
+	cmd.Dir = tr.Cwd
+	cmd.Stdin = strings.NewReader(tr.Stdin)
+	cmd.Stdout = pf.sink
+	cmd.Stderr = item.batch.errOut
+
+	if err := cmd.Run(); err != nil {
+		pf.abort()
+		// A program's exit code says nothing this can read: curl answers 22 for
+		// a 404 and 7 for a refused connection, and another transport will use
+		// its own numbers. So unlike the built-in client, which can tell a 404
+		// from a hiccup, this retries and lets the attempt limit end it.
+		return fmt.Errorf("transport %q: %w", tr.Name, err), true
+	}
+	return pf.commit()
+}
+
+// partFile is a destination mid-write: the .part sibling, the byte counter, and
+// the digest, behind one writer. Both fetch paths write through it, so a
+// transport download gets the same guarantees as a built-in one.
+type partFile struct {
+	item   *downloadItem
+	dest   string
+	part   string
+	file   *os.File
+	sink   io.Writer
+	digest hash.Hash
+}
+
+// openPart creates the .part file for an item. name is the file name to use if
+// the declaration named a directory rather than a file.
+func openPart(item *downloadItem, name string) (*partFile, error) {
 	dest := item.spec.Dest
 	if item.spec.DestIsDir {
-		dest = filepath.Join(dest, responseFilename(resp, item.spec.URL))
+		dest = filepath.Join(dest, name)
 	}
 	item.name.Store(dest)
 
 	if dir := filepath.Dir(dest); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err, false
+			return nil, err
 		}
 	}
-
 	// Write through a .part sibling so an interrupted transfer never leaves a
 	// truncated file wearing the real name.
 	part := dest + ".part"
 	f, err := os.Create(part)
 	if err != nil {
-		return err, false
+		return nil, err
 	}
+
+	pf := &partFile{item: item, dest: dest, part: part, file: f}
 	// Digested on the way past, so verifying costs no second pass over a file
 	// that may not fit in memory or in the page cache.
 	sink := []io.Writer{f, item}
-	digest := newHasher(item.spec.HashAlgo, item.spec.Hash)
-	if digest != nil {
-		sink = append(sink, digest)
+	if pf.digest = newHasher(item.spec.HashAlgo, item.spec.Hash); pf.digest != nil {
+		sink = append(sink, pf.digest)
 	}
-	_, copyErr := io.Copy(io.MultiWriter(sink...), resp.Body)
-	closeErr := f.Close()
-	if copyErr != nil {
-		os.Remove(part)
-		return copyErr, true
+	pf.sink = io.MultiWriter(sink...)
+	return pf, nil
+}
+
+// commit closes the file, checks it against its declared digest, and only then
+// gives it the real name.
+func (p *partFile) commit() (error, bool) {
+	if err := p.file.Close(); err != nil {
+		os.Remove(p.part)
+		return err, false
 	}
-	if closeErr != nil {
-		os.Remove(part)
-		return closeErr, false
-	}
-	if digest != nil {
+	if p.digest != nil {
 		// The transfer completed, so the same URL will hand back the same bytes:
 		// a wrong digest is an answer, not a hiccup, and retrying only wastes
 		// the download again. The file never gets the real name.
-		if got := hex.EncodeToString(digest.Sum(nil)); got != item.spec.Hash {
-			os.Remove(part)
-			return fmt.Errorf("%s mismatch: expected %s, got %s", item.spec.HashAlgo, item.spec.Hash, got), false
+		if got := hex.EncodeToString(p.digest.Sum(nil)); got != p.item.spec.Hash {
+			os.Remove(p.part)
+			return fmt.Errorf("%s mismatch: expected %s, got %s", p.item.spec.HashAlgo, p.item.spec.Hash, got), false
 		}
 	}
-	if err := os.Rename(part, dest); err != nil {
+	if err := os.Rename(p.part, p.dest); err != nil {
 		return err, false
 	}
 	return nil, false
+}
+
+// abort drops a partial write, leaving nothing behind for a retry to trip over.
+func (p *partFile) abort() {
+	p.file.Close()
+	os.Remove(p.part)
 }
 
 // newHasher returns the hasher for a spec, or nil when the declaration supplied

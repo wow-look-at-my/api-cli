@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"sort"
 	"strings"
 )
@@ -108,7 +109,14 @@ func installTransports(cfg *Config) {
 // is a property of that endpoint, not a user preference — sending an internal
 // API's request over the built-in client would just fetch an SSO page.
 func resolveTransport(req *Request) (*Transport, error) {
-	name := strings.TrimSpace(req.Transport)
+	return resolveTransportNamed(req.Transport)
+}
+
+// resolveTransportNamed is the selection itself, shared by requests and
+// downloads: an explicit name, else the registry default, else the built-in
+// client (a nil return).
+func resolveTransportNamed(name string) (*Transport, error) {
+	name = strings.TrimSpace(name)
 	if name == "" {
 		name = defaultTransport
 	}
@@ -123,6 +131,53 @@ func resolveTransport(req *Request) (*Transport, error) {
 		return nil, fmt.Errorf("transport %q is not registered (known: %s)", name, knownTransports())
 	}
 	return t, nil
+}
+
+// downloadTransport is a transport resolved for one download: the program's
+// argv with every template already rendered, plus where to run it. The queue
+// executes this on a worker long after the leaf's data context is gone, so
+// nothing here may still need rendering.
+type downloadTransport struct {
+	Name  string
+	Argv  []string
+	Cwd   string
+	Stdin string
+}
+
+// prepareDownloadTransport picks the transport for a download and renders its
+// command now. A nil return means the built-in client carries this one.
+//
+// The program sees the same `.request` context a request-form transport sees —
+// method, url, headers, header_lines — so one program serves both. The
+// difference is on the way back: a download's stdout is streamed to the file
+// rather than buffered as a response body, because the whole point of the file
+// is that it need not fit in memory.
+func prepareDownloadTransport(name, rawURL string, headers []renderedHeader, ctx map[string]any) (*downloadTransport, error) {
+	t, err := resolveTransportNamed(name)
+	if err != nil || t == nil {
+		return nil, err
+	}
+
+	p := &preparedRequest{Method: http.MethodGet, URL: rawURL, Headers: headers}
+	tctx := p.context(ctx)
+
+	cwd, err := renderCwd(t.Cwd, tctx)
+	if err != nil {
+		return nil, fmt.Errorf("transport %q: render cwd: %w", t.Name, err)
+	}
+	// A download has no body, so a transport that declares no <stdin> gets
+	// nothing — never the user's terminal.
+	stdin := ""
+	if t.StdinSet {
+		if stdin, err = renderString(t.Stdin, tctx); err != nil {
+			return nil, fmt.Errorf("transport %q: render stdin: %w", t.Name, err)
+		}
+	}
+	argv, err := resolveArgv(t.Command, tctx)
+	if err != nil {
+		return nil, fmt.Errorf("transport %q: %w", t.Name, err)
+	}
+	return &downloadTransport{Name: t.Name, Argv: argv, Cwd: cwd, Stdin: stdin}, nil
 }
 
 func knownTransports() string {
