@@ -262,8 +262,8 @@ func planDownloads(dls []Download, data map[string]any, dir string) ([]downloadS
 		if err != nil {
 			return nil, err
 		}
-		for _, rec := range records {
-			specs, err := planOne(d, rec.ctx, dir, i)
+		for _, ctx := range records {
+			specs, err := planOne(d, ctx, dir, i)
 			if err != nil {
 				return nil, err
 			}
@@ -285,15 +285,13 @@ func planDownloads(dls []Download, data map[string]any, dir string) ([]downloadS
 	return out, nil
 }
 
-type downloadRecord struct{ ctx map[string]any }
-
-// downloadRecords expands `over=` into one context per record. A path that
-// resolves to nothing is a config error, not an empty run: silently downloading
-// zero files is exactly how a renamed field goes unnoticed. An empty list, on
-// the other hand, legitimately means "nothing matched".
-func downloadRecords(d *Download, data map[string]any, idx int) ([]downloadRecord, error) {
+// downloadRecords expands `over=` into one render context per record. A path
+// that resolves to nothing is a config error, not an empty run: silently
+// downloading zero files is exactly how a renamed field goes unnoticed. An empty
+// list, on the other hand, legitimately means "nothing matched".
+func downloadRecords(d *Download, data map[string]any, idx int) ([]map[string]any, error) {
 	if d.Over == "" {
-		return []downloadRecord{{ctx: data}}, nil
+		return []map[string]any{data}, nil
 	}
 	src := lookupPath(data, d.Over)
 	if src == nil {
@@ -301,11 +299,11 @@ func downloadRecords(d *Download, data map[string]any, idx int) ([]downloadRecor
 	}
 	list, ok := src.([]any)
 	if !ok {
-		return []downloadRecord{{ctx: downloadCtx(data, src)}}, nil
+		return []map[string]any{downloadCtx(data, src)}, nil
 	}
-	out := make([]downloadRecord, 0, len(list))
+	out := make([]map[string]any, 0, len(list))
 	for _, el := range list {
-		out = append(out, downloadRecord{ctx: downloadCtx(data, el)})
+		out = append(out, downloadCtx(data, el))
 	}
 	logVerbose("download[%d]: over=%q expanded to %d records", idx, d.Over, len(out))
 	return out, nil
