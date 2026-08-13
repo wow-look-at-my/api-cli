@@ -2,8 +2,8 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -142,7 +142,9 @@ func TestTUI_InterruptRestoresTheTerminal(t *testing.T) {
 
 	tu.Start()
 	t.Cleanup(tu.Stop)
-	require.NoError(t, syscall.Kill(syscall.Getpid(), syscall.SIGINT))
+	self, err := os.FindProcess(os.Getpid())
+	require.NoError(t, err)
+	require.NoError(t, self.Signal(os.Interrupt))
 
 	select {
 	case code := <-exited:
