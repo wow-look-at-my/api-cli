@@ -211,4 +211,18 @@
 		</download>
 	</command>
 
+	<!--
+		The same hand-off carried by the curl transport instead of the built-in
+		client, for an endpoint a program has to reach. The program's stdout is
+		streamed to the file, so the size it can fetch is not bounded by memory.
+	-->
+	<command name="fetch-via-curl" description="Download one photo record through the curl transport. Needs curl on PATH.">
+		<arg name="id" type="int" required="true" description="Photo id."/>
+		<download transport="curl">
+			<url><value name="var.base_url"/>/photos/<value name="arg.id"/></url>
+			<to>photo-<value name="arg.id"/>.json</to>
+			<header name="Accept">application/json</header>
+		</download>
+	</command>
+
 </config>

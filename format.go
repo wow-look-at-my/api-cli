@@ -287,13 +287,18 @@ func captureRun(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[stri
 }
 
 // streamRequest performs a request and writes its output straight to stdout.
+//
+// The trailing newline is cosmetic — it keeps a response off the shell prompt —
+// so it goes only to a terminal. Redirected, the body is somebody's file, and a
+// byte they did not ask for is corruption: one appended newline is the
+// difference between a working archive and a failing checksum.
 func streamRequest(request *Request, data map[string]any) int {
 	out, code := runRequest(request, data, execStderr)
 	if code != 0 {
 		return code
 	}
 	fmt.Fprint(execStdout, out)
-	if out != "" && !strings.HasSuffix(out, "\n") {
+	if isTTY, _ := stdoutTTY(); isTTY && out != "" && !strings.HasSuffix(out, "\n") {
 		fmt.Fprintln(execStdout)
 	}
 	return 0

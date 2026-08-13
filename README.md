@@ -261,6 +261,34 @@ destination paths go to stdout, one per line, for whatever reads them next.
 - **No resume.** Every attempt starts at byte zero, and a leftover `.part` is
   overwritten rather than continued.
 
+### Downloading through a transport
+
+A `<download>` reaches its URL the same way a `<request>` does: over the
+built-in client, or over a [transport](#transports) program when the endpoint
+needs one.
+
+```xml
+<download transport="corp">…</download>
+```
+
+- **Selection matches requests**: the `transport=` attribute, else the
+  registry's `default="true"` entry, else the built-in client. So a config whose
+  endpoints all need the program needs it for its files too, with nothing extra
+  to say. `transport="http"` opts one download back to the built-in client.
+- **The program is handed the same `.request` context** — `method`, `url`,
+  `headers`, `header_lines` — so one program serves requests and downloads
+  alike. `method` is `GET` and there is no body.
+- **Its stdout is streamed into the file**, not buffered as a response body:
+  that is the one way the two paths differ, and it is why a file larger than
+  memory is fine. The `.part` sibling, the byte counting, and the digest check
+  are the same code on both.
+- **A non-zero exit fails the download and is retried.** A program's exit code
+  is its own (curl says 22 for a 404 and 7 for a refused connection), so unlike
+  the built-in client this cannot tell an answer from a hiccup, and lets the
+  attempt limit end it. Its stderr goes to the log region.
+- The size is unknown up front — there is no `Content-Length` — so the display
+  shows `?%` for that file and marks the total as a floor.
+
 ### Checking a download against a digest
 
 `<hash>` is optional; when present the file is verified as it streams, and one
@@ -285,7 +313,8 @@ that does not match its digest is deleted rather than renamed into place.
   no digest: `<hash><if test="sha256"><value name="sha256"/></if></hash>`.
 
 `<downloads>` sets the queue up once for the config: `concurrency` (default 4),
-`retries` (3), `dir` (`.`), and `log_lines` for the log region's height
+`retries` (3; `0` means report a failure immediately), `dir` (`.`), and
+`log_lines` for the log region's height
 (default: `min(15, half the terminal)`). `--concurrency`, `--download-dir`,
 `--log-lines`, and `--no-tui` override them per invocation.
 
@@ -686,7 +715,7 @@ XSD validator cannot represent the recursive `<command>` grammar.
 | `<entry>` | Leaf-only. `<path>`, `<query>`, or user-defined keys -> `.entry`. |
 | `<preconditions><precondition>` | Leaf-only. A non-empty render is a fatal error message (exit 1). |
 | `<fields>` / `<format>` | Output shape (auto) / legacy format. Leaf-only; not both. |
-| `<download over= when=>` | Leaf-only, repeatable. Hands URLs to the download queue. See [Downloads](#downloads). |
+| `<download over= when= transport=>` | Leaf-only, repeatable. Hands URLs to the download queue. See [Downloads](#downloads). |
 | `<command>` | Nested subcommands. |
 
 ### `<arg>` and `<flag>`

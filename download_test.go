@@ -28,7 +28,10 @@ func TestParseXML_Download(t *testing.T) {
 	</config>`)
 
 	require.NotNil(t, cfg.Downloads)
-	assert.Equal(t, &Downloads{Concurrency: 8, Retries: 1, Dir: "./out", LogLines: 6}, cfg.Downloads)
+	assert.Equal(t, &Downloads{Concurrency: 8, Retries: 1, Dir: "./out", LogLines: 6, RetriesSet: true}, cfg.Downloads)
+
+	bare := mustParse(t, `<config name="x"><downloads/><command name="c"><run>x</run></command></config>`)
+	assert.False(t, bare.Downloads.RetriesSet, "an absent retries= is not a request for zero")
 
 	require.Len(t, cfg.Commands[0].Downloads, 1)
 	d := cfg.Commands[0].Downloads[0]
@@ -384,6 +387,10 @@ func TestResolveDownloadSettings(t *testing.T) {
 
 	installDownloads(&Config{Downloads: &Downloads{Concurrency: 8, Retries: 1, Dir: "out", LogLines: 5}})
 	assert.Equal(t, downloadSettings{Concurrency: 8, Retries: 1, Dir: "out", LogLines: 5}, resolveDownloadSettings(nil))
+
+	// A config asking for no retries gets none, rather than silently the default.
+	installDownloads(&Config{Downloads: &Downloads{Retries: 0, RetriesSet: true}})
+	assert.Equal(t, 0, resolveDownloadSettings(nil).Retries)
 
 	root := newRoot(nil)
 	require.NoError(t, root.PersistentFlags().Set("concurrency", "2"))
