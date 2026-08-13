@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -39,13 +41,27 @@ type Downloads struct {
 // keys are promoted to the top level (like a <field expr=>) and the record
 // itself is available as `.item`.
 type Download struct {
-	Over    string   `json:"over,omitempty"`
-	When    string   `json:"when,omitempty"`
-	URL     string   `json:"url"`
-	To      string   `json:"to,omitempty"`
-	Headers []Header `json:"headers,omitempty"`
-	Cookies []Header `json:"cookies,omitempty"`
+	Over     string   `json:"over,omitempty"`
+	When     string   `json:"when,omitempty"`
+	URL      string   `json:"url"`
+	To       string   `json:"to,omitempty"`
+	Headers  []Header `json:"headers,omitempty"`
+	Cookies  []Header `json:"cookies,omitempty"`
+	Hash     string   `json:"hash,omitempty"`     // template for the expected digest
+	HashAlgo string   `json:"hashAlgo,omitempty"` // md5 | sha1 | sha256 (default) | sha512
 }
+
+// hashAlgos maps a <hash algo=> to the length of its digest in hex characters.
+// md5 and sha1 are here because real manifests still publish them, not because
+// they are a good choice for anything but catching a mangled transfer.
+var hashAlgos = map[string]int{
+	"md5":    32,
+	"sha1":   40,
+	"sha256": 64,
+	"sha512": 128,
+}
+
+const defaultHashAlgo = "sha256"
 
 // downloadSettings is the effective configuration for one run: config values
 // with the command line layered on top.
@@ -161,6 +177,21 @@ func buildDownload(n *xnode) (Download, error) {
 				return Download{}, err
 			}
 			d.To = strings.TrimSpace(s)
+		case "hash":
+			// compileContent, not compileTextElem: the latter rejects every
+			// attribute, and <hash> carries algo=.
+			if err := checkAttrs(child, "algo"); err != nil {
+				return Download{}, err
+			}
+			s, err := compileContent(child)
+			if err != nil {
+				return Download{}, err
+			}
+			d.Hash = strings.TrimSpace(s)
+			d.HashAlgo = strings.ToLower(strings.TrimSpace(child.attr("algo")))
+			if d.HashAlgo == "" {
+				d.HashAlgo = defaultHashAlgo
+			}
 		case "header", "cookie":
 			h, err := buildHeader(child, "")
 			if err != nil {
@@ -233,11 +264,26 @@ func validateDownloads(c *Command, where string) error {
 		return fmt.Errorf("%s: <download> writes files rather than records, so <fields>/<format> cannot shape it", where)
 	}
 	for i := range c.Downloads {
-		if strings.TrimSpace(c.Downloads[i].URL) == "" {
+		d := &c.Downloads[i]
+		if strings.TrimSpace(d.URL) == "" {
 			return fmt.Errorf("%s.downloads[%d]: <download> requires a <url>", where, i)
+		}
+		if d.Hash != "" {
+			if _, ok := hashAlgos[d.HashAlgo]; !ok {
+				return fmt.Errorf("%s.downloads[%d]: <hash algo=%q> must be one of %s", where, i, d.HashAlgo, knownHashAlgos())
+			}
 		}
 	}
 	return nil
+}
+
+func knownHashAlgos() string {
+	names := make([]string, 0, len(hashAlgos))
+	for name := range hashAlgos {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, "|")
 }
 
 // planDownloads renders every declaration into concrete specs. It is the
@@ -355,6 +401,11 @@ func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSp
 		to = strings.TrimSpace(to)
 	}
 
+	digest, err := renderHash(d, ctx, idx)
+	if err != nil {
+		return nil, err
+	}
+
 	headers, err := renderHeaders(d.Headers, ctx)
 	if err != nil {
 		return nil, fmt.Errorf("download[%d]: %w", idx, err)
@@ -370,9 +421,42 @@ func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSp
 	out := make([]downloadSpec, 0, len(urls))
 	for _, u := range urls {
 		dest, isDir := downloadDest(dir, to, len(urls) > 1)
-		out = append(out, downloadSpec{URL: u, Dest: dest, DestIsDir: isDir, Headers: headers})
+		out = append(out, downloadSpec{
+			URL: u, Dest: dest, DestIsDir: isDir, Headers: headers,
+			Hash: digest, HashAlgo: d.HashAlgo,
+		})
 	}
 	return out, nil
+}
+
+// renderHash renders the expected digest for one record and normalizes it.
+//
+// An empty render means this record carries no digest — which is how a <hash>
+// body wrapped in an <if test=> opts one record of an `over=` list out. Anything
+// else must be a digest of the right shape: a manifest field that got renamed
+// renders as the template engine's placeholder, and silently not verifying is
+// the one outcome a verification feature must never have.
+func renderHash(d *Download, ctx map[string]any, idx int) (string, error) {
+	if d.Hash == "" {
+		return "", nil
+	}
+	raw, err := renderString(d.Hash, ctx)
+	if err != nil {
+		return "", fmt.Errorf("download[%d]: render hash: %w", idx, err)
+	}
+	// A digest often arrives as the first field of a `sha256sum` line
+	// ("<hex>  <name>"), so read that field rather than the whole line.
+	fields := strings.Fields(raw)
+	if len(fields) == 0 {
+		return "", nil
+	}
+	digest := strings.ToLower(fields[0])
+	width := hashAlgos[d.HashAlgo]
+	if _, err := hex.DecodeString(digest); err != nil || len(digest) != width {
+		return "", fmt.Errorf("download[%d]: <hash algo=%q> rendered %q, which is not a %d-character hex digest",
+			idx, d.HashAlgo, digest, width)
+	}
+	return digest, nil
 }
 
 // downloadDest resolves where a file lands. An empty <to> means "the download

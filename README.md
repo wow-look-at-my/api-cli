@@ -214,6 +214,7 @@ auth the steps established.
 	<download over="result.release.assets">
 		<url><value name="browser_download_url"/></url>
 		<to><value name="name"/></to>
+		<hash algo="sha256"><value name="digest"/></hash>
 		<header name="Authorization">Bearer <value name="var.token"/></header>
 		<cookie name="session"><value name="result.login.sid"/></cookie>
 	</download>
@@ -257,6 +258,31 @@ destination paths go to stdout, one per line, for whatever reads them next.
   and exits non-zero, while the other files carry on.
 - Bytes land in a `.part` sibling first, so an interrupted transfer never leaves
   a truncated file wearing the real name.
+- **No resume.** Every attempt starts at byte zero, and a leftover `.part` is
+  overwritten rather than continued.
+
+### Checking a download against a digest
+
+`<hash>` is optional; when present the file is verified as it streams, and one
+that does not match its digest is deleted rather than renamed into place.
+
+```xml
+<hash algo="sha256"><value name="digest"/></hash>
+```
+
+- `algo=` is `sha256` (the default), `sha512`, `sha1`, or `md5`.
+- The body is a template like any other, so the digest usually comes from the
+  same manifest record as the URL, or from a step that fetched a `.sha256` file.
+- **A mismatch is final.** The bytes arrived intact, so refetching them cannot
+  change the digest; the run reports expected and actual, and exits non-zero.
+- A success says which algorithm passed (`downloaded x.iso (6.0 MiB, sha256
+  ok)`) — a check you cannot see happen is one you cannot trust ran.
+- **The digest must look like one.** A renamed manifest field renders as the
+  template engine's placeholder, and that is rejected before anything is
+  fetched, rather than quietly leaving the file unverified. A `sha256sum` line
+  (`<hex>  <name>`) is accepted, as is any capitalization.
+- **To make it optional per record**, render it empty for the records that have
+  no digest: `<hash><if test="sha256"><value name="sha256"/></if></hash>`.
 
 `<downloads>` sets the queue up once for the config: `concurrency` (default 4),
 `retries` (3), `dir` (`.`), and `log_lines` for the log region's height

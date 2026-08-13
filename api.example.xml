@@ -196,6 +196,13 @@
 		<download over="result.album">
 			<url><value name="var.base_url"/>/photos/<value name="id"/></url>
 			<to>album-<value name="arg.album"/>/<value name="id"/>.json</to>
+			<!--
+				Optional digest check, in its per-record form: jsonplaceholder
+				publishes no digests, so this renders empty and NOTHING IS
+				VERIFIED here. Against an API that does publish them, drop the
+				<if> so a missing digest fails instead of being skipped.
+			-->
+			<hash algo="sha256"><if test="sha256"><value name="sha256"/></if></hash>
 			<header name="Accept">application/json</header>
 			<if test="env.PHOTO_TOKEN">
 				<header name="Authorization">Bearer <value name="env.PHOTO_TOKEN"/></header>

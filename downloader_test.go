@@ -1,11 +1,17 @@
 package main
 
 import (
+	"crypto/md5"
+	"crypto/sha1"
+	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -136,6 +142,77 @@ func TestDownloadQueue_ExhaustedRetriesReportTheLastError(t *testing.T) {
 
 	assert.Equal(t, dlFailed, items[0].state.Load())
 	assert.ErrorContains(t, items[0].failure(), "502")
+}
+
+func TestDownloadQueue_VerifiesTheDeclaredDigest(t *testing.T) {
+	body := "payload-bytes"
+	sum := sha256.Sum256([]byte(body))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "ok.bin")
+	items := collect(t, testQueue(t, srv, 1, 0), downloadSpec{
+		URL: srv.URL + "/f", Dest: dest,
+		Hash: hex.EncodeToString(sum[:]), HashAlgo: "sha256",
+	})
+
+	assert.NoError(t, items[0].failure())
+	assert.FileExists(t, dest)
+}
+
+func TestDownloadQueue_MismatchedDigestFailsWithoutKeepingTheFile(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		_, _ = w.Write([]byte("not what the manifest promised"))
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "tampered.bin")
+	wrong := strings.Repeat("ab", 32)
+	items := collect(t, testQueue(t, srv, 1, 3), downloadSpec{
+		URL: srv.URL + "/f", Dest: dest,
+		Hash: wrong, HashAlgo: "sha256",
+	})
+
+	assert.Equal(t, dlFailed, items[0].state.Load())
+	assert.ErrorContains(t, items[0].failure(), "sha256 mismatch: expected "+wrong)
+	assert.NoFileExists(t, dest, "a file that failed its digest never gets the real name")
+	assert.NoFileExists(t, dest+".part")
+	assert.Equal(t, int32(1), hits.Load(), "the bytes arrived intact; refetching them cannot change the digest")
+}
+
+func TestDownloadQueue_VerifiesEveryAlgorithm(t *testing.T) {
+	body := []byte("checksum me")
+	sums := map[string]string{
+		"md5":    fmt.Sprintf("%x", md5.Sum(body)),
+		"sha1":   fmt.Sprintf("%x", sha1.Sum(body)),
+		"sha256": fmt.Sprintf("%x", sha256.Sum256(body)),
+		"sha512": fmt.Sprintf("%x", sha512.Sum512(body)),
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	q := testQueue(t, srv, 2, 0)
+	for algo, sum := range sums {
+		t.Run(algo, func(t *testing.T) {
+			items := collect(t, q, downloadSpec{
+				URL: srv.URL + "/f", Dest: filepath.Join(dir, algo+".bin"),
+				Hash: sum, HashAlgo: algo,
+			})
+			assert.NoError(t, items[0].failure())
+		})
+	}
+}
+
+func TestNewHasher_NoDigestMeansNoHashing(t *testing.T) {
+	assert.Nil(t, newHasher("sha256", ""), "an absent digest must not cost a hash pass")
+	assert.NotNil(t, newHasher("", "abc"), "an unnamed algorithm falls back to the default")
 }
 
 func TestDownloadQueue_SendsDeclaredHeaders(t *testing.T) {

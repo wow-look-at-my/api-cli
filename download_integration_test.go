@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -119,6 +120,47 @@ func TestIntegration_DownloadFailureIsLoudAndNonZero(t *testing.T) {
 	assert.FileExists(t, filepath.Join(dir, "ok.txt"), "one bad URL does not cancel the rest")
 	assert.NoFileExists(t, filepath.Join(dir, "bad.txt"))
 	assert.Contains(t, out, "ok.txt", "the paths that landed are still reported")
+}
+
+func TestIntegration_DownloadVerifiesDigestsFromTheStep(t *testing.T) {
+	// The manifest carries a digest per asset; one of them is wrong, which is
+	// the case the feature exists for.
+	good := sha256.Sum256([]byte("first"))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index":
+			fmt.Fprintf(w, `{"assets":[
+				{"name":"one.txt","url":"http://%s/files/one","sha256":"%x"},
+				{"name":"two.txt","url":"http://%s/files/two","sha256":"%s"}
+			]}`, r.Host, good, r.Host, strings.Repeat("ff", 32))
+		case "/files/one":
+			_, _ = w.Write([]byte("first"))
+		default:
+			_, _ = w.Write([]byte("second-file"))
+		}
+	}))
+	defer srv.Close()
+	swapHTTPClient(t, srv)
+	swapDownloadClient(t, srv)
+	dir := t.TempDir()
+
+	cfg, err := loadStr(t, `<config name="dl"><command name="grab">
+		<steps><step name="index"><run><request><url>`+srv.URL+`/index</url></request></run></step></steps>
+		<download over="result.index.assets">
+			<url><value name="url"/></url>
+			<to><value name="name"/></to>
+			<hash algo="sha256"><value name="sha256"/></hash>
+		</download>
+	</command></config>`)
+	require.NoError(t, err)
+
+	code, out, errOut := execCmdFull(t, cfg, "grab", "--download-dir", dir)
+	assert.Equal(t, 1, code)
+	assert.Contains(t, errOut, "sha256 ok", "a verification that happened is visible")
+	assert.Contains(t, errOut, "sha256 mismatch: expected "+strings.Repeat("ff", 32))
+	assert.FileExists(t, filepath.Join(dir, "one.txt"))
+	assert.NoFileExists(t, filepath.Join(dir, "two.txt"), "the file that failed its digest is not kept")
+	assert.NotContains(t, out, "two.txt")
 }
 
 func TestIntegration_DownloadPlanErrorStopsBeforeFetching(t *testing.T) {

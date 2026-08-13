@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -198,6 +199,100 @@ func TestPlanDownloads_MultiLineURLBecomesManyDownloads(t *testing.T) {
 		assert.Equal(t, filepath.Join("dl", "bundle"), s.Dest)
 		assert.True(t, s.DestIsDir, "one <to> serving several URLs is a directory")
 	}
+}
+
+func TestParseXML_DownloadHash(t *testing.T) {
+	cfg := mustParse(t, `<config name="x"><command name="get">
+		<download><url>https://h/a</url><hash><value name="sha256"/></hash></download>
+		<download><url>https://h/b</url><hash algo="SHA512"><value name="d"/></hash></download>
+	</command></config>`)
+
+	assert.Equal(t, "{{ .sha256 }}", cfg.Commands[0].Downloads[0].Hash)
+	assert.Equal(t, "sha256", cfg.Commands[0].Downloads[0].HashAlgo, "sha256 is the default")
+	assert.Equal(t, "sha512", cfg.Commands[0].Downloads[1].HashAlgo, "algo= is case-insensitive")
+}
+
+func TestValidate_DownloadHashAlgo(t *testing.T) {
+	_, err := loadStr(t, `<config name="x"><command name="g">
+		<download><url>https://h/f</url><hash algo="crc32">abc</hash></download>
+	</command></config>`)
+	assert.ErrorContains(t, err, `<hash algo="crc32"> must be one of md5|sha1|sha256|sha512`)
+}
+
+func TestPlanDownloads_Hash(t *testing.T) {
+	data := planData()
+	good := strings.Repeat("a1", 32)
+	data["result"].(map[string]any)["digest"] = good
+
+	specs, err := planDownloads([]Download{{
+		URL: "https://h/f", Hash: "{{.result.digest}}", HashAlgo: "sha256",
+	}}, data, ".")
+	require.NoError(t, err)
+	assert.Equal(t, good, specs[0].Hash)
+	assert.Equal(t, "sha256", specs[0].HashAlgo)
+}
+
+func TestPlanDownloads_HashNormalization(t *testing.T) {
+	data := planData()
+	digest := strings.Repeat("AB", 32)
+	// The shape `sha256sum` writes: the digest, two spaces, the file name.
+	data["result"].(map[string]any)["sumfile"] = "  " + digest + "  archive.tar.gz\n"
+
+	specs, err := planDownloads([]Download{{
+		URL: "https://h/f", Hash: "{{.result.sumfile}}", HashAlgo: "sha256",
+	}}, data, ".")
+	require.NoError(t, err)
+	assert.Equal(t, strings.ToLower(digest), specs[0].Hash, "a sha256sum line and mixed case both normalize")
+}
+
+func TestPlanDownloads_MalformedHashIsAnError(t *testing.T) {
+	// The third case is the one that matters: a renamed manifest field renders
+	// as the template engine's placeholder, and must fail loudly rather than
+	// quietly leave the file unverified.
+	cases := map[string]string{
+		"too short":     strings.Repeat("ab", 8),
+		"not hex":       strings.Repeat("zz", 32),
+		"missing field": "<no value>",
+	}
+	for name, value := range cases {
+		t.Run(name, func(t *testing.T) {
+			data := planData()
+			data["var"].(map[string]any)["digest"] = value
+			_, err := planDownloads([]Download{{
+				URL: "https://h/f", Hash: "{{.var.digest}}", HashAlgo: "sha256",
+			}}, data, ".")
+			assert.ErrorContains(t, err, "is not a 64-character hex digest")
+		})
+	}
+
+	// And the placeholder really is what a missing field renders as, so the
+	// case above is the real one and not a straw man.
+	_, err := planDownloads([]Download{{
+		URL: "https://h/f", Hash: "{{.result.list.typo}}", HashAlgo: "sha256",
+	}}, planData(), ".")
+	assert.ErrorContains(t, err, "is not a 64-character hex digest")
+}
+
+// A digest is optional per record: an <if> around the <hash> body renders empty
+// for a record that has none, and that record simply is not verified.
+func TestPlanDownloads_HashCanBeEmptyPerRecord(t *testing.T) {
+	data := planData()
+	data["result"].(map[string]any)["assets"] = []any{
+		map[string]any{"url": "https://h/a", "sum": strings.Repeat("cd", 32)},
+		map[string]any{"url": "https://h/b"},
+	}
+
+	specs, err := planDownloads([]Download{{
+		Over:     "result.assets",
+		URL:      "{{.url}}",
+		Hash:     "{{ if truthy .sum }}{{ .sum }}{{ end }}",
+		HashAlgo: "sha256",
+	}}, data, ".")
+	require.NoError(t, err)
+
+	require.Len(t, specs, 2)
+	assert.Equal(t, strings.Repeat("cd", 32), specs[0].Hash)
+	assert.Empty(t, specs[1].Hash)
 }
 
 func TestPlanDownloads_ColLidingDestinationsAreAnError(t *testing.T) {

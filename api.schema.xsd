@@ -113,6 +113,10 @@
            or serves several URLs. Omit for the download directory, named by the
            URL or the response's Content-Disposition. -->
       <xs:element name="to" type="content" minOccurs="0"/>
+      <!-- Optional. The file is verified as it streams and deleted rather than
+           renamed if it does not match. Render the body empty to skip the check
+           for one record of an over= list. -->
+      <xs:element name="hash" type="hash" minOccurs="0"/>
       <xs:choice minOccurs="0" maxOccurs="unbounded">
         <xs:element name="header" type="header"/>
         <!-- Folded into one Cookie header. -->
@@ -123,6 +127,20 @@
     <xs:attribute name="over" type="xs:string"/>
     <xs:attribute name="when" type="xs:string"/>
   </xs:complexType>
+
+  <xs:complexType name="hash" mixed="true">
+    <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+    <xs:attribute name="algo" type="hashAlgo"/>
+  </xs:complexType>
+
+  <xs:simpleType name="hashAlgo">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="md5"/>
+      <xs:enumeration value="sha1"/>
+      <xs:enumeration value="sha256"/>
+      <xs:enumeration value="sha512"/>
+    </xs:restriction>
+  </xs:simpleType>
 
   <xs:complexType name="downloadAuthIf">
     <xs:choice maxOccurs="unbounded">

@@ -1,7 +1,13 @@
 package main
 
 import (
+	"crypto/md5"
+	"crypto/sha1"
+	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/hex"
 	"fmt"
+	"hash"
 	"io"
 	"mime"
 	"net/http"
@@ -53,6 +59,10 @@ type downloadSpec struct {
 	// DestIsDir means Dest names a directory and the file name still has to
 	// come from the URL or the response's Content-Disposition.
 	DestIsDir bool
+	// Hash is the expected digest as lowercase hex, empty when the declaration
+	// supplied none. HashAlgo names the algorithm that produced it.
+	Hash     string
+	HashAlgo string
 }
 
 // downloadItem is a spec plus its live progress. Every mutable field is atomic
@@ -227,7 +237,13 @@ func (q *downloadQueue) run(item *downloadItem) {
 		if err == nil {
 			item.end.Store(time.Now().UnixNano())
 			item.state.Store(dlDone)
-			log("downloaded %s (%s)", item.dest(), humanBytes(item.done.Load()))
+			// Name the algorithm on success: a verification you cannot see
+			// happen is indistinguishable from one that never ran.
+			verified := ""
+			if item.spec.Hash != "" {
+				verified = ", " + item.spec.HashAlgo + " ok"
+			}
+			log("downloaded %s (%s%s)", item.dest(), humanBytes(item.done.Load()), verified)
 			return
 		}
 		if !retryable || attempt >= q.retries {
@@ -289,7 +305,14 @@ func (q *downloadQueue) fetch(item *downloadItem) (error, bool) {
 	if err != nil {
 		return err, false
 	}
-	_, copyErr := io.Copy(io.MultiWriter(f, item), resp.Body)
+	// Digested on the way past, so verifying costs no second pass over a file
+	// that may not fit in memory or in the page cache.
+	sink := []io.Writer{f, item}
+	digest := newHasher(item.spec.HashAlgo, item.spec.Hash)
+	if digest != nil {
+		sink = append(sink, digest)
+	}
+	_, copyErr := io.Copy(io.MultiWriter(sink...), resp.Body)
 	closeErr := f.Close()
 	if copyErr != nil {
 		os.Remove(part)
@@ -299,10 +322,37 @@ func (q *downloadQueue) fetch(item *downloadItem) (error, bool) {
 		os.Remove(part)
 		return closeErr, false
 	}
+	if digest != nil {
+		// The transfer completed, so the same URL will hand back the same bytes:
+		// a wrong digest is an answer, not a hiccup, and retrying only wastes
+		// the download again. The file never gets the real name.
+		if got := hex.EncodeToString(digest.Sum(nil)); got != item.spec.Hash {
+			os.Remove(part)
+			return fmt.Errorf("%s mismatch: expected %s, got %s", item.spec.HashAlgo, item.spec.Hash, got), false
+		}
+	}
 	if err := os.Rename(part, dest); err != nil {
 		return err, false
 	}
 	return nil, false
+}
+
+// newHasher returns the hasher for a spec, or nil when the declaration supplied
+// no digest to check against.
+func newHasher(algo, want string) hash.Hash {
+	if want == "" {
+		return nil
+	}
+	switch algo {
+	case "md5":
+		return md5.New()
+	case "sha1":
+		return sha1.New()
+	case "sha512":
+		return sha512.New()
+	default:
+		return sha256.New()
+	}
 }
 
 // retryableStatus reports whether an error status is worth another attempt:
