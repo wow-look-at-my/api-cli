@@ -53,13 +53,17 @@ Do not add new third-party deps without a clear reason.
 | `steps.go`                      | `runSteps`: the one step loop, shared by the CLI and MCP paths (they take a `stepCapture` and an errOut). A step runs its own command/request or inherits the leaf's. |
 | `fields.go`                     | The `<fields>` auto-formatter: `renderFields` represents one declaration as table / list / lines / raw / json / markdown / csv / timeline, with `show_in` gating, `@key`/`@value` map walking, and priority-based column dropping. Reuses `align.go`. |
 | `timeline.go`                    | The `timeline` sink (`--as=timeline`): maps each record to an `ascii-timeline` event by field name (`label`/`date`/`start`/`end`/`description`/`color`), then renders via the `timeline` library. Color/width come from the format context (`.tty`/`.width`). |
+| `download.go`                   | The `<download>` hand-off: `Downloads`/`Download` structs, `buildDownloads`/`buildDownload`, validation, settings resolution (config + flags), and `planDownloads` (renders declarations into `downloadSpec`s, expanding `over=`). |
+| `downloader.go`                 | The shared queue: a process-wide worker pool (`sharedQueue`) plus a per-invocation `downloadBatch`. `fetch` writes via a `.part` sibling, retries transient failures at a fixed cadence, and names dir destinations from `Content-Disposition`. Progress fields are atomic (`tallyDownloads`, `progressOf`). |
+| `downloadrun.go`                | `downloadSession` ties a leaf to the queue: settings, TTY detection (`stdoutSize`), swapping the output channels to the TUI, drain, and the summary. `mcpRunDownloads` is the MCP path. |
+| `tui.go`                        | The download display: a fixed-width column layout decided once per frame (`planProgressLayout`/`progressLine`), the aggregate row, a capped self-scrolling log region, and in-place ANSI repainting. |
 | `format.go`                     | Execution + presentation dispatch: `execLeaf` picks command-vs-request execution and fields-vs-legacy-format-vs-raw output. `captureRun`, `streamRequest`, `runFieldsFormatted`, `runFormatted`, `resolveFormat`, `selectView`. |
 | `render.go`                     | `renderString`, `renderEntry`, `lookupPath`, `funcMap` (sprig + custom helpers incl. `truthy`, `querystring`, `urlpath`, `spread`, ...). |
 | `align.go`                      | Width-aware aligner: `displayWidth`, `stripANSI`, `alignColumns`, `padRight`/`padLeft`. |
 | `mcp.go` / `mcp_exec.go`        | MCP server: one tool per leaf. Threads run (`*Cmd`/`*Request`) + format inheritance; `mcpExecLeaf` runs the leaf and applies `<fields>` (like `--format=always`: `.tty` true, width 80) or a legacy format. |
 | `cors.go` / `debug.go` / `docs.go` | CORS middleware for MCP HTTP/SSE; verbose/debug logging; the `docs` subcommand (embeds `README.md`, `api.schema.xsd`, `api.example.xml`). |
 | `api.schema.xsd`                | XSD reference for the XML grammar (editor aid + `docs schema`). NOT enforced at runtime; the loader is authoritative. |
-| `api.example.xml`              | Reference config (jsonplaceholder); loaded by `TestExampleConfigsLoad`. Exercises the grammar end to end, including a non-default `curl` transport and a request-step chain (`posts by-user`). |
+| `api.example.xml`              | Reference config (jsonplaceholder); loaded by `TestExampleConfigsLoad`. Exercises the grammar end to end, including a non-default `curl` transport, a request-step chain (`posts by-user`), and a step-to-queue download hand-off (`archive`). |
 | `samples/github/github.xml`     | Read-only GitHub REST API wrapper in XML: first-class requests, jq noise-trimming, fields views. Used by the Docker image and CI demo; loaded by `TestGithubSampleLoads`. |
 | `samples/github/Dockerfile.github` | Alpine image: ships `api-cli` + `github.xml`; ENTRYPOINT runs `--mcp`. No curl/jq (requests + gojq built in). |
 | `*_test.go`                     | Unit + integration tests. `integration_test.go` has `execCmd`/`execCmdFull`; `request_test.go`/`request_integration_test.go` use httptest via `swapHTTPClient`. |
@@ -78,7 +82,9 @@ interleave text with **placeholders** that compile to Go templates:
 `<run>` is the executable (inherited): a `<request>`, an `<argv>` list, or shell
 text. `<entry>` (path/query/arbitrary) becomes `.entry`. `<fields>` declares
 output shape; `<vars>/<var>` define `.var` (fixpoint resolution). Top-level
-`<transports>` names programs that perform requests instead of net/http.
+`<transports>` names programs that perform requests instead of net/http, and
+top-level `<downloads>` configures the shared download queue that leaf-level
+`<download>` elements feed.
 
 ## Key design rules
 
@@ -96,6 +102,11 @@ output shape; `<vars>/<var>` define `.var` (fixpoint resolution). Top-level
    `resolveTransport`. Both consume the same `preparedRequest`, and the response
    path (`<response jq=>`, `<fields>`) is identical either way — so a transport
    is never a second code path to keep in sync.
+3c. **A `<download>` leaf hands off instead of running.** The declarations are
+   the leaf's action (after its steps), so no command or request executes for it
+   — an inherited `<run>` stays put. One process-wide queue serves every
+   hand-off; a `downloadBatch` scopes one invocation's items on it, which is what
+   keeps a long-lived MCP server from mixing tool calls together.
 4. **Formatting precedence.** `<fields>` (always, unless the user opts out) >
    legacy `<format>` (author `when` AND user verdict) > raw. `--no-format` /
    `--format=raw` / `NO_FORMAT` veto. `--as=<sink>` forces a fields
@@ -104,8 +115,13 @@ output shape; `<vars>/<var>` define `.var` (fixpoint resolution). Top-level
    `@value` are the entry when `over=` walks a map; `expr=` sees the record
    promoted to the top level plus the whole context via `$` (`$.var`, `$.data`).
 6. **Templates use `missingkey=zero`.** Don't change this default.
-7. **Test redirection.** `execStdin/Stdout/Stderr` and `httpClient` are
-   package-level vars; tests swap them.
+7. **Test redirection.** `execStdin/Stdout/Stderr`, `httpClient`, and
+   `downloadClient` are package-level vars; tests swap them. The download queue
+   is process-wide, so a test that swaps its client also calls
+   `resetSharedQueue` (see `swapDownloadClient`).
+8. **Downloads use their own HTTP client.** `downloadClient` has no overall
+   timeout — `httpClient`'s 60s cap is an API deadline and would be a ceiling on
+   file size — only connect and response-header deadlines.
 
 ## Adding a new field to the config
 

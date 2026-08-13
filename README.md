@@ -195,6 +195,74 @@ adds two arguments only when there is a body. A plain `<if>` would leave an
 empty string in the argv instead. See the `curl` transport in
 [`api.example.xml`](./api.example.xml) for both together.
 
+## Downloads
+
+A step can work a URL out -- parse it from a listing, sign it, follow a redirect
+-- and then hand it to a shared downloader instead of printing it. One queue
+serves the whole run, fetching four at a time by default and carrying whatever
+auth the steps established.
+
+```xml
+<downloads concurrency="8" dir="./out"/>
+...
+<command name="grab" description="Fetch every asset in the release.">
+	<steps>
+		<step name="release">
+			<run><request><url><value name="var.api"/>/releases/latest</url></request></run>
+		</step>
+	</steps>
+	<download over="result.release.assets">
+		<url><value name="browser_download_url"/></url>
+		<to><value name="name"/></to>
+		<header name="Authorization">Bearer <value name="var.token"/></header>
+		<cookie name="session"><value name="result.login.sid"/></cookie>
+	</download>
+</command>
+```
+
+On a terminal this draws a live display: a line per transfer with percentage,
+sizes, rate and ETA, an aggregate `TOTAL` row, and a height-capped,
+self-scrolling log region carrying the steps' and the downloader's output.
+
+```
+downloads: 3 active, 3 queued, 0 done
+  ubuntu-25.04.iso         59%     3.6 MiB / 6.0 MiB      870.1 KiB/s  ETA 00:02
+  linux-6.18.tar.xz        55%     1.7 MiB / 3.0 MiB      406.0 KiB/s  ETA 00:03
+  dataset-a.parquet        69%     5.5 MiB / 8.0 MiB      1.3 MiB/s    ETA 00:01
+  TOTAL                    63%    10.8 MiB / 17.0 MiB+    2.6 MiB/s
+------------------------------------------------------------
+ downloading dataset-a.parquet
+ downloaded ubuntu-25.04.iso (6.0 MiB)
+```
+
+Piped, there is no display: progress stays line-based on stderr and the
+destination paths go to stdout, one per line, for whatever reads them next.
+
+- **`<download>` is the leaf's action.** It runs after the steps and stands in
+  for the leaf's `<run>`, so an inherited request does not fire on the way.
+- **`over=`** repeats the declaration per record of a list, with the record's
+  keys promoted (`<value name="name"/>`) and the record itself at `.item`. An
+  empty list downloads nothing; a path that resolves to nothing is an error.
+- **`<url>` may render several lines** -- what a `<for>` loop produces -- and
+  each line becomes its own download.
+- **`<to>`** is a file path, or a directory when it ends in `/`, names an
+  existing one, or serves several URLs. Empty means the download directory,
+  named by the URL or the response's `Content-Disposition`.
+- **A relative `<to>` resolves under the download directory** (`dir=`, or
+  `--download-dir`); an absolute one is taken as-is.
+- **Auth rides along**: `<header>` and `<cookie>` render against the same
+  context, take `<if test=>`, and cookies fold into one `Cookie` header.
+- **Failures are loud.** A 4xx is the answer; a 5xx or a network fault retries
+  at a fixed one-second cadence. Anything still failing names its URL on stderr
+  and exits non-zero, while the other files carry on.
+- Bytes land in a `.part` sibling first, so an interrupted transfer never leaves
+  a truncated file wearing the real name.
+
+`<downloads>` sets the queue up once for the config: `concurrency` (default 4),
+`retries` (3), `dir` (`.`), and `log_lines` for the log region's height
+(default: `min(15, half the terminal)`). `--concurrency`, `--download-dir`,
+`--log-lines`, and `--no-tui` override them per invocation.
+
 ## Output: fields
 
 A leaf can declare the *shape* of its output records once, via `<fields>`. The
@@ -574,6 +642,7 @@ XSD validator cannot represent the recursive `<command>` grammar.
 | `<cwd>` / `<stdin>` | Default working directory / stdin templates. Inherited. |
 | `<formats>` | Named, reusable legacy formats. |
 | `<transports>` | Named programs that perform requests. See [Transports](#transports). |
+| `<downloads concurrency= retries= dir= log_lines=/>` | Settings for the shared download queue. See [Downloads](#downloads). |
 | `<command>` | Top-level subcommands. |
 
 ### `<command>`
@@ -591,6 +660,7 @@ XSD validator cannot represent the recursive `<command>` grammar.
 | `<entry>` | Leaf-only. `<path>`, `<query>`, or user-defined keys -> `.entry`. |
 | `<preconditions><precondition>` | Leaf-only. A non-empty render is a fatal error message (exit 1). |
 | `<fields>` / `<format>` | Output shape (auto) / legacy format. Leaf-only; not both. |
+| `<download over= when=>` | Leaf-only, repeatable. Hands URLs to the download queue. See [Downloads](#downloads). |
 | `<command>` | Nested subcommands. |
 
 ### `<arg>` and `<flag>`
@@ -619,6 +689,10 @@ hidden `--no-NAME` companion.
 | `--as <sink>`     |       |         | Force a `<fields>` representation: `table|list|lines|json|markdown|csv|timeline`. |
 | `--view <name>`   |       |         | Pick a named legacy view, bypassing predicate selection. |
 | `--var KEY=VALUE` |       |         | Set an env var before evaluation (so `{{.env.KEY}}` sees it). Repeatable. |
+| `--concurrency <n>` |     | `4`     | Parallel downloads. See [Downloads](#downloads). |
+| `--download-dir <path>` | | `.`     | Base directory for `<download>` destinations. |
+| `--log-lines <n>`  |      |         | Height of the download display's log region. Default: `min(15, half the terminal)`. |
+| `--no-tui`        |       | false   | Report download progress as plain lines instead of drawing the display. |
 
 Env vars (lower precedence than flags): `NO_FORMAT` (any value disables
 formatting), `API_CLI_FORMAT` (`raw`/`auto`/`always`).
@@ -669,7 +743,7 @@ source <(./api-cli completion bash)
 | Code | Meaning |
 |------|---------|
 | 0    | Success. |
-| 1    | Render error, cobra usage error, request error, or empty command. |
+| 1    | Render error, cobra usage error, request error, failed download, or empty command. |
 | 2    | Config not found or invalid. |
 | 127  | Child binary not found or failed to start. |
 | N    | Any other value is the child's exit code. |
