@@ -173,4 +173,42 @@
 		<run>id -un</run>
 	</command>
 
+	<!--
+		A hand-off to the shared download queue. The step finds the URLs; the
+		<download> hands them over and the queue fetches them concurrently,
+		carrying the auth declared here. It stands in for the leaf's run, so the
+		root request does not also fire.
+	-->
+	<command name="archive" description="Download an album's photo records to a directory.">
+		<arg name="album" type="int" required="true" description="Album id."/>
+		<flag name="limit" type="int" default="5" description="How many to fetch."/>
+		<steps>
+			<step name="album">
+				<entry>
+					<path>/photos</path>
+					<query>
+						<param name="albumId"><value name="arg.album"/></param>
+						<param name="_limit"><value name="flag.limit"/></param>
+					</query>
+				</entry>
+			</step>
+		</steps>
+		<download over="result.album">
+			<url><value name="var.base_url"/>/photos/<value name="id"/></url>
+			<to>album-<value name="arg.album"/>/<value name="id"/>.json</to>
+			<!--
+				Optional digest check, in its per-record form: jsonplaceholder
+				publishes no digests, so this renders empty and NOTHING IS
+				VERIFIED here. Against an API that does publish them, drop the
+				<if> so a missing digest fails instead of being skipped.
+			-->
+			<hash algo="sha256"><if test="sha256"><value name="sha256"/></if></hash>
+			<header name="Accept">application/json</header>
+			<if test="env.PHOTO_TOKEN">
+				<header name="Authorization">Bearer <value name="env.PHOTO_TOKEN"/></header>
+				<cookie name="session"><value name="env.PHOTO_SESSION"/></cookie>
+			</if>
+		</download>
+	</command>
+
 </config>
