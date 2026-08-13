@@ -195,79 +195,137 @@ func (t *tui) progressRegion(now time.Time) []string {
 		head += fmt.Sprintf(", %d failed", totals.Failed)
 	}
 	lines := []string{head}
+	lay := planProgressLayout(t.width - 2)
 
 	for _, item := range items {
 		if item.state.Load() != dlActive {
 			continue
 		}
 		p := progressOf(item.done.Load(), item.total.Load(), time.Unix(0, item.start.Load()), now)
-		lines = append(lines, "  "+progressLine(item.label(), p, t.width-2))
+		lines = append(lines, "  "+progressLine(item.label(), p, lay))
 	}
 
-	agg := itemProgress{Done: totals.Bytes, Total: totals.Total, Fraction: -1}
-	if totals.TotalKnown && totals.Total > 0 {
-		agg.Fraction = float64(totals.Bytes) / float64(totals.Total)
+	return append(lines, "  "+progressLine("TOTAL", aggregateProgress(totals), lay))
+}
+
+// aggregateProgress turns a tally into the TOTAL row's numbers. The percentage
+// is always shown: an unreported length makes the denominator a floor, which
+// the row marks with a "+" rather than replacing the whole reading with "?".
+func aggregateProgress(t downloadTotals) itemProgress {
+	p := itemProgress{Done: t.Bytes, Total: t.Total, Fraction: -1, TotalIsFloor: !t.TotalKnown}
+	if t.Total > 0 {
+		p.Fraction = float64(t.Bytes) / float64(t.Total)
 	}
-	if totals.Elapsed > 0 && totals.Bytes > 0 {
-		agg.Speed = float64(totals.Bytes) / totals.Elapsed.Seconds()
-		if totals.TotalKnown && totals.Total > totals.Bytes && agg.Speed > 0 {
-			agg.ETA = time.Duration(float64(totals.Total-totals.Bytes) / agg.Speed * float64(time.Second))
-			agg.HasETA = true
+	if t.Elapsed <= 0 || t.Bytes <= 0 {
+		return p
+	}
+	p.Speed = float64(t.Bytes) / t.Elapsed.Seconds()
+	if t.TotalKnown && t.Total > t.Bytes && p.Speed > 0 {
+		p.ETA = time.Duration(float64(t.Total-t.Bytes) / p.Speed * float64(time.Second))
+		p.HasETA = true
+	}
+	return p
+}
+
+// The progress columns, each sized for its widest legal value: a bar, the
+// percentage, the size pair ("1023.9 KiB / 1023.9 KiB+"), the rate
+// ("999.9 KiB/s"), and the ETA. Every column has a fixed width so the rows form
+// real columns.
+//
+// prio orders what goes when the terminal cannot fit them all. The bar goes
+// first despite being the eye-catching column: it is the one thing here the
+// percentage beside it already says. At 80 columns that leaves name, percent,
+// sizes, rate, and ETA — the numbers — and spends the recovered room on the
+// file name.
+const (
+	colBar = iota
+	colPct
+	colSizes
+	colSpeed
+	colETA
+)
+
+var progressColumns = []struct{ kind, width, prio int }{
+	{colBar, 16, 1},
+	{colPct, 4, 9},
+	{colSizes, 24, 5},
+	{colSpeed, 11, 2},
+	{colETA, 9, 3},
+}
+
+// The label column takes the room the columns leave, within these bounds. The
+// cap keeps a wide terminal from pushing the numbers half a screen away from
+// the names they belong to.
+const (
+	minLabelWidth = 8
+	maxLabelWidth = 32
+)
+
+// progressLayout is the column arrangement for one frame. It is computed once
+// and used for every row, because a layout decided per row would let one wide
+// value knock that row's columns out of line with its neighbours'.
+type progressLayout struct {
+	label int
+	keep  []int
+}
+
+func planProgressLayout(width int) progressLayout {
+	if width < minLabelWidth+2 {
+		width = minLabelWidth + 2
+	}
+	keep := make([]int, 0, len(progressColumns))
+	for i := range progressColumns {
+		keep = append(keep, i)
+	}
+	tail := func() int {
+		w := 0
+		for _, i := range keep {
+			w += progressColumns[i].width + 2
 		}
+		return w - 2
 	}
-	return append(lines, "  "+progressLine("TOTAL", agg, t.width-2))
-}
-
-// segment is one column of a progress line. Lower priority is dropped first
-// when the terminal is too narrow for the whole line.
-type segment struct {
-	text string
-	prio int
-}
-
-// progressLine lays out one download as label + columns, dropping the least
-// important columns until it fits. The label keeps whatever room is left.
-func progressLine(label string, p itemProgress, width int) string {
-	if width < 12 {
-		width = 12
-	}
-	segs := []segment{
-		{progressBar(p.Fraction, 14), 3},
-		{percentText(p.Fraction), 9},
-		{sizesText(p.Done, p.Total), 5},
-		{speedText(p.Speed), 1},
-		{etaText(p), 2},
-	}
-	const minLabel = 8
-	for len(segs) > 1 && minLabel+2+segmentWidth(segs) > width {
-		segs = dropLowest(segs)
-	}
-	tail := joinSegments(segs)
-	labelW := width - 2 - displayWidth(tail)
-	if labelW < minLabel {
-		labelW = minLabel
-	}
-	return padRight(labelW, clipDisplay(label, labelW)) + "  " + tail
-}
-
-func segmentWidth(segs []segment) int { return displayWidth(joinSegments(segs)) }
-
-func joinSegments(segs []segment) string {
-	parts := make([]string, 0, len(segs))
-	for _, s := range segs {
-		parts = append(parts, s.text)
-	}
-	return strings.Join(parts, "  ")
-}
-
-func dropLowest(segs []segment) []segment {
-	worst := 0
-	for i, s := range segs {
-		if s.prio < segs[worst].prio {
-			worst = i
+	for len(keep) > 1 && minLabelWidth+2+tail() > width {
+		worst := 0
+		for k, i := range keep {
+			if progressColumns[i].prio < progressColumns[keep[worst]].prio {
+				worst = k
+			}
 		}
+		keep = append(keep[:worst:worst], keep[worst+1:]...)
 	}
-	return append(segs[:worst:worst], segs[worst+1:]...)
+	label := min(max(width-2-tail(), minLabelWidth), maxLabelWidth)
+	return progressLayout{label: label, keep: keep}
+}
+
+// progressLine renders one row into the frame's layout. Each column is clipped
+// and padded to its declared width, so an unexpectedly wide value costs its own
+// cell and never the alignment.
+func progressLine(label string, p itemProgress, lay progressLayout) string {
+	if lay.label == 0 {
+		lay = planProgressLayout(80)
+	}
+	parts := make([]string, 0, len(lay.keep)+1)
+	parts = append(parts, padRight(lay.label, clipDisplay(label, lay.label)))
+	for _, i := range lay.keep {
+		col := progressColumns[i]
+		parts = append(parts, padRight(col.width, clipDisplay(columnText(col.kind, p), col.width)))
+	}
+	return strings.TrimRight(strings.Join(parts, "  "), " ")
+}
+
+func columnText(kind int, p itemProgress) string {
+	switch kind {
+	case colBar:
+		return progressBar(p.Fraction, 14)
+	case colPct:
+		return percentText(p.Fraction)
+	case colSizes:
+		return sizesText(p)
+	case colSpeed:
+		return speedText(p.Speed)
+	default:
+		return etaText(p)
+	}
 }
 
 // progressBar draws a fixed-width bar. A negative fraction means the total is
@@ -290,26 +348,32 @@ func percentText(fraction float64) string {
 	return fmt.Sprintf("%3.0f%%", fraction*100)
 }
 
-func sizesText(done, total int64) string {
+// sizesText renders "downloaded / total". A total that is only a floor — some
+// download in the tally never reported a length — is marked with "+" rather
+// than presented as the finish line.
+func sizesText(p itemProgress) string {
 	right := "?"
-	if total > 0 {
-		right = humanBytes(total)
+	if p.Total > 0 {
+		right = humanBytes(p.Total)
+		if p.TotalIsFloor {
+			right += "+"
+		}
 	}
-	return fmt.Sprintf("%9s / %-9s", humanBytes(done), right)
+	return fmt.Sprintf("%10s / %s", humanBytes(p.Done), right)
 }
 
 func speedText(speed float64) string {
 	if speed <= 0 {
-		return fmt.Sprintf("%10s", "")
+		return ""
 	}
-	return fmt.Sprintf("%10s", humanBytes(int64(speed))+"/s")
+	return humanBytes(int64(speed)) + "/s"
 }
 
 func etaText(p itemProgress) string {
 	if !p.HasETA {
-		return fmt.Sprintf("%-9s", "")
+		return ""
 	}
-	return fmt.Sprintf("%-9s", "ETA "+shortDuration(p.ETA))
+	return "ETA " + shortDuration(p.ETA)
 }
 
 // humanBytes formats a byte count in binary units, the size a download tool is

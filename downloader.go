@@ -72,11 +72,13 @@ type downloadItem struct {
 	err error
 }
 
+// label is the short name the display and the log use: the destination's file
+// name once the transfer has resolved it, and the URL's until then.
 func (d *downloadItem) label() string {
 	if s := d.dest(); s != "" {
 		return filepath.Base(s)
 	}
-	return path.Base(d.spec.URL)
+	return urlFilename(d.spec.URL)
 }
 
 func (d *downloadItem) dest() string {
@@ -178,7 +180,13 @@ func (q *downloadQueue) worker() {
 func (b *downloadBatch) add(spec downloadSpec) *downloadItem {
 	item := &downloadItem{spec: spec, batch: b}
 	item.total.Store(-1)
-	item.name.Store(spec.Dest)
+	// A directory destination is not yet a file name — the response gets to
+	// pick that — so the item stays unnamed until the transfer resolves it.
+	if spec.DestIsDir {
+		item.name.Store("")
+	} else {
+		item.name.Store(spec.Dest)
+	}
 	b.mu.Lock()
 	b.items = append(b.items, item)
 	b.mu.Unlock()
@@ -210,7 +218,7 @@ func (q *downloadQueue) run(item *downloadItem) {
 	log := item.batch.log
 	item.state.Store(dlActive)
 	item.start.Store(time.Now().UnixNano())
-	log("downloading %s", item.spec.URL)
+	log("downloading %s", item.label())
 
 	var err error
 	for attempt := 0; ; attempt++ {
@@ -225,7 +233,7 @@ func (q *downloadQueue) run(item *downloadItem) {
 		if !retryable || attempt >= q.retries {
 			break
 		}
-		log("retrying %s: %v", item.spec.URL, err)
+		log("retrying %s: %v", item.label(), err)
 		item.done.Store(0)
 		time.Sleep(retryDelay)
 	}
@@ -235,7 +243,7 @@ func (q *downloadQueue) run(item *downloadItem) {
 	item.mu.Unlock()
 	item.end.Store(time.Now().UnixNano())
 	item.state.Store(dlFailed)
-	log("failed %s: %v", item.spec.URL, err)
+	log("failed %s: %v", item.label(), err)
 }
 
 // fetch performs one attempt. The second return reports whether retrying could
@@ -362,8 +370,9 @@ func tallyDownloads(items []*downloadItem, now time.Time) downloadTotals {
 	for _, item := range items {
 		done := item.done.Load()
 		total := item.total.Load()
+		state := item.state.Load()
 		t.Bytes += done
-		switch item.state.Load() {
+		switch state {
 		case dlActive:
 			t.Active++
 		case dlDone:
@@ -374,7 +383,12 @@ func tallyDownloads(items []*downloadItem, now time.Time) downloadTotals {
 			t.Queued++
 		}
 		if total < 0 {
-			t.TotalKnown = false
+			// Only unfinished work leaves the aggregate open-ended. A finished
+			// download's bytes are its final contribution either way, so a run
+			// that ended with a failure still reports a settled total.
+			if state == dlActive || state == dlQueued {
+				t.TotalKnown = false
+			}
 			t.Total += done
 		} else {
 			t.Total += total
@@ -397,6 +411,9 @@ type itemProgress struct {
 	Speed       float64 // bytes/sec, 0 when not measurable yet
 	ETA         time.Duration
 	HasETA      bool
+	// TotalIsFloor marks an aggregate whose denominator is incomplete because
+	// some download in it has not reported a length.
+	TotalIsFloor bool
 }
 
 // progressOf derives an item's rate and ETA from the bytes it has moved since

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -325,6 +326,14 @@ func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSp
 	urls := splitLines(rawURL)
 	if len(urls) == 0 {
 		return nil, fmt.Errorf("download[%d]: <url> rendered empty", idx)
+	}
+	// Checked here rather than at the socket: a <url> built from a mistyped
+	// path renders to the template engine's placeholder, and "unsupported
+	// protocol scheme" some seconds later does not point at the typo.
+	for _, u := range urls {
+		if parsed, err := url.Parse(u); err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return nil, fmt.Errorf("download[%d]: <url> rendered %q, which is not an http(s) URL", idx, u)
+		}
 	}
 
 	to := ""

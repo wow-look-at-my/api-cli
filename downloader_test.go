@@ -281,9 +281,25 @@ func TestTallyDownloads(t *testing.T) {
 	assert.Equal(t, 1, got.Done)
 	assert.Equal(t, 1, got.Failed)
 	assert.Equal(t, int64(150), got.Bytes)
-	assert.False(t, got.TotalKnown, "an unreported length makes the total a floor")
+	assert.False(t, got.TotalKnown, "a queued file of unreported length makes the total a floor")
 	assert.Equal(t, int64(300), got.Total)
 	assert.InDelta(t, 4*time.Second, got.Elapsed, float64(time.Second))
+}
+
+func TestTallyDownloads_FinishedRunHasASettledTotal(t *testing.T) {
+	now := time.Now()
+	done := &downloadItem{}
+	done.state.Store(dlDone)
+	done.done.Store(100)
+	done.total.Store(100)
+	done.start.Store(now.Add(-time.Second).UnixNano())
+	failed := &downloadItem{}
+	failed.state.Store(dlFailed)
+	failed.total.Store(-1)
+
+	got := tallyDownloads([]*downloadItem{done, failed}, now)
+	assert.True(t, got.TotalKnown, "a failed download never gets a size, and nothing is still coming")
+	assert.Equal(t, int64(100), got.Total)
 }
 
 func TestProgressOf(t *testing.T) {
