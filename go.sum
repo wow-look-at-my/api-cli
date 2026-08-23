@@ -57,8 +57,6 @@ github.com/wow-look-at-my/api-dsl v0.0.0-20260823132545-703875e77856 h1:hVOyUB/k
 github.com/wow-look-at-my/api-dsl v0.0.0-20260823132545-703875e77856/go.mod h1:NQ6lujlyarCFqv7acKB+kv1bwio8Ta5Haofz6zEMd/M=
 github.com/wow-look-at-my/ascii-timeline v0.0.0-20260530054731-aa3acff2a327 h1:QVcQEgst4ZD2VBL59/hyvscS0C+m8Bzzw1cr0IjCkwA=
 github.com/wow-look-at-my/ascii-timeline v0.0.0-20260530054731-aa3acff2a327/go.mod h1:LFgfRy1D557LcnXyRQjmIH1xoCVNeWXXjvn9CEgAE1c=
-github.com/wow-look-at-my/go-containers v0.0.0-20260820210621-2e1261867045 h1:1ir/Tf75SwE29xK4Fn5e85LksidQh9x/6GGGFOjzv7w=
-github.com/wow-look-at-my/go-containers v0.0.0-20260820210621-2e1261867045/go.mod h1:7j8wbDwrqh+uJnlENqD5iwsgYkF4y3kIgremn/ctvVE=
 github.com/wow-look-at-my/testify v0.0.0-20260217010200-5fd2c08e3abb h1:kLSElPimf1wjuunb+noAlkV/xzrE65BzqnQr3Xr31u4=
 github.com/wow-look-at-my/testify v0.0.0-20260217010200-5fd2c08e3abb/go.mod h1:xlD/Hz0iizP83KvPMWiQ8dbEvfjRGQ2A5qsK+GBq9do=
 github.com/yosida95/uritemplate/v3 v3.0.2 h1:Ed3Oyj9yrmi9087+NczuL5BwkIc4wvTb5zIM+UJPGz4=

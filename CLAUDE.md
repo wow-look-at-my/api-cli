@@ -16,12 +16,11 @@ orientation for code changes.
 
 ## Module / dependencies
 
-- Module: `github.com/wow-look-at-my/api-cli`, Go 1.26.
+- Module: `github.com/wow-look-at-my/api-cli`, Go 1.25.0.
 - CLI parsing: `github.com/spf13/cobra`.
 - The spec language: `github.com/wow-look-at-my/api-dsl` — the XML DOM, the `<value>`/`<if>`/`<for>` placeholder compiler, and the renderer. This repo invented that language and api-mirror now shares it, so it lives there and this repo consumes it. `dsl.go` is the local boundary; see the file map.
 - Config parsing: **XML** via api-dsl's `ParseDOM`, over the stdlib `encoding/xml` tokenizer. No third-party config parser. (The Go decoder only supports XML 1.0, so api-dsl strips the leading `<?xml ... ?>` declaration before decoding.)
 - Templating: Go stdlib `text/template` + `github.com/Masterminds/sprig/v3`, both reached through api-dsl's `Renderer`.
-- Sets: `github.com/wow-look-at-my/go-containers/set` — a `map[...]bool` used as a set is a vet error, not a style note.
 - jq (response shaping): `github.com/itchyny/gojq` (pure Go, embedded — no jq
   binary needed).
 - TTY / terminal width: `golang.org/x/term`. East Asian Wide width:
@@ -146,6 +145,7 @@ top-level `<downloads>` configures the shared download queue that leaf-level
   past 750.
 - **XML 1.1.** Shipped `*.xml`/`*.xsd` must declare `version="1.1"` (the CI `xml-validator` rejects 1.0 / missing declarations). api-dsl strips the declaration before it decodes, so an inline test snippet can omit it.
 - **The language is not ours to edit here.** A change to `<value>`/`<if>`/`<for>`, to the DOM, or to a shared template helper belongs in api-dsl. A helper that is only meaningful to a CLI belongs in `cliFuncs` (`render.go`).
+- **Sets are `[]string` + `slices.Contains`.** A `map[...]bool` used as a set is a vet error, not a style note. These collections are read once at boot or once per render, so the linear scan costs nothing; api-mirror does the same. Do not reach for a container dependency, and do not silence the analyzer with `map[...]struct{}`.
 - **`spread` sentinel.** NUL/SOH markers delimit spread elements (`render.go` /
   `exec.go`).
 - **Number normalization.** `parseResult` (`exec.go`) normalizes JSON numbers to

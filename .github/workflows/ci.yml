@@ -16,9 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The docker job COPYs api-cli_linux_${TARGETARCH}, so this repo builds native per-platform binaries rather than the action's default single fat APE.
       - uses: wow-look-at-my/go-toolchain@v1
         with:
           autorelease: 'true'
+          os: linux,darwin,windows
+          arch: amd64,arm64
       - name: Run samples/github/github.xml demo into the step summary
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
