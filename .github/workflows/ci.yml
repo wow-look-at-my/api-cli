@@ -31,11 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # The schema is an XML 1.1 document like every config, so it is validated
-      # like one. Patterns rather than names, so a file added later is covered.
-      # No `schema:` input: --schema overflows the stack on the recursive
-      # <command> grammar, so this job checks well-formedness only.
+      # The schema is an XML 1.1 document too, and a pattern covers a file added later.
       - uses: wow-look-at-my/xml-validator@master
+        # No schema= here: --schema overflows the stack on the recursive <command> grammar.
         with:
           files: '**/*.xml **/*.xsd'
 
