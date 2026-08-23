@@ -64,27 +64,6 @@ func TestResolveFormat_NamedAndInline(t *testing.T) {
 	assert.Nil(t, resolveFormat(&FormatRef{Name: "missing"}, registry))
 }
 
-func TestIsTruthy(t *testing.T) {
-	cases := []struct {
-		in   string
-		want bool
-	}{
-		{"", false},
-		{"  ", false},
-		{"false", false},
-		{"0", false},
-		{"no", false},
-		{"FALSE", false},
-		{"true", true},
-		{"yes", true},
-		{"1", true},
-		{"hello", true},
-	}
-	for _, c := range cases {
-		assert.Equal(t, c.want, isTruthy(c.in), "input %q", c.in)
-	}
-}
-
 func TestRenderPredicate_Truthy(t *testing.T) {
 	ctx := map[string]any{"tty": true}
 	cache := map[predicateKey]bool{}

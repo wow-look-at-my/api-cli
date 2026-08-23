@@ -111,11 +111,32 @@ func (t *tui) watchInterrupt() {
 			signal.Stop(sig)
 		case <-sig:
 			signal.Stop(sig)
-			t.Stop()
-			fmt.Fprintln(t.out, "interrupted; partial transfers left as .part files")
-			tuiExit(interruptExitCode)
+			t.onSignal()
 		}
 	}()
+}
+
+// onSignal restores the terminal and ends the run. A display that already
+// stopped does nothing instead.
+//
+// Notify fans a signal out to every display the process started, and both
+// select cases above go ready together when Stop races the signal, so a
+// retired display reaches this point. It owns no terminal any more. Answering
+// would write over the display that replaced it, and would end that run.
+func (t *tui) onSignal() {
+	if t.isStopped() {
+		return
+	}
+	t.Stop()
+	fmt.Fprintln(t.out, "interrupted; partial transfers left as .part files")
+	tuiExit(interruptExitCode)
+}
+
+// isStopped reports whether Stop already ran.
+func (t *tui) isStopped() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.stopped
 }
 
 // Stop ends repainting, leaving the final frame on screen for the user to read.

@@ -18,11 +18,9 @@ orientation for code changes.
 
 - Module: `github.com/wow-look-at-my/api-cli`, Go 1.25.0.
 - CLI parsing: `github.com/spf13/cobra`.
-- Config parsing: **XML** via the stdlib `encoding/xml` tokenizer (`xmldom.go`).
-  No third-party config parser. (The Go decoder only supports XML 1.0, so the
-  leading `<?xml ... ?>` declaration is stripped before decoding — see
-  `stripXMLDecl`.)
-- Templating: Go stdlib `text/template` + `github.com/Masterminds/sprig/v3`.
+- The spec language: `github.com/wow-look-at-my/api-dsl` — the XML DOM, the `<value>`/`<if>`/`<for>` placeholder compiler, and the renderer. This repo invented that language and api-mirror now shares it, so it lives there and this repo consumes it. `dsl.go` is the local boundary; see the file map.
+- Config parsing: **XML** via api-dsl's `ParseDOM`, over the stdlib `encoding/xml` tokenizer. No third-party config parser. (The Go decoder only supports XML 1.0, so api-dsl strips the leading `<?xml ... ?>` declaration before decoding.)
+- Templating: Go stdlib `text/template` + `github.com/Masterminds/sprig/v3`, both reached through api-dsl's `Renderer`.
 - jq (response shaping): `github.com/itchyny/gojq` (pure Go, embedded — no jq
   binary needed).
 - TTY / terminal width: `golang.org/x/term`. East Asian Wide width:
@@ -43,8 +41,7 @@ Do not add new third-party deps without a clear reason.
 |---------------------------------|-------------------------------------------------------------|
 | `main.go`                       | Entrypoint, root cobra command, persistent flags, config loading. `preparseGlobalFlags` extracts `--config` / `--mcp` / `--cors` before the cobra tree is built. Config discovery: `./api.xml`. |
 | `config.go`                     | Schema structs (`Config`, `Command`, `Step`, `Arg`, `Flag`, `Cmd`, `Request`, `Param`, `Header`, `Response`, `Fields`, `Field`, `Format`, `View`, `FormatRef`); `Load` (bytes → `parseConfigXML` → `validate`); `validate`/`validateCommand`/`validateRequest`. |
-| `xmldom.go`                     | XML tokenizer → order-preserving DOM (`xnode`): preserves mixed content, CDATA, attribute order. `stripXMLDecl`, `checkAttrs` (rejects unknown attributes). |
-| `xmlcompile.go`                 | Placeholder compiler: `<value>`/`<if>`/`<else>`/`<for>` (+ surrounding text) → Go `text/template` source. `cleanText`/`dedentTabs` handle structural-tab whitespace. |
+| `dsl.go`                        | The api-dsl boundary: `xnode` = `apidsl.Node`, plus `parseDOM`/`checkAttrs`/`compileContent`/`compileTextElem`/`textOf`/`isPlaceholder`/`envMap`/`lookupPath`/`mergeVars`/`isTruthy`/`templateTruthy`. An element's name is the method `Name()`, never a field. |
 | `xmlsource.go`                  | `parseConfigXML` + config builders (`buildConfig`, `buildCommandNode`/`addCommandChild`, `buildRun`, `buildRequest`, `buildFields`, `buildEntry`, ...). `<entry>` is converted to a `json.RawMessage`. |
 | `build.go`                      | Builds the `cobra.Command` tree. Threads inheritance for run (`*Cmd`/`*Request`), `cwd`/`stdin`/`confirm`/`format`. `runLeaf`, `renderVars` (fixpoint — vars may reference other vars). |
 | `flags.go`                      | Declared `<arg>`/`<flag>` on both sides of a run: `registerFlag`/`registerConflicts` on the cobra command, `gatherArgs`/`gatherFlags`/`passthroughParse` back out into `.arg`/`.flag`. |
@@ -59,7 +56,7 @@ Do not add new third-party deps without a clear reason.
 | `downloadrun.go`                | `downloadSession` ties a leaf to the queue: settings, TTY detection (`stdoutSize`), swapping the output channels to the TUI, drain, and the summary. `mcpRunDownloads` is the MCP path. |
 | `tui.go`                        | The download display: a fixed-width column layout decided once per frame (`planProgressLayout`/`progressLine`), the aggregate row, a capped self-scrolling log region, and in-place ANSI repainting. |
 | `format.go`                     | Execution + presentation dispatch: `execLeaf` picks command-vs-request execution and fields-vs-legacy-format-vs-raw output. `captureRun`, `streamRequest`, `runFieldsFormatted`, `runFormatted`, `resolveFormat`, `selectView`. |
-| `render.go`                     | `renderString`, `renderEntry`, `lookupPath`, `funcMap` (sprig + custom helpers incl. `truthy`, `querystring`, `urlpath`, `spread`, ...). |
+| `render.go`                     | `renderString` (over one shared `apidsl.NewRenderer(cliFuncs())`), `renderEntry`, and `cliFuncs` — the helpers this CLI adds to the shared set (`shellquote`, `spread`, `fileExists`, `tabwriter`, `padRight`, ...). `addQueryValue` builds a `<query from=>` value. |
 | `align.go`                      | Width-aware aligner: `displayWidth`, `stripANSI`, `alignColumns`, `padRight`/`padLeft`. |
 | `mcp.go` / `mcp_exec.go`        | MCP server: one tool per leaf. Threads run (`*Cmd`/`*Request`) + format inheritance; `mcpExecLeaf` runs the leaf and applies `<fields>` (like `--format=always`: `.tty` true, width 80) or a legacy format. |
 | `cors.go` / `debug.go` / `docs.go` | CORS middleware for MCP HTTP/SSE; verbose/debug logging; the `docs` subcommand (embeds `README.md`, `api.schema.xsd`, `api.example.xml`). |
@@ -146,9 +143,9 @@ top-level `<downloads>` configures the shared download queue that leaf-level
 - **Line budget.** go-toolchain warns at 500 lines, **errors at 750**. Several
   files are near the warning; extract into a topical file rather than growing one
   past 750.
-- **XML 1.1.** Shipped `*.xml`/`*.xsd` must declare `version="1.1"` (the CI
-  `xml-validator` rejects 1.0 / missing declarations). The Go loader strips the
-  declaration, so inline test snippets can omit it.
+- **XML 1.1.** Shipped `*.xml`/`*.xsd` must declare `version="1.1"` (the CI `xml-validator` rejects 1.0 / missing declarations). api-dsl strips the declaration before it decodes, so an inline test snippet can omit it.
+- **The language is not ours to edit here.** A change to `<value>`/`<if>`/`<for>`, to the DOM, or to a shared template helper belongs in api-dsl. A helper that is only meaningful to a CLI belongs in `cliFuncs` (`render.go`).
+- **Sets are `[]string` + `slices.Contains`.** A `map[...]bool` used as a set is a vet error, not a style note. These collections are read once at boot or once per render, so the linear scan costs nothing; api-mirror does the same. Do not reach for a container dependency, and do not silence the analyzer with `map[...]struct{}`.
 - **`spread` sentinel.** NUL/SOH markers delimit spread elements (`render.go` /
   `exec.go`).
 - **Number normalization.** `parseResult` (`exec.go`) normalizes JSON numbers to

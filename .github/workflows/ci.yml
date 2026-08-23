@@ -16,9 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The docker job COPYs api-cli_linux_${TARGETARCH}, so this repo builds native per-platform binaries rather than the action's default single fat APE.
       - uses: wow-look-at-my/go-toolchain@v1
         with:
           autorelease: 'true'
+          os: linux,darwin,windows
+          arch: amd64,arm64
       - name: Run samples/github/github.xml demo into the step summary
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -28,14 +31,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate XML configs and schema (well-formedness, XML 1.1)
-        run: |
-          curl -fsSL --compressed -o /usr/local/bin/xml-validator \
-            "https://dl.pazer.build/xml-validator?os=linux&arch=amd64"
-          chmod +x /usr/local/bin/xml-validator
-          xml-validator api.example.xml
-          xml-validator api.schema.xsd
-          xml-validator samples/github/github.xml
+      # The schema is an XML 1.1 document too, and a pattern covers a file added later.
+      - uses: wow-look-at-my/xml-validator@master
+        # No schema= here: --schema overflows the stack on the recursive <command> grammar.
+        with:
+          files: '**/*.xml **/*.xsd'
 
   docker:
     needs: test

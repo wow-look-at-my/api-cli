@@ -3,12 +3,13 @@ module github.com/wow-look-at-my/api-cli
 go 1.25.0
 
 require (
-	github.com/Masterminds/sprig/v3 v3.2.3
+	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
 	github.com/itchyny/gojq v0.12.19
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
-	github.com/wow-look-at-my/ascii-timeline v0.0.0-20260530054731-aa3acff2a327
+	github.com/wow-look-at-my/api-dsl v0.0.0-20260823132545-703875e77856 // go-toolchain:auto-branch
+	github.com/wow-look-at-my/ascii-timeline v0.0.0-20260530054731-aa3acff2a327 // go-toolchain:auto-branch
 	golang.org/x/term v0.43.0
 	golang.org/x/text v0.37.0
 )

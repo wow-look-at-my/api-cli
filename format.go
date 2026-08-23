@@ -144,18 +144,6 @@ func ctxIdentity(m map[string]any) uintptr {
 	return reflect.ValueOf(m).Pointer()
 }
 
-func isTruthy(s string) bool {
-	t := strings.TrimSpace(s)
-	if t == "" {
-		return false
-	}
-	switch strings.ToLower(t) {
-	case "false", "0", "no":
-		return false
-	}
-	return true
-}
-
 // parseInput interprets the captured child stdout per the format's Input
 // setting.
 func parseInput(s, mode string) any {
