@@ -29,9 +29,9 @@ func buildTransports(n *xnode) (map[string]*Transport, error) {
 		return nil, err
 	}
 	out := map[string]*Transport{}
-	for _, child := range n.children() {
-		if child.name != "transport" {
-			return nil, fmt.Errorf("<transports>: unexpected child element <%s>", child.name)
+	for _, child := range n.Children() {
+		if child.Name() != "transport" {
+			return nil, fmt.Errorf("<transports>: unexpected child element <%s>", child.Name())
 		}
 		t, err := buildTransport(child)
 		if err != nil {
@@ -49,13 +49,13 @@ func buildTransport(n *xnode) (*Transport, error) {
 	if err := checkAttrs(n, "name", "default"); err != nil {
 		return nil, err
 	}
-	name := strings.TrimSpace(n.attr("name"))
+	name := strings.TrimSpace(n.Attr("name"))
 	if name == "" {
 		return nil, fmt.Errorf("<transport>: name= is required")
 	}
-	t := &Transport{Name: name, Default: n.attr("default") == "true"}
-	for _, child := range n.children() {
-		switch child.name {
+	t := &Transport{Name: name, Default: n.Attr("default") == "true"}
+	for _, child := range n.Children() {
+		switch child.Name() {
 		case "run":
 			cmd, req, err := buildRun(child)
 			if err != nil {
@@ -78,7 +78,7 @@ func buildTransport(n *xnode) (*Transport, error) {
 			}
 			t.Stdin, t.StdinSet = s, true
 		default:
-			return nil, fmt.Errorf("<transport %q>: unexpected child element <%s>", name, child.name)
+			return nil, fmt.Errorf("<transport %q>: unexpected child element <%s>", name, child.Name())
 		}
 	}
 	return t, nil

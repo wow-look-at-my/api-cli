@@ -157,6 +157,42 @@ func TestTUI_InterruptRestoresTheTerminal(t *testing.T) {
 	assert.Contains(t, out, "left as .part files")
 }
 
+// Notify fans a signal out to every display the process started, and one process
+// runs many in turn (the MCP server serves one per tool call). A retired display
+// that answered would write over the display that replaced it, and would end
+// that run. Driving onSignal directly pins the decision, because reaching it
+// through a real signal depends on which select case the runtime picks.
+func TestTUI_ARetiredDisplayIgnoresTheSignal(t *testing.T) {
+	exited := make(chan int, 4)
+	prev := tuiExit
+	tuiExit = func(code int) { exited <- code }
+	t.Cleanup(func() { tuiExit = prev })
+
+	var retired bytes.Buffer
+	old := newTUI(&retired, 60, 24, 3, staticItems())
+	old.Start()
+	old.Stop()
+	before := retired.String()
+
+	old.onSignal()
+
+	assert.Equal(t, before, retired.String(), "a retired display writes nothing on a signal")
+	assert.NotContains(t, retired.String(), "left as .part files")
+	assert.Empty(t, exited, "a retired display must not end the run")
+
+	var live bytes.Buffer
+	cur := newTUI(&live, 60, 24, 3, staticItems())
+	cur.Start()
+	t.Cleanup(cur.Stop)
+
+	cur.onSignal()
+
+	assert.Contains(t, live.String(), ansiShowCur, "the live display puts the cursor back")
+	assert.Contains(t, live.String(), "left as .part files")
+	require.Len(t, exited, 1)
+	assert.Equal(t, interruptExitCode, <-exited)
+}
+
 func TestProgressLine_DropsColumnsAsTheTerminalNarrows(t *testing.T) {
 	p := itemProgress{Done: 512, Total: 2048, Fraction: 0.25, Speed: 1024, ETA: 3 * time.Second, HasETA: true}
 

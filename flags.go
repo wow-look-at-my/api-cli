@@ -6,6 +6,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -62,7 +63,7 @@ func registerFlag(cmd *cobra.Command, f Flag) {
 // exclusion machinery. Each unordered pair is registered once.
 func registerConflicts(cmd *cobra.Command, flags []Flag) {
 	type pair struct{ a, b string }
-	seen := map[pair]bool{}
+	seen := make([]pair, 0, len(flags))
 	for _, f := range flags {
 		for _, peer := range f.Conflicts {
 			a, b := f.Name, peer
@@ -70,10 +71,10 @@ func registerConflicts(cmd *cobra.Command, flags []Flag) {
 				a, b = b, a
 			}
 			p := pair{a, b}
-			if seen[p] {
+			if slices.Contains(seen, p) {
 				continue
 			}
-			seen[p] = true
+			seen = append(seen, p)
 			cmd.MarkFlagsMutuallyExclusive(a, b)
 		}
 	}
