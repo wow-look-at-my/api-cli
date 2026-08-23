@@ -6,6 +6,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 // Config is the top-level JSON schema.
@@ -374,33 +376,20 @@ type Field struct {
 	ShowIn    string `json:"showIn,omitempty"`
 }
 
-var reservedCommandNames = map[string]bool{
-	"help":       true,
-	"completion": true,
-	"__complete": true,
-	"docs":       true,
-}
+// reservedCommandNames are the names cobra owns. A config cannot declare one.
+var reservedCommandNames = set.Of("help", "completion", "__complete", "docs")
 
-var validFlagTypes = map[string]bool{
-	"":             true, // empty defaults to "string"
-	"string":       true,
-	"bool":         true,
-	"int":          true,
-	"string-slice": true,
-}
+// validFlagTypes are the accepted <flag type=> values. The empty string
+// defaults to "string".
+var validFlagTypes = set.Of("", "string", "bool", "int", "string-slice")
 
-var validArgTypes = map[string]bool{
-	"":       true, // defaults to "string"
-	"string": true,
-	"int":    true,
-}
+// validArgTypes are the accepted <arg type=> values. The empty string defaults
+// to "string".
+var validArgTypes = set.Of("", "string", "int")
 
-var validFormatInputs = map[string]bool{
-	"":      true, // defaults to "json"
-	"json":  true,
-	"lines": true,
-	"raw":   true,
-}
+// validFormatInputs are the accepted <format input=> values. The empty string
+// defaults to "json".
+var validFormatInputs = set.Of("", "json", "lines", "raw")
 
 // Load reads and parses an XML config file. The XML element tree is mapped to
 // the Config model by parseConfigXML (see xmlsource.go); node placeholders
@@ -513,22 +502,22 @@ func validateFormat(f *Format, where string) error {
 	if f == nil {
 		return fmt.Errorf("%s: empty format", where)
 	}
-	if !validFormatInputs[f.Input] {
+	if !validFormatInputs.Contains(f.Input) {
 		return fmt.Errorf("%s: input %q must be one of json|lines|raw", where, f.Input)
 	}
 	if len(f.Views) == 0 {
 		return fmt.Errorf("%s: at least one view is required", where)
 	}
-	viewNames := map[string]bool{}
+	viewNames := set.New[string]()
 	for i, v := range f.Views {
 		vw := fmt.Sprintf("%s.views[%d]", where, i)
 		if strings.TrimSpace(v.Name) == "" {
 			return fmt.Errorf("%s: name required", vw)
 		}
-		if viewNames[v.Name] {
+		if viewNames.Contains(v.Name) {
 			return fmt.Errorf("%s: duplicate view name %q", vw, v.Name)
 		}
-		viewNames[v.Name] = true
+		viewNames.Add(v.Name)
 		if strings.TrimSpace(v.Template) == "" {
 			return fmt.Errorf("%s: template required", vw)
 		}
@@ -547,7 +536,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	if strings.ContainsAny(c.Name, " \t\n/") {
 		return fmt.Errorf("%s: name %q must not contain whitespace or slashes", where, c.Name)
 	}
-	if reservedCommandNames[c.Name] {
+	if reservedCommandNames.Contains(c.Name) {
 		return fmt.Errorf("%s: name %q is reserved by cobra", where, c.Name)
 	}
 	if siblings[c.Name] {
@@ -562,20 +551,20 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		return fmt.Errorf("%s: passthrough is only allowed on leaves", where)
 	}
 
-	argNames := map[string]bool{}
+	argNames := set.New[string]()
 	requiredAfterOptional := false
 	for i, a := range c.Args {
 		aw := fmt.Sprintf("%s.args[%d]", where, i)
 		if strings.TrimSpace(a.Name) == "" {
 			return fmt.Errorf("%s: name required", aw)
 		}
-		if !validArgTypes[a.Type] {
+		if !validArgTypes.Contains(a.Type) {
 			return fmt.Errorf("%s: type %q must be one of string|int", aw, a.Type)
 		}
-		if argNames[a.Name] {
+		if argNames.Contains(a.Name) {
 			return fmt.Errorf("%s: duplicate arg name %q", aw, a.Name)
 		}
-		argNames[a.Name] = true
+		argNames.Add(a.Name)
 		if a.Variadic && i != len(c.Args)-1 {
 			return fmt.Errorf("%s: variadic arg %q must be the last arg", aw, a.Name)
 		}
@@ -586,28 +575,28 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		}
 	}
 
-	flagNames := map[string]bool{}
-	flagShorts := map[string]bool{}
+	flagNames := set.New[string]()
+	flagShorts := set.New[string]()
 	for i, fl := range c.Flags {
 		fw := fmt.Sprintf("%s.flags[%d]", where, i)
 		if strings.TrimSpace(fl.Name) == "" {
 			return fmt.Errorf("%s: name required", fw)
 		}
-		if !validFlagTypes[fl.Type] {
+		if !validFlagTypes.Contains(fl.Type) {
 			return fmt.Errorf("%s: type %q must be one of string|bool|int|string-slice", fw, fl.Type)
 		}
-		if flagNames[fl.Name] {
+		if flagNames.Contains(fl.Name) {
 			return fmt.Errorf("%s: duplicate flag name %q", fw, fl.Name)
 		}
-		flagNames[fl.Name] = true
+		flagNames.Add(fl.Name)
 		if fl.Short != "" {
 			if len(fl.Short) != 1 {
 				return fmt.Errorf("%s: short %q must be a single character", fw, fl.Short)
 			}
-			if flagShorts[fl.Short] {
+			if flagShorts.Contains(fl.Short) {
 				return fmt.Errorf("%s: duplicate short %q", fw, fl.Short)
 			}
-			flagShorts[fl.Short] = true
+			flagShorts.Add(fl.Short)
 		}
 		if strings.HasPrefix(fl.Name, "no-") {
 			return fmt.Errorf("%s: flag name %q cannot start with \"no-\" (reserved for bool negation)", fw, fl.Name)
@@ -619,7 +608,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 			if peer == fl.Name {
 				return fmt.Errorf("%s: flag %q conflicts with itself", fw, fl.Name)
 			}
-			if !flagNames[peer] {
+			if !flagNames.Contains(peer) {
 				return fmt.Errorf("%s: flag %q conflicts with unknown flag %q", fw, fl.Name, peer)
 			}
 		}
@@ -662,16 +651,16 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	if len(c.Preconditions) > 0 && len(c.Commands) > 0 {
 		return fmt.Errorf("%s: `preconditions` is only allowed on leaves (nodes with no subcommands)", where)
 	}
-	stepNames := map[string]bool{}
+	stepNames := set.New[string]()
 	for i, s := range c.Steps {
 		sw := fmt.Sprintf("%s.steps[%d]", where, i)
 		if strings.TrimSpace(s.Name) == "" {
 			return fmt.Errorf("%s: name required", sw)
 		}
-		if stepNames[s.Name] {
+		if stepNames.Contains(s.Name) {
 			return fmt.Errorf("%s: duplicate step name %q", sw, s.Name)
 		}
-		stepNames[s.Name] = true
+		stepNames.Add(s.Name)
 		if s.Command.Defined() && s.Request.Defined() {
 			return fmt.Errorf("%s: a <run> is either a command or a request, not both", sw)
 		}

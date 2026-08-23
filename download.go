@@ -136,10 +136,10 @@ func buildDownloads(n *xnode) (*Downloads, error) {
 	if err := checkAttrs(n, "concurrency", "retries", "dir", "log_lines"); err != nil {
 		return nil, err
 	}
-	if len(n.children()) > 0 {
+	if len(n.Children()) > 0 {
 		return nil, fmt.Errorf("<downloads>: settings element takes no children (a per-command hand-off is <download>)")
 	}
-	d := &Downloads{Dir: strings.TrimSpace(n.attr("dir"))}
+	d := &Downloads{Dir: strings.TrimSpace(n.Attr("dir"))}
 	for _, f := range []struct {
 		attr string
 		dst  *int
@@ -148,7 +148,7 @@ func buildDownloads(n *xnode) (*Downloads, error) {
 		{"retries", &d.Retries},
 		{"log_lines", &d.LogLines},
 	} {
-		raw := strings.TrimSpace(n.attr(f.attr))
+		raw := strings.TrimSpace(n.Attr(f.attr))
 		if raw == "" {
 			continue
 		}
@@ -158,7 +158,7 @@ func buildDownloads(n *xnode) (*Downloads, error) {
 		}
 		*f.dst = v
 	}
-	d.RetriesSet = n.hasAttr("retries")
+	d.RetriesSet = n.HasAttr("retries")
 	return d, nil
 }
 
@@ -168,12 +168,12 @@ func buildDownload(n *xnode) (Download, error) {
 		return Download{}, err
 	}
 	d := Download{
-		Over:      strings.TrimSpace(n.attr("over")),
-		When:      n.attr("when"),
-		Transport: strings.TrimSpace(n.attr("transport")),
+		Over:      strings.TrimSpace(n.Attr("over")),
+		When:      n.Attr("when"),
+		Transport: strings.TrimSpace(n.Attr("transport")),
 	}
-	for _, child := range n.children() {
-		switch child.name {
+	for _, child := range n.Children() {
+		switch child.Name() {
 		case "url":
 			s, err := compileTextElem(child)
 			if err != nil {
@@ -197,7 +197,7 @@ func buildDownload(n *xnode) (Download, error) {
 				return Download{}, err
 			}
 			d.Hash = strings.TrimSpace(s)
-			d.HashAlgo = strings.ToLower(strings.TrimSpace(child.attr("algo")))
+			d.HashAlgo = strings.ToLower(strings.TrimSpace(child.Attr("algo")))
 			if d.HashAlgo == "" {
 				d.HashAlgo = defaultHashAlgo
 			}
@@ -206,24 +206,24 @@ func buildDownload(n *xnode) (Download, error) {
 			if err != nil {
 				return Download{}, err
 			}
-			d.append(child.name, h)
+			d.append(child.Name(), h)
 		case "if":
 			if err := checkAttrs(child, "test"); err != nil {
 				return Download{}, err
 			}
-			test := child.attr("test")
-			for _, inner := range child.children() {
-				if inner.name != "header" && inner.name != "cookie" {
-					return Download{}, fmt.Errorf("<download><if>: only <header> and <cookie> children are supported, got <%s>", inner.name)
+			test := child.Attr("test")
+			for _, inner := range child.Children() {
+				if inner.Name() != "header" && inner.Name() != "cookie" {
+					return Download{}, fmt.Errorf("<download><if>: only <header> and <cookie> children are supported, got <%s>", inner.Name())
 				}
 				h, err := buildHeader(inner, test)
 				if err != nil {
 					return Download{}, err
 				}
-				d.append(inner.name, h)
+				d.append(inner.Name(), h)
 			}
 		default:
-			return Download{}, fmt.Errorf("<download>: unexpected child element <%s>", child.name)
+			return Download{}, fmt.Errorf("<download>: unexpected child element <%s>", child.Name())
 		}
 	}
 	return d, nil

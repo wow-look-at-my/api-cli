@@ -11,20 +11,8 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/Masterminds/sprig/v3"
+	apidsl "github.com/wow-look-at-my/api-dsl"
 )
-
-// envMap returns the process environment as a map[string]string for use as
-// {{.env.VAR}} inside templates.
-func envMap() map[string]string {
-	out := make(map[string]string, len(os.Environ()))
-	for _, kv := range os.Environ() {
-		if i := strings.IndexByte(kv, '='); i > 0 {
-			out[kv[:i]] = kv[i+1:]
-		}
-	}
-	return out
-}
 
 // spreadSentinel (NUL) delimits elements in spread output; spreadEndSentinel
 // (SOH) terminates a spread region. These are reserved internal markers —
@@ -32,44 +20,33 @@ func envMap() map[string]string {
 const spreadSentinel = "\x00"
 const spreadEndSentinel = "\x01"
 
-// funcMap is the template function set available in every rendered template.
-// It combines sprig's text FuncMap (a broad library of string/list/math/json
-// helpers) with a few custom helpers specific to this tool.
-func funcMap() template.FuncMap {
-	fm := sprig.TxtFuncMap()
-	fm["querystring"] = queryString
-	fm["shellquote"] = shellQuote
-	fm["urlpath"] = url.PathEscape
-	fm["spread"] = spread
-	fm["fileExists"] = fileExists
-	fm["dirExists"] = dirExists
-	fm["repeatkey"] = repeatKey
-	fm["tabwriter"] = tabwriter
-	fm["padRight"] = padRight
-	fm["padLeft"] = padLeft
-	fm["displayWidth"] = displayWidth
-	fm["stripANSI"] = stripANSI
-	fm["filterSuffix"] = filterSuffix
-	fm["filterPrefix"] = filterPrefix
-	fm["truthy"] = templateTruthy
-	return fm
+// cliFuncs are the template functions this CLI adds to the shared set. Each one
+// serves a shell, a file path, or a terminal column, which is vocabulary the
+// shared language does not carry.
+func cliFuncs() template.FuncMap {
+	return template.FuncMap{
+		"shellquote":   shellQuote,
+		"spread":       spread,
+		"fileExists":   fileExists,
+		"dirExists":    dirExists,
+		"tabwriter":    tabwriter,
+		"padRight":     padRight,
+		"padLeft":      padLeft,
+		"displayWidth": displayWidth,
+		"stripANSI":    stripANSI,
+		"filterSuffix": filterSuffix,
+		"filterPrefix": filterPrefix,
+	}
 }
 
-// templateTruthy reports whether v is truthy under the same rules as the format
-// `when` predicates (see isTruthy): nil and false are falsy; strings use
-// isTruthy ("", "false", "0", "no" falsy); other values are stringified first.
-// Used by <if test=> placeholders compiled from XML.
-func templateTruthy(v any) bool {
-	switch x := v.(type) {
-	case nil:
-		return false
-	case bool:
-		return x
-	case string:
-		return isTruthy(x)
-	default:
-		return isTruthy(fmt.Sprintf("%v", x))
-	}
+// renderer executes every template this tool renders. It is read-only after
+// construction, and safe for concurrent use.
+var renderer = apidsl.NewRenderer(cliFuncs())
+
+// renderString executes a text/template against data with the shared functions
+// plus cliFuncs.
+func renderString(tmpl string, data any) (string, error) {
+	return renderer.Render(tmpl, data)
 }
 
 // tabwriter formats rows with columns aligned by displayWidth. Accepts:
@@ -231,45 +208,9 @@ func filterPrefix(prefix string, list any) ([]string, error) {
 	return out, nil
 }
 
-// queryString renders a map (or struct) of parameters as a URL-encoded query
-// string prefixed with "?". An empty/nil map yields the empty string so it's
-// safe to inline directly after a path: "{{.entry.path}}{{querystring .entry.query}}".
-//
-// Accepted input shapes:
-//   - map[string]string, map[string]any — keys and string values
-//   - values that are themselves slices produce repeated key=value pairs
-//     (e.g., {"tag": ["a", "b"]} → "?tag=a&tag=b")
-//
-// Values that render to the empty string are dropped, so optional flags
-// defaulted to "" don't clutter the URL.
-func queryString(v any) (string, error) {
-	if v == nil {
-		return "", nil
-	}
-	values := url.Values{}
-	switch m := v.(type) {
-	case map[string]string:
-		for k, val := range m {
-			if val != "" {
-				values.Add(k, val)
-			}
-		}
-	case map[string]any:
-		for k, val := range m {
-			if err := addQueryValue(values, k, val); err != nil {
-				return "", err
-			}
-		}
-	default:
-		return "", fmt.Errorf("querystring: unsupported type %T (need map)", v)
-	}
-	enc := values.Encode()
-	if enc == "" {
-		return "", nil
-	}
-	return "?" + enc, nil
-}
-
+// addQueryValue adds one declared parameter to values, per its Go type. A
+// nested slice repeats the key. An empty string is dropped, so an unset
+// optional parameter does not clutter the URL.
 func addQueryValue(values url.Values, key string, v any) error {
 	switch val := v.(type) {
 	case nil:
@@ -302,46 +243,11 @@ func addQueryValue(values url.Values, key string, v any) error {
 	return nil
 }
 
-// repeatKey emits repeated query-string parameters for a single key, one per
-// slice element: repeatkey "tag" ["a","b"] → "tag=a&tag=b" (URL-encoded, no
-// leading "?"). Empty string elements are dropped. Nil/empty slices yield "".
-func repeatKey(key string, v any) (string, error) {
-	parts, err := toStringSlice(v)
-	if err != nil {
-		return "", fmt.Errorf("repeatkey: %w", err)
-	}
-	values := url.Values{}
-	for _, p := range parts {
-		if p != "" {
-			values.Add(key, p)
-		}
-	}
-	enc := values.Encode()
-	return enc, nil
-}
-
 // shellQuote wraps s in single quotes for safe interpolation into a POSIX sh
 // command line. Each embedded single quote is escaped by closing the quoted
 // run, emitting an escaped quote, and reopening (see the replacement below).
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
-// renderString executes a text/template against data using the full funcMap.
-//
-// missingkey=zero: accessing a missing map key yields the zero value of the
-// map's element type. Combined with sprig's `required` helper this lets the
-// config author decide per-field whether a missing value is an error.
-func renderString(tmpl string, data any) (string, error) {
-	t, err := template.New("t").Funcs(funcMap()).Option("missingkey=zero").Parse(tmpl)
-	if err != nil {
-		return "", fmt.Errorf("parse template %q: %w", tmpl, err)
-	}
-	var buf bytes.Buffer
-	if err := t.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("execute template %q: %w", tmpl, err)
-	}
-	return buf.String(), nil
 }
 
 // renderEntry walks raw JSON, rendering every string leaf as a template
@@ -400,36 +306,4 @@ func walkEntry(v any, data any) (any, error) {
 	default:
 		return v, nil
 	}
-}
-
-// lookupPath walks a dotted context path ("var.filter", "data.items") into a
-// nested map structure. Returns nil if any segment is missing or a non-map is
-// traversed. An empty path returns the value unchanged.
-func lookupPath(data any, path string) any {
-	cur := data
-	for _, seg := range strings.Split(path, ".") {
-		seg = strings.TrimSpace(seg)
-		if seg == "" {
-			continue
-		}
-		m, ok := cur.(map[string]any)
-		if !ok {
-			return nil
-		}
-		cur = m[seg]
-	}
-	return cur
-}
-
-// mergeVars merges `child` into a copy of `parent`, with the child winning on
-// key collision. Nil inputs are treated as empty maps. Returns a fresh map.
-func mergeVars(parent, child map[string]any) map[string]any {
-	out := make(map[string]any, len(parent)+len(child))
-	for k, v := range parent {
-		out[k] = v
-	}
-	for k, v := range child {
-		out[k] = v
-	}
-	return out
 }

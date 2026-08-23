@@ -7,20 +7,14 @@ import (
 	"strings"
 
 	"github.com/wow-look-at-my/ascii-timeline/timeline"
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 // timelineEventKeys are the field names the timeline sink understands. A record
 // becomes one timeline event by reading the fields with these names; any other
 // field is ignored. "date" makes a point event; "start"+"end" make a duration
 // event. The remaining keys are optional annotations.
-var timelineEventKeys = map[string]bool{
-	"label":       true,
-	"date":        true,
-	"start":       true,
-	"end":         true,
-	"description": true,
-	"color":       true,
-}
+var timelineEventKeys = set.Of("label", "date", "start", "end", "description", "color")
 
 // renderTimelineSink represents the records as a horizontal ASCII timeline,
 // rendered by the ascii-timeline library. Each record is one event; the field
@@ -38,7 +32,7 @@ func renderTimelineSink(recs []record, fields []Field, ctx map[string]any) (stri
 	for _, r := range recs {
 		ev := map[string]string{}
 		for _, fld := range inc {
-			if !timelineEventKeys[fld.Name] {
+			if !timelineEventKeys.Contains(fld.Name) {
 				continue
 			}
 			v, err := cellValue(fld, r, ctx)
