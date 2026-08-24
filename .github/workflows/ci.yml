@@ -16,12 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # The docker job COPYs api-cli_linux_${TARGETARCH}, so this repo builds native per-platform binaries rather than the action's default single fat APE.
       - uses: wow-look-at-my/go-toolchain@v1
         with:
           autorelease: 'true'
-          os: linux,darwin,windows
-          arch: amd64,arm64
       - name: Run samples/github/github.xml demo into the step summary
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -36,31 +33,3 @@ jobs:
         # No schema= here: --schema overflows the stack on the recursive <command> grammar.
         with:
           files: '**/*.xml **/*.xsd'
-
-  docker:
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: wow-look-at-my/actions@cache-download#latest
-        with:
-          name: go-build-test
-      - name: Log in to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      - name: Build and push
-        run: |
-          branch_tag="$(echo "${{ github.ref_name }}" | tr '/' '-')"
-          tags="--tag ghcr.io/${{ github.repository_owner }}/github:${branch_tag}"
-          if [ "${{ github.ref }}" = "refs/heads/master" ]; then
-            tags="${tags} --tag ghcr.io/${{ github.repository_owner }}/github:latest"
-          fi
-          docker buildx create --use
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --file samples/github/Dockerfile.github \
-            ${tags} \
-            --push \
-            .
