@@ -27,7 +27,10 @@ type record struct {
 // sink auto-selects from the data shape. width (>0) enables priority-based
 // column dropping for tables.
 func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width int) (string, error) {
-	recs, shape := resolveRecords(f, parsed, ctx)
+	recs, shape, err := resolveRecords(f, parsed, ctx)
+	if err != nil {
+		return "", err
+	}
 
 	fieldsList := f.List
 	derived := len(fieldsList) == 0
@@ -42,10 +45,7 @@ func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width 
 		return "", fmt.Errorf("unknown representation %q", sink)
 	}
 
-	var (
-		out string
-		err error
-	)
+	var out string
 	switch sink {
 	case "json":
 		return renderJSONSink(f, recs, fieldsList, shape, parsed, ctx, derived)
@@ -86,59 +86,6 @@ func humanSink(sink string) bool {
 	switch sink {
 	case "table", "list", "lines":
 		return true
-	}
-	return false
-}
-
-// resolveRecords selects the record set per f.Over and classifies its shape:
-// "array-objects", "array-scalars", "map-entries", "single", or "scalar".
-func resolveRecords(f *Fields, parsed any, ctx map[string]any) ([]record, string) {
-	src := parsed
-	if f.Over != "" {
-		src = lookupPath(ctx, f.Over)
-	}
-	switch v := src.(type) {
-	case []any:
-		hasMap := false
-		for _, el := range v {
-			if _, ok := el.(map[string]any); ok {
-				hasMap = true
-				break
-			}
-		}
-		recs := make([]record, 0, len(v))
-		for _, el := range v {
-			recs = append(recs, record{obj: el})
-		}
-		// Scalars (lines) only when no element is an object and no fields are
-		// declared. A declared field list, or any object element (e.g. a null
-		// row among objects), keeps the table shape; missing values render empty.
-		if !hasMap && len(f.List) == 0 {
-			return recs, "array-scalars"
-		}
-		return recs, "array-objects"
-	case map[string]any:
-		if fieldsWalkMap(f) {
-			keys := sortedKeys(v)
-			recs := make([]record, 0, len(v))
-			for _, k := range keys {
-				recs = append(recs, record{obj: v[k], key: k, isEntry: true})
-			}
-			return recs, "map-entries"
-		}
-		return []record{{obj: v}}, "single"
-	default:
-		return []record{{obj: src}}, "scalar"
-	}
-}
-
-// fieldsWalkMap reports whether any field reads @key/@value, the signal that a
-// map should be walked entry-by-entry rather than treated as a single record.
-func fieldsWalkMap(f *Fields) bool {
-	for _, fld := range f.List {
-		if fld.Path == "@key" || fld.Path == "@value" {
-			return true
-		}
 	}
 	return false
 }
@@ -244,7 +191,7 @@ func rawFieldValue(fld Field, rec record, ctx map[string]any) (any, error) {
 	if fld.Path == "" {
 		return rec.obj, nil
 	}
-	return lookupPath(rec.obj, fld.Path), nil
+	return lookupValue(rec.obj, fld.Path), nil
 }
 
 // exprData builds the data context for a field expr: the whole format context,

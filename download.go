@@ -355,8 +355,8 @@ func downloadRecords(d *Download, data map[string]any, idx int) ([]map[string]an
 	if d.Over == "" {
 		return []map[string]any{data}, nil
 	}
-	src := lookupPath(data, d.Over)
-	if src == nil {
+	src, ok := lookupData(data, d.Over)
+	if !ok || src == nil {
 		return nil, fmt.Errorf("download[%d]: over=%q resolved to nothing", idx, d.Over)
 	}
 	list, ok := src.([]any)

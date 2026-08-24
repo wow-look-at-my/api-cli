@@ -132,7 +132,7 @@ requests through your own program instead, see [Transports](#transports).
 | `<query><param name="k">v</param></query>` | Explicit params. Empty values are dropped. An enclosing `<if test=>` gates the params it wraps. |
 | `<header name="H">v</header>` | A header (value is a template). An enclosing `<if test=>` gates the headers it wraps. |
 | `<body>` | Request body (template); omit for no body. |
-| `<response jq="path"/>` | Shape the JSON body with the jq program at that context path. Omit `<response>` to return the raw body verbatim (diffs, READMEs, ...). |
+| `<response jq="path"/>` | Shape the JSON body with the jq program at that context path. A path that names nothing, or names something other than a string, fails the run. Omit `<response>` to return the raw body verbatim (diffs, READMEs, ...). |
 
 A non-2xx/3xx status prints the body to stderr and exits non-zero (like
 `curl -f`). The root `<run>` is typically the shared request; per-leaf `<run>`
@@ -348,7 +348,7 @@ Automatic representation, by data shape:
 
 | `<field>` attribute | Meaning |
 |---------------------|---------|
-| body text | Record-relative source path (`login`, `user.login`). |
+| body text | Record-relative source path (`login`, `user.login`). A numeric step indexes a list (`assets.0.name`). |
 | `@key` / `@value` | The entry key/value when `over=` walks a map. |
 | `expr=` | A virtual field: a Go template with the record as `.` and the whole context as `$` (`$.var`, `$.data`). Overrides the path. |
 | `default=` | Substitute for an empty value. |
@@ -358,8 +358,16 @@ Automatic representation, by data shape:
 | `show_in=` | Gate per sink: `""`/`*` = all; an allowlist (`json,csv`) shows only there; a negated list (`!json`) shows everywhere except there. |
 
 `<fields over="path"/>` selects where the records live (`data.items`, a map for
-`@key`/`@value`, `data.names` for scalars) rather than the whole body.
-`footer=` adds a trailing summary line for the human sinks.
+`@key`/`@value`, `data.names` for scalars) rather than the whole body. The path
+reads against the body first (`items`), then against the whole context
+(`data.items`), so either spelling reaches the same records. A numeric step
+indexes a list (`pages.0.rows`). `footer=` adds a trailing summary line for the
+human sinks.
+
+**A path that names nothing is an error**, and so is one that names a scalar:
+the run exits non-zero and names the path. An empty table over exit 0 reads as
+an API that returned nothing, which is how a renamed field costs an afternoon.
+An empty **list** is a real answer and stays quiet.
 
 With **no** `<fields>` at all, a request leaf prints its (jq-shaped) JSON body;
 add `--as=table` to project nothing and table the raw keys.
@@ -733,6 +741,7 @@ hidden `--no-NAME` companion.
 | Flag              | Short | Default | Notes |
 |-------------------|-------|---------|-------|
 | `--config <path>` |       |         | Config file (XML). Falls back to `./api.xml`. |
+| `--version`       |       |         | Print the binary's version. Needs no config. |
 | `--mcp <transport>` |     |         | Run the config as an MCP server: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes a tool; HTTP/SSE also expose `GET /health`. Behaves like `--format=always`. |
 | `--cors <level>`  |       | `strict`| CORS for the MCP HTTP/SSE server. See [CORS levels](#cors-levels). |
 | `--quiet`         | `-q`  | false   | Suppress the `N executions` line. |
