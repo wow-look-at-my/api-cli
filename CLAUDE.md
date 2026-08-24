@@ -50,6 +50,7 @@ Do not add new third-party deps without a clear reason.
 | `transport.go`                  | `<transports>`: parsing (`buildTransports`), the package-level registry (`installTransports`, published by `newRoot`/`buildMCPServer`), selection (`resolveTransportNamed`: `transport=` > registry default > built-in; no runtime override by design), `runViaTransport` (requests), and `prepareDownloadTransport` (downloads: renders the program's argv at plan time). `preparedRequest.context` exposes `.request` to the program's argv. |
 | `steps.go`                      | `runSteps`: the one step loop, shared by the CLI and MCP paths (they take a `stepCapture` and an errOut). A step runs its own command/request or inherits the leaf's. |
 | `fields.go`                     | The `<fields>` auto-formatter: `renderFields` represents one declaration as table / list / lines / raw / json / markdown / csv / timeline, with `show_in` gating, `@key`/`@value` map walking, and priority-based column dropping. Reuses `align.go`. |
+| `records.go`                    | Path resolution and record selection: `lookupData` (maps by key, lists by index — the DSL's own lookup walks maps only), `lookupValue`, `overSource` (body-relative then context-relative, and the loud failure), `resolveRecords`, `fieldsWalkMap`. |
 | `timeline.go`                    | The `timeline` sink (`--as=timeline`): maps each record to an `ascii-timeline` event by field name (`label`/`date`/`start`/`end`/`description`/`color`), then renders via the `timeline` library. Color/width come from the format context (`.tty`/`.width`). |
 | `download.go`                   | The `<download>` hand-off: `Downloads`/`Download` structs, `buildDownloads`/`buildDownload`, validation, settings resolution (config + flags), and `planDownloads` (renders declarations into `downloadSpec`s, expanding `over=`). `renderHash` normalizes an optional `<hash>` and rejects one that is not a well-formed digest. |
 | `downloader.go`                 | The shared queue: a process-wide worker pool (`sharedQueue`) plus a per-invocation `downloadBatch`. `fetch` (net/http) and `fetchViaTransport` (a program's stdout) both write through `partFile` — `.part` sibling, byte count, digest, rename. Retries transient failures at a fixed cadence; names dir destinations from `Content-Disposition` or the URL. Progress fields are atomic (`tallyDownloads`, `progressOf`). |
@@ -117,6 +118,12 @@ top-level `<downloads>` configures the shared download queue that leaf-level
 5. **Fields scoping.** A `<field>` body is a record-relative path; `@key`/
    `@value` are the entry when `over=` walks a map; `expr=` sees the record
    promoted to the top level plus the whole context via `$` (`$.var`, `$.data`).
+   Both a field path and `over=` resolve through `lookupData`, so a numeric step
+   indexes a list. `over=` reads the body first, then the whole context.
+5b. **A projection that finds nothing says so.** `over=` pointing at a missing
+   path or a scalar, and `<response jq=>` pointing at a missing var, each fail
+   the run. These paths used to render one empty record over exit 0, which reads
+   as an empty API rather than a broken config.
 6. **Templates use `missingkey=zero`.** Don't change this default.
 7. **Test redirection.** `execStdin/Stdout/Stderr`, `httpClient`, and
    `downloadClient` are package-level vars; tests swap them. The download queue

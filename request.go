@@ -226,9 +226,15 @@ func applyJQ(jqPath string, raw []byte, data map[string]any) (string, error) {
 
 	program := ""
 	if jqPath != "" {
-		if s, ok := lookupPath(data, jqPath).(string); ok {
-			program = strings.TrimSpace(s)
+		v, ok := lookupData(data, jqPath)
+		if !ok || v == nil {
+			return "", fmt.Errorf("response jq=%q resolved to nothing", jqPath)
 		}
+		s, ok := v.(string)
+		if !ok {
+			return "", fmt.Errorf("response jq=%q is %s, not a jq program", jqPath, jsonTypeName(v))
+		}
+		program = strings.TrimSpace(s)
 	}
 	if program == "" {
 		return marshalJSON(input)
