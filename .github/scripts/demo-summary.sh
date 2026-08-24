@@ -23,18 +23,21 @@
 
 set -euo pipefail
 
-bin=./build/api-cli
-# CI builds via `go-toolchain matrix`, which emits per-platform binaries
-# (api-cli_<os>_<arch>) instead of a bare build/api-cli; fall back to the
-# linux/amd64 binary the ubuntu runner uses.
-[[ -x "$bin" ]] || bin=./build/api-cli_linux_amd64
+artifact=./build/api-cli
 cfg=samples/github/github.xml
 sum="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 
-if [[ ! -x "$bin" ]]; then
-    echo "demo: binary not found at $bin (did go-toolchain run first?)" >&2
+if [[ ! -x "$artifact" ]]; then
+    echo "demo: binary not found at $artifact (did go-toolchain run first?)" >&2
     exit 1
 fi
+
+# `go-toolchain matrix` builds one fat APE. An APE rewrites its own header on
+# first exec, so the file stops matching its checksum. Run a throwaway copy and
+# leave the artifact pristine.
+bin="$(mktemp -d)/api-cli"
+cp "$artifact" "$bin"
+chmod +x "$bin"
 if [[ ! -f "$cfg" ]]; then
     echo "demo: config not found at $cfg" >&2
     exit 1
