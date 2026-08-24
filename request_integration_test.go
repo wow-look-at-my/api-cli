@@ -76,7 +76,7 @@ func TestIntegration_RequestRawStreaming(t *testing.T) {
 	}
 	code, out := execCmd(t, cfg, "diff")
 	require.Equal(t, 0, code)
-	assert.Equal(t, "raw diff body\n", out)
+	assert.Equal(t, "raw diff body", out)
 }
 
 func TestIntegration_RequestNoFormatGivesRaw(t *testing.T) {

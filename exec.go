@@ -104,6 +104,35 @@ func captureExec(c *Cmd, cwd, stdin string, data any) (string, int) {
 	return buf.String(), 0
 }
 
+// captureExecTo captures stdout and sends stderr to errOut instead of the
+// process's own. Child stdin is always explicit, never inherited: the callers
+// are contexts where the parent's stdin is either the MCP protocol channel or
+// the user's terminal, and neither belongs to the child.
+func captureExecTo(c *Cmd, cwd, stdin string, data any, errOut io.Writer) (string, int) {
+	if !c.Defined() {
+		fmt.Fprintln(errOut, "error: command is empty")
+		return "", 1
+	}
+	cmd, err := buildExecCmd(c, data)
+	if err != nil {
+		fmt.Fprintln(errOut, "error:", err)
+		return "", 1
+	}
+	cmd.Dir = cwd
+	cmd.Stdin = strings.NewReader(stdin)
+	var outBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = errOut
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return outBuf.String(), exitErr.ExitCode()
+		}
+		fmt.Fprintln(errOut, "error:", err)
+		return outBuf.String(), 127
+	}
+	return outBuf.String(), 0
+}
+
 // captureExecCapped is the format-path capture variant. It buffers the
 // child's stdout up to maxBytes; if the child exceeds the cap, the buffered
 // prefix is flushed to execStdout and the remainder streams through. The
@@ -232,13 +261,28 @@ func normalizeNumbers(v any) any {
 }
 
 func buildExecCmd(c *Cmd, data any) (*exec.Cmd, error) {
+	argv, err := resolveArgv(c, data)
+	if err != nil {
+		return nil, err
+	}
+	return exec.Command(argv[0], argv[1:]...), nil
+}
+
+// resolveArgv renders a command into the exact argv that will run it: the shell
+// form becomes ["/bin/sh", "-c", <rendered>], the argv form its rendered
+// elements.
+//
+// Split out of buildExecCmd for the caller that cannot execute where it
+// renders: a <download> resolves its transport while the leaf's data context
+// still exists, and the queue runs the result later, on a worker, with no
+// context in reach. Rendering stays in one place either way.
+func resolveArgv(c *Cmd, data any) ([]string, error) {
 	if c.Shell {
 		rendered, err := renderString(c.Template, data)
 		if err != nil {
 			return nil, fmt.Errorf("render command: %w", err)
 		}
-		rendered = expandSpreadForShell(rendered)
-		return exec.Command("/bin/sh", "-c", rendered), nil
+		return []string{"/bin/sh", "-c", expandSpreadForShell(rendered)}, nil
 	}
 	if len(c.Argv) == 0 {
 		return nil, fmt.Errorf("argv command is empty")
@@ -263,7 +307,7 @@ func buildExecCmd(c *Cmd, data any) (*exec.Cmd, error) {
 	if len(argv) == 0 {
 		return nil, fmt.Errorf("argv command rendered to no arguments")
 	}
-	return exec.Command(argv[0], argv[1:]...), nil
+	return argv, nil
 }
 
 // expandSpreadForShell replaces spread sentinel regions in a rendered shell

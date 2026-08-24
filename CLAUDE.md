@@ -18,11 +18,9 @@ orientation for code changes.
 
 - Module: `github.com/wow-look-at-my/api-cli`, Go 1.25.0.
 - CLI parsing: `github.com/spf13/cobra`.
-- Config parsing: **XML** via the stdlib `encoding/xml` tokenizer (`xmldom.go`).
-  No third-party config parser. (The Go decoder only supports XML 1.0, so the
-  leading `<?xml ... ?>` declaration is stripped before decoding — see
-  `stripXMLDecl`.)
-- Templating: Go stdlib `text/template` + `github.com/Masterminds/sprig/v3`.
+- The spec language: `github.com/wow-look-at-my/api-dsl` — the XML DOM, the `<value>`/`<if>`/`<for>` placeholder compiler, and the renderer. This repo invented that language and api-mirror now shares it, so it lives there and this repo consumes it. `dsl.go` is the local boundary; see the file map.
+- Config parsing: **XML** via api-dsl's `ParseDOM`, over the stdlib `encoding/xml` tokenizer. No third-party config parser. (The Go decoder only supports XML 1.0, so api-dsl strips the leading `<?xml ... ?>` declaration before decoding.)
+- Templating: Go stdlib `text/template` + `github.com/Masterminds/sprig/v3`, both reached through api-dsl's `Renderer`.
 - jq (response shaping): `github.com/itchyny/gojq` (pure Go, embedded — no jq
   binary needed).
 - TTY / terminal width: `golang.org/x/term`. East Asian Wide width:
@@ -43,23 +41,29 @@ Do not add new third-party deps without a clear reason.
 |---------------------------------|-------------------------------------------------------------|
 | `main.go`                       | Entrypoint, root cobra command, persistent flags, config loading. `preparseGlobalFlags` extracts `--config` / `--mcp` / `--cors` before the cobra tree is built. Config discovery: `./api.xml`. |
 | `config.go`                     | Schema structs (`Config`, `Command`, `Step`, `Arg`, `Flag`, `Cmd`, `Request`, `Param`, `Header`, `Response`, `Fields`, `Field`, `Format`, `View`, `FormatRef`); `Load` (bytes → `parseConfigXML` → `validate`); `validate`/`validateCommand`/`validateRequest`. |
-| `xmldom.go`                     | XML tokenizer → order-preserving DOM (`xnode`): preserves mixed content, CDATA, attribute order. `stripXMLDecl`, `checkAttrs` (rejects unknown attributes). |
-| `xmlcompile.go`                 | Placeholder compiler: `<value>`/`<if>`/`<else>`/`<for>` (+ surrounding text) → Go `text/template` source. `cleanText`/`dedentTabs` handle structural-tab whitespace. |
+| `dsl.go`                        | The api-dsl boundary: `xnode` = `apidsl.Node`, plus `parseDOM`/`checkAttrs`/`compileContent`/`compileTextElem`/`textOf`/`isPlaceholder`/`envMap`/`lookupPath`/`mergeVars`/`isTruthy`/`templateTruthy`. An element's name is the method `Name()`, never a field. |
 | `xmlsource.go`                  | `parseConfigXML` + config builders (`buildConfig`, `buildCommandNode`/`addCommandChild`, `buildRun`, `buildRequest`, `buildFields`, `buildEntry`, ...). `<entry>` is converted to a `json.RawMessage`. |
-| `build.go`                      | Builds the `cobra.Command` tree. Threads inheritance for run (`*Cmd`/`*Request`), `cwd`/`stdin`/`confirm`/`format`. `runLeaf`, `passthroughParse`, `renderVars` (fixpoint — vars may reference other vars). |
-| `exec.go`                       | Shell/argv execution: `doExec` (streaming), `captureExec` (steps), `captureExecCapped` (format path, 32 MiB cap), `parseResult`, `cappedTee`. |
-| `request.go`                    | First-class HTTP: `runRequest` (net/http) builds URL/query/headers/body from templates; `applyJQ` (embedded gojq) for `<response jq=>`. `httpClient` is a package var (tests swap it for httptest). |
+| `build.go`                      | Builds the `cobra.Command` tree. Threads inheritance for run (`*Cmd`/`*Request`), `cwd`/`stdin`/`confirm`/`format`. `runLeaf`, `renderVars` (fixpoint — vars may reference other vars). |
+| `flags.go`                      | Declared `<arg>`/`<flag>` on both sides of a run: `registerFlag`/`registerConflicts` on the cobra command, `gatherArgs`/`gatherFlags`/`passthroughParse` back out into `.arg`/`.flag`. |
+| `exec.go`                       | Shell/argv execution: `doExec` (streaming), `captureExec` (steps), `captureExecCapped` (format path, 32 MiB cap), `parseResult`, `cappedTee`. `resolveArgv` renders a `*Cmd` to its final argv, for the caller that cannot execute where it renders (a download's transport). |
+| `request.go`                    | First-class HTTP: `prepareRequest` renders URL/query/headers/body into a `preparedRequest`; `runRequest` sends it via `doHTTP` (net/http) or a transport, then `applyJQ` (embedded gojq) for `<response jq=>`. `httpClient` is a package var (tests swap it for httptest). |
+| `transport.go`                  | `<transports>`: parsing (`buildTransports`), the package-level registry (`installTransports`, published by `newRoot`/`buildMCPServer`), selection (`resolveTransportNamed`: `transport=` > registry default > built-in; no runtime override by design), `runViaTransport` (requests), and `prepareDownloadTransport` (downloads: renders the program's argv at plan time). `preparedRequest.context` exposes `.request` to the program's argv. |
+| `steps.go`                      | `runSteps`: the one step loop, shared by the CLI and MCP paths (they take a `stepCapture` and an errOut). A step runs its own command/request or inherits the leaf's. |
 | `fields.go`                     | The `<fields>` auto-formatter: `renderFields` represents one declaration as table / list / lines / raw / json / markdown / csv / timeline, with `show_in` gating, `@key`/`@value` map walking, and priority-based column dropping. Reuses `align.go`. |
+| `records.go`                    | Path resolution and record selection: `lookupData` (maps by key, lists by index — the DSL's own lookup walks maps only), `lookupValue`, `overSource` (body-relative then context-relative, and the loud failure), `resolveRecords`, `fieldsWalkMap`. |
 | `timeline.go`                    | The `timeline` sink (`--as=timeline`): maps each record to an `ascii-timeline` event by field name (`label`/`date`/`start`/`end`/`description`/`color`), then renders via the `timeline` library. Color/width come from the format context (`.tty`/`.width`). |
+| `download.go`                   | The `<download>` hand-off: `Downloads`/`Download` structs, `buildDownloads`/`buildDownload`, validation, settings resolution (config + flags), and `planDownloads` (renders declarations into `downloadSpec`s, expanding `over=`). `renderHash` normalizes an optional `<hash>` and rejects one that is not a well-formed digest. |
+| `downloader.go`                 | The shared queue: a process-wide worker pool (`sharedQueue`) plus a per-invocation `downloadBatch`. `fetch` (net/http) and `fetchViaTransport` (a program's stdout) both write through `partFile` — `.part` sibling, byte count, digest, rename. Retries transient failures at a fixed cadence; names dir destinations from `Content-Disposition` or the URL. Progress fields are atomic (`tallyDownloads`, `progressOf`). |
+| `downloadrun.go`                | `downloadSession` ties a leaf to the queue: settings, TTY detection (`stdoutSize`), swapping the output channels to the TUI, drain, and the summary. `mcpRunDownloads` is the MCP path. |
+| `tui.go`                        | The download display: a fixed-width column layout decided once per frame (`planProgressLayout`/`progressLine`), the aggregate row, a capped self-scrolling log region, and in-place ANSI repainting. |
 | `format.go`                     | Execution + presentation dispatch: `execLeaf` picks command-vs-request execution and fields-vs-legacy-format-vs-raw output. `captureRun`, `streamRequest`, `runFieldsFormatted`, `runFormatted`, `resolveFormat`, `selectView`. |
-| `render.go`                     | `renderString`, `renderEntry`, `lookupPath`, `funcMap` (sprig + custom helpers incl. `truthy`, `querystring`, `urlpath`, `spread`, ...). |
+| `render.go`                     | `renderString` (over one shared `apidsl.NewRenderer(cliFuncs())`), `renderEntry`, and `cliFuncs` — the helpers this CLI adds to the shared set (`shellquote`, `spread`, `fileExists`, `tabwriter`, `padRight`, ...). `addQueryValue` builds a `<query from=>` value. |
 | `align.go`                      | Width-aware aligner: `displayWidth`, `stripANSI`, `alignColumns`, `padRight`/`padLeft`. |
 | `mcp.go` / `mcp_exec.go`        | MCP server: one tool per leaf. Threads run (`*Cmd`/`*Request`) + format inheritance; `mcpExecLeaf` runs the leaf and applies `<fields>` (like `--format=always`: `.tty` true, width 80) or a legacy format. |
 | `cors.go` / `debug.go` / `docs.go` | CORS middleware for MCP HTTP/SSE; verbose/debug logging; the `docs` subcommand (embeds `README.md`, `api.schema.xsd`, `api.example.xml`). |
 | `api.schema.xsd`                | XSD reference for the XML grammar (editor aid + `docs schema`). NOT enforced at runtime; the loader is authoritative. |
-| `api.example.xml`              | Reference config (jsonplaceholder); loaded by `TestExampleConfigsLoad`. |
-| `samples/github/github.xml`     | Read-only GitHub REST API wrapper in XML: first-class requests, jq noise-trimming, fields views. Used by the Docker image and CI demo; loaded by `TestGithubSampleLoads`. |
-| `samples/github/Dockerfile.github` | Alpine image: ships `api-cli` + `github.xml`; ENTRYPOINT runs `--mcp`. No curl/jq (requests + gojq built in). |
+| `api.example.xml`              | Reference config (jsonplaceholder); loaded by `TestExampleConfigsLoad`. Exercises the grammar end to end, including a non-default `curl` transport, a request-step chain (`posts by-user`), and a step-to-queue download hand-off (`archive`). |
+| `samples/github/github.xml`     | Read-only GitHub REST API wrapper in XML: first-class requests, jq noise-trimming, fields views. Used by the CI demo; loaded by `TestGithubSampleLoads`. |
 | `*_test.go`                     | Unit + integration tests. `integration_test.go` has `execCmd`/`execCmdFull`; `request_test.go`/`request_integration_test.go` use httptest via `swapHTTPClient`. |
 | `workers/`                      | Cloudflare Workers TypeScript port. Parses same JSON configs; serves leaves as HTTP endpoints via `fetch()`. See `workers/README.md`. |
 
@@ -76,7 +80,10 @@ interleave text with **placeholders** that compile to Go templates:
 
 `<run>` is the executable (inherited): a `<request>`, an `<argv>` list, or shell
 text. `<entry>` (path/query/arbitrary) becomes `.entry`. `<fields>` declares
-output shape; `<vars>/<var>` define `.var` (fixpoint resolution).
+output shape; `<vars>/<var>` define `.var` (fixpoint resolution). Top-level
+`<transports>` names programs that perform requests instead of net/http, and
+top-level `<downloads>` configures the shared download queue that leaf-level
+`<download>` elements feed.
 
 ## Key design rules
 
@@ -88,7 +95,22 @@ output shape; `<vars>/<var>` define `.var` (fixpoint resolution).
 2. **Placeholders compile to templates.** The node language is sugar over
    `text/template`; everything funnels through `renderString`.
 3. **Execution is command OR request.** `execLeaf` streams raw (`doExec` /
-   `streamRequest`) unless a formatter applies. Steps are command-only.
+   `streamRequest`) unless a formatter applies. Steps take the same fork, and a
+   step declaring neither inherits the leaf's effective run.
+   3b. **A request travels over net/http or a `<transport>` program**, chosen in
+   `resolveTransport`. Both consume the same `preparedRequest`, and the response
+   path (`<response jq=>`, `<fields>`) is identical either way — so a transport
+   is never a second code path to keep in sync.
+3c. **A `<download>` leaf hands off instead of running.** The declarations are
+   the leaf's action (after its steps), so no command or request executes for it
+   — an inherited `<run>` stays put. One process-wide queue serves every
+   hand-off; a `downloadBatch` scopes one invocation's items on it, which is what
+   keeps a long-lived MCP server from mixing tool calls together.
+   3d. **A download travels over net/http or a `<transport>`**, selected exactly
+   as a request's is. The program gets the same `.request` context; the one
+   difference is the return path — its stdout is streamed to the file rather
+   than buffered as a body, because a file need not fit in memory. Both paths
+   then share `partFile` (`.part` sibling, byte count, digest, rename).
 4. **Formatting precedence.** `<fields>` (always, unless the user opts out) >
    legacy `<format>` (author `when` AND user verdict) > raw. `--no-format` /
    `--format=raw` / `NO_FORMAT` veto. `--as=<sink>` forces a fields
@@ -96,9 +118,20 @@ output shape; `<vars>/<var>` define `.var` (fixpoint resolution).
 5. **Fields scoping.** A `<field>` body is a record-relative path; `@key`/
    `@value` are the entry when `over=` walks a map; `expr=` sees the record
    promoted to the top level plus the whole context via `$` (`$.var`, `$.data`).
+   Both a field path and `over=` resolve through `lookupData`, so a numeric step
+   indexes a list. `over=` reads the body first, then the whole context.
+5b. **A projection that finds nothing says so.** `over=` pointing at a missing
+   path or a scalar, and `<response jq=>` pointing at a missing var, each fail
+   the run. These paths used to render one empty record over exit 0, which reads
+   as an empty API rather than a broken config.
 6. **Templates use `missingkey=zero`.** Don't change this default.
-7. **Test redirection.** `execStdin/Stdout/Stderr` and `httpClient` are
-   package-level vars; tests swap them.
+7. **Test redirection.** `execStdin/Stdout/Stderr`, `httpClient`, and
+   `downloadClient` are package-level vars; tests swap them. The download queue
+   is process-wide, so a test that swaps its client also calls
+   `resetSharedQueue` (see `swapDownloadClient`).
+8. **Downloads use their own HTTP client.** `downloadClient` has no overall
+   timeout — `httpClient`'s 60s cap is an API deadline and would be a ceiling on
+   file size — only connect and response-header deadlines.
 
 ## Adding a new field to the config
 
@@ -117,9 +150,9 @@ output shape; `<vars>/<var>` define `.var` (fixpoint resolution).
 - **Line budget.** go-toolchain warns at 500 lines, **errors at 750**. Several
   files are near the warning; extract into a topical file rather than growing one
   past 750.
-- **XML 1.1.** Shipped `*.xml`/`*.xsd` must declare `version="1.1"` (the CI
-  `xml-validator` rejects 1.0 / missing declarations). The Go loader strips the
-  declaration, so inline test snippets can omit it.
+- **XML 1.1.** Shipped `*.xml`/`*.xsd` must declare `version="1.1"` (the CI `xml-validator` rejects 1.0 / missing declarations). api-dsl strips the declaration before it decodes, so an inline test snippet can omit it.
+- **The language is not ours to edit here.** A change to `<value>`/`<if>`/`<for>`, to the DOM, or to a shared template helper belongs in api-dsl. A helper that is only meaningful to a CLI belongs in `cliFuncs` (`render.go`).
+- **Sets are `[]string` + `slices.Contains`.** A `map[...]bool` used as a set is a vet error, not a style note. These collections are read once at boot or once per render, so the linear scan costs nothing; api-mirror does the same. Do not reach for a container dependency, and do not silence the analyzer with `map[...]struct{}`.
 - **`spread` sentinel.** NUL/SOH markers delimit spread elements (`render.go` /
   `exec.go`).
 - **Number normalization.** `parseResult` (`exec.go`) normalizes JSON numbers to
@@ -132,8 +165,8 @@ output shape; `<vars>/<var>` define `.var` (fixpoint resolution).
 
 - `go-toolchain` runs `go mod tidy`, vet, all tests with coverage, and the
   build. **Always `go-toolchain`, never bare `go ...`.** Coverage minimum 80%.
-- CI: `.github/workflows/ci.yml` (go-toolchain test + demo, `validate-xml`,
-  docker).
+- CI: `.github/workflows/ci.yml` (go-toolchain test + demo, `validate-xml`). The
+  build names no `os`/`arch`, so it is one fat APE, autoreleased to buildhost.
 
 ## Cloudflare Workers port (`workers/`)
 

@@ -94,6 +94,8 @@ type mcpLeaf struct {
 
 // buildMCPServer creates an MCP server with one tool per leaf command.
 func buildMCPServer(cfg *Config) *mcp.Server {
+	installTransports(cfg) // see newRoot: every activation path publishes it
+	installDownloads(cfg)
 	srv := mcp.NewServer(&mcp.Implementation{Name: cfg.Name, Version: "1.0.0"}, nil)
 	for _, leaf := range collectMCPLeaves(cfg.Commands, mcpInherit{
 		vars:    cfg.Vars,

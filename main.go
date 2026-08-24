@@ -4,10 +4,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"strings"
 
 	"github.com/spf13/cobra"
 )
+
+// version is stamped at build time with -ldflags "-X main.version=...". An
+// unstamped build falls back to the module version; see buildVersion.
+var version string
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stderr))
@@ -39,10 +44,12 @@ func run(argv []string, errOut io.Writer) int {
 	}
 
 	// No config and user invoked a real subcommand — they need a config.
+	// A version request is answered by the binary itself, so it joins the
+	// help invocations that a missing config must not turn away.
 	// Bare invocation (no args) and help flags fall through to cobra so the
 	// user sees --help output. --mcp mode always requires a config, so don't
 	// exempt help invocations when --mcp is present (that would panic).
-	if cfg == nil && ((!isHelpInvocation(argv) && !isDocsInvocation(argv)) || mcpTransport != "") {
+	if cfg == nil && ((!isHelpInvocation(argv) && !isDocsInvocation(argv) && !isVersionInvocation(argv)) || mcpTransport != "") {
 		fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.xml in the current directory")
 		return 2
 	}
@@ -77,9 +84,17 @@ func newRoot(cfg *Config) *cobra.Command {
 		}
 	}
 
+	// Installed here rather than at load time so every path that turns a
+	// config into runnable commands publishes the registry — a request whose
+	// transport went missing would otherwise fall back to the built-in client
+	// without saying so.
+	installTransports(cfg)
+	installDownloads(cfg)
+
 	root := &cobra.Command{
 		Use:          name,
 		Short:        short,
+		Version:      buildVersion(),
 		SilenceUsage: true,
 	}
 	// Declared so --help lists them. In MCP mode we extract --config /
@@ -97,6 +112,10 @@ func newRoot(cfg *Config) *cobra.Command {
 	root.PersistentFlags().String("format", "auto", "Output formatting mode: raw|auto|always.")
 	root.PersistentFlags().String("view", "", "Select a named view from the active format (overrides selectors).")
 	root.PersistentFlags().String("as", "", "Force a <fields> representation: table|list|lines|json|markdown|csv|timeline (default: auto).")
+	root.PersistentFlags().Int("concurrency", defaultConcurrency, "Parallel downloads for <download> hand-offs.")
+	root.PersistentFlags().String("download-dir", ".", "Base directory for <download> destinations.")
+	root.PersistentFlags().Int("log-lines", 0, "Height of the download TUI's log region (default: min(15, half the terminal)).")
+	root.PersistentFlags().Bool("no-tui", false, "Disable the download TUI; report progress as plain lines.")
 
 	if cfg != nil {
 		for _, c := range cfg.Commands {
@@ -113,6 +132,31 @@ func newRoot(cfg *Config) *cobra.Command {
 	}
 	root.AddCommand(docsCommand())
 	return root
+}
+
+// isVersionInvocation reports whether argv asks for the version. The answer
+// comes from the binary, so it must not depend on finding a config.
+func isVersionInvocation(argv []string) bool {
+	for _, a := range argv {
+		if a == "--version" {
+			return true
+		}
+	}
+	return false
+}
+
+// buildVersion reports the version stamped into the binary. A `go build` of a
+// working tree stamps nothing, so a development build says so rather than
+// claiming a release number.
+func buildVersion() string {
+	if version != "" {
+		return version
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok || info.Main.Version == "" || info.Main.Version == "(devel)" {
+		return "dev"
+	}
+	return info.Main.Version
 }
 
 // isHelpInvocation reports whether argv is a plain help request: no args at

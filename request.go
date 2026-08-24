@@ -18,81 +18,52 @@ import (
 // at an httptest.Server.
 var httpClient = &http.Client{Timeout: 60 * time.Second}
 
+// preparedRequest is a request with every template rendered — what actually
+// goes on the wire. Both the built-in client and a <transport> program consume
+// this, so the two see an identical request.
+type preparedRequest struct {
+	Method  string
+	URL     string // includes the query string
+	Body    string
+	Headers []renderedHeader
+}
+
+type renderedHeader struct{ Name, Value string }
+
 // runRequest performs a first-class HTTP request and returns its output as a
 // string plus an exit code (0 on success). On an HTTP error status or a
 // transport error it writes a diagnostic to errOut and returns a non-zero
 // code with empty output, mirroring `curl -f`.
 //
+// The request travels over the built-in net/http client, or over the
+// <transport> program the config selects for it (see transport.go).
+//
 // Output is the response body, optionally shaped by the request's jq program
 // (resolved from the data context) and re-encoded as indented JSON. Without a
 // <response> the raw body is returned verbatim.
 func runRequest(req *Request, data map[string]any, errOut io.Writer) (string, int) {
-	method := strings.TrimSpace(req.Method)
-	if method == "" {
-		method = "GET"
-	}
-
-	rawURL, err := renderString(req.URL, data)
-	if err != nil {
-		fmt.Fprintln(errOut, "error: render url:", err)
-		return "", 1
-	}
-	rawURL = strings.TrimSpace(rawURL)
-
-	qs, err := buildRequestQuery(req, data)
+	prepared, err := prepareRequest(req, data)
 	if err != nil {
 		fmt.Fprintln(errOut, "error:", err)
 		return "", 1
 	}
-	if qs != "" {
-		if strings.Contains(rawURL, "?") {
-			rawURL += "&" + qs
-		} else {
-			rawURL += "?" + qs
-		}
-	}
 
-	var body io.Reader
-	if req.Body != "" {
-		rendered, err := renderString(req.Body, data)
-		if err != nil {
-			fmt.Fprintln(errOut, "error: render body:", err)
-			return "", 1
-		}
-		body = strings.NewReader(rendered)
-	}
-
-	httpReq, err := http.NewRequest(method, rawURL, body)
+	transport, err := resolveTransport(req)
 	if err != nil {
-		fmt.Fprintln(errOut, "error: build request:", err)
-		return "", 1
-	}
-	if err := applyHeaders(httpReq, req.Headers, data); err != nil {
 		fmt.Fprintln(errOut, "error:", err)
 		return "", 1
 	}
 
-	logVerbose("request: %s %s", method, rawURL)
-	resp, err := httpClient.Do(httpReq)
-	if err != nil {
-		fmt.Fprintln(errOut, "error: request failed:", err)
-		return "", 1
+	var raw []byte
+	var code int
+	if transport != nil {
+		out, c := runViaTransport(transport, prepared, data, errOut)
+		raw, code = []byte(out), c
+	} else {
+		raw, code = doHTTP(prepared, errOut)
 	}
-	defer resp.Body.Close()
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Fprintln(errOut, "error: read response:", err)
-		return "", 1
-	}
-	logVerbose("request: status %d (%d bytes)", resp.StatusCode, len(raw))
-
-	if resp.StatusCode >= 400 {
-		fmt.Fprintf(errOut, "error: HTTP %d %s\n", resp.StatusCode, strings.TrimSpace(resp.Status))
-		if len(raw) > 0 {
-			fmt.Fprintln(errOut, strings.TrimSpace(string(raw)))
-		}
-		return "", 1
+	if code != 0 {
+		return "", code
 	}
 
 	if req.Response == nil {
@@ -104,6 +75,84 @@ func runRequest(req *Request, data map[string]any, errOut io.Writer) (string, in
 		return "", 1
 	}
 	return out, 0
+}
+
+// prepareRequest renders every part of a request against the data context.
+func prepareRequest(req *Request, data map[string]any) (*preparedRequest, error) {
+	p := &preparedRequest{Method: strings.TrimSpace(req.Method)}
+	if p.Method == "" {
+		p.Method = "GET"
+	}
+
+	rawURL, err := renderString(req.URL, data)
+	if err != nil {
+		return nil, fmt.Errorf("render url: %w", err)
+	}
+	p.URL = strings.TrimSpace(rawURL)
+
+	qs, err := buildRequestQuery(req, data)
+	if err != nil {
+		return nil, err
+	}
+	if qs != "" {
+		if strings.Contains(p.URL, "?") {
+			p.URL += "&" + qs
+		} else {
+			p.URL += "?" + qs
+		}
+	}
+
+	if req.Body != "" {
+		if p.Body, err = renderString(req.Body, data); err != nil {
+			return nil, fmt.Errorf("render body: %w", err)
+		}
+	}
+
+	if p.Headers, err = renderHeaders(req.Headers, data); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// doHTTP performs a prepared request with the built-in client and returns the
+// response body. A 4xx/5xx status is a failure, like `curl -f`.
+func doHTTP(p *preparedRequest, errOut io.Writer) ([]byte, int) {
+	var body io.Reader
+	if p.Body != "" {
+		body = strings.NewReader(p.Body)
+	}
+	httpReq, err := http.NewRequest(p.Method, p.URL, body)
+	if err != nil {
+		fmt.Fprintln(errOut, "error: build request:", err)
+		return nil, 1
+	}
+	for _, h := range p.Headers {
+		httpReq.Header.Set(h.Name, h.Value)
+	}
+
+	logVerbose("request: %s %s", p.Method, p.URL)
+	resp, err := httpClient.Do(httpReq)
+	if err != nil {
+		fmt.Fprintln(errOut, "error: request failed:", err)
+		return nil, 1
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Fprintln(errOut, "error: read response:", err)
+		return nil, 1
+	}
+	logVerbose("request: status %d (%d bytes)", resp.StatusCode, len(raw))
+
+	if resp.StatusCode >= 400 {
+		fmt.Fprintf(errOut, "error: HTTP %d %s\n", resp.StatusCode, strings.TrimSpace(resp.Status))
+		if len(raw) > 0 {
+			fmt.Fprintln(errOut, strings.TrimSpace(string(raw)))
+		}
+		return nil, 1
+	}
+	return raw, 0
 }
 
 // buildRequestQuery assembles the URL-encoded query string (no leading "?")
@@ -141,25 +190,28 @@ func buildRequestQuery(req *Request, data map[string]any) (string, error) {
 	return values.Encode(), nil
 }
 
-func applyHeaders(httpReq *http.Request, headers []Header, data map[string]any) error {
+// renderHeaders renders the declared headers in order, dropping those whose
+// `When` path is falsy and those whose name renders empty.
+func renderHeaders(headers []Header, data map[string]any) ([]renderedHeader, error) {
+	var out []renderedHeader
 	for _, h := range headers {
 		if h.When != "" && !templateTruthy(lookupPath(data, h.When)) {
 			continue
 		}
 		name, err := renderString(h.Name, data)
 		if err != nil {
-			return fmt.Errorf("render header name: %w", err)
+			return nil, fmt.Errorf("render header name: %w", err)
 		}
 		val, err := renderString(h.Value, data)
 		if err != nil {
-			return fmt.Errorf("render header %q: %w", name, err)
+			return nil, fmt.Errorf("render header %q: %w", name, err)
 		}
 		if name == "" {
 			continue
 		}
-		httpReq.Header.Set(name, val)
+		out = append(out, renderedHeader{Name: name, Value: val})
 	}
-	return nil
+	return out, nil
 }
 
 // applyJQ runs the jq program (resolved from the data context via jqPath) over
@@ -174,9 +226,15 @@ func applyJQ(jqPath string, raw []byte, data map[string]any) (string, error) {
 
 	program := ""
 	if jqPath != "" {
-		if s, ok := lookupPath(data, jqPath).(string); ok {
-			program = strings.TrimSpace(s)
+		v, ok := lookupData(data, jqPath)
+		if !ok || v == nil {
+			return "", fmt.Errorf("response jq=%q resolved to nothing", jqPath)
 		}
+		s, ok := v.(string)
+		if !ok {
+			return "", fmt.Errorf("response jq=%q is %s, not a jq program", jqPath, jsonTypeName(v))
+		}
+		program = strings.TrimSpace(s)
 	}
 	if program == "" {
 		return marshalJSON(input)

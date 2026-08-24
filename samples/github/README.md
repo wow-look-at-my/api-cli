@@ -1,19 +1,25 @@
 # GitHub MCP server
 
-Pre-built Alpine image containing `api-cli` and `github.xml` (HTTP requests and
-`jq` are built in -- no `curl`/`jq` binaries needed).
-The transport is specified as the container command (default `stdio`):
+`github.xml` turns the GitHub REST API into an MCP server: every leaf becomes a
+tool. HTTP requests and `jq` are built into `api-cli`, so there is nothing else
+to install -- no `curl`, no `jq`, no GitHub CLI.
+
+The transport is the value of `--mcp` (`stdio` suits an MCP client that spawns a
+subprocess):
 
 ```sh
-# stdio (default — for MCP clients that spawn subprocesses)
-docker run --rm -e GH_TOKEN=ghp_xxx ghcr.io/wow-look-at-my/github
+# stdio (for MCP clients that spawn subprocesses)
+GH_TOKEN=ghp_xxx api-cli --config samples/github/github.xml --mcp stdio
 
 # Streamable HTTP on port 8080
-docker run --rm -p 127.0.0.1:8080:8080 -e GH_TOKEN=ghp_xxx ghcr.io/wow-look-at-my/github http://:8080
+GH_TOKEN=ghp_xxx api-cli --config samples/github/github.xml --mcp http://:8080
 
 # SSE on port 8080
-docker run --rm -p 127.0.0.1:8080:8080 -e GH_TOKEN=ghp_xxx ghcr.io/wow-look-at-my/github sse://:8080
+GH_TOKEN=ghp_xxx api-cli --config samples/github/github.xml --mcp sse://:8080
 ```
 
-Pass `--cors <level>` after the transport to control CORS.
+Pass `--cors <level>` to control CORS on the HTTP and SSE transports.
 `$GITHUB_TOKEN` is also accepted in place of `$GH_TOKEN`.
+
+The same config works as a plain CLI: `api-cli --config samples/github/github.xml
+repo get golang/go`.

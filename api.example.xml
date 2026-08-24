@@ -18,6 +18,33 @@
 		<var name="base_url">https://jsonplaceholder.typicode.com</var>
 	</vars>
 
+	<!--
+		A transport performs requests in place of the built-in HTTP client, for
+		APIs whose auth or wire format is easier to delegate to a program you
+		already have. This one is not the default, so only the request that
+		names it (`users list-via-curl`) goes through it. There is no runtime
+		override: which transport carries a request is fixed here, because it
+		is a property of the endpoint rather than a user preference.
+	-->
+	<transports>
+		<transport name="curl">
+			<run>
+				<argv>curl</argv>
+				<argv>-fsSL</argv>
+				<argv>-X</argv>
+				<argv><value name="request.method"/></argv>
+				<argv><value expr="{{ $h := list }}{{ range .request.header_lines }}{{ $h = concat $h (list &quot;-H&quot; .) }}{{ end }}{{ spread $h }}"/></argv>
+				<!--
+					The body arrives on stdin (the default), so tell curl to read
+					it from there. An empty spread contributes no argument at
+					all, which is why this is a spread and not an <if>.
+				-->
+				<argv><value expr="{{ spread (ternary (list &quot;--data-binary&quot; &quot;@-&quot;) (list) (ne .request.body &quot;&quot;)) }}"/></argv>
+				<argv><value name="request.url"/></argv>
+			</run>
+		</transport>
+	</transports>
+
 	<!-- Inherited by every leaf unless a leaf declares its own <run>. -->
 	<run>
 		<request method="GET">
@@ -56,6 +83,21 @@
 					<param name="_limit"><value name="flag.limit"/></param>
 				</query>
 			</entry>
+		</command>
+		<command name="list-via-curl" description="List users, performed by the curl transport instead of the built-in client. Needs curl on PATH.">
+			<run>
+				<request transport="curl">
+					<url><value name="var.base_url"/>/users</url>
+					<query>
+						<param name="_limit">5</param>
+					</query>
+					<header name="Accept">application/json</header>
+				</request>
+			</run>
+			<fields>
+				<field name="id">id</field>
+				<field name="name">name</field>
+			</fields>
 		</command>
 		<command name="create" description="Create a user. Overrides the inherited GET with a POST + JSON body.">
 			<flag name="name" type="string" required="true" description="Full name."/>
@@ -96,11 +138,91 @@
 				</query>
 			</entry>
 		</command>
+		<!--
+			Two requests, one command: the step looks the user up by name and
+			the leaf uses the id it found. A step with no <run> of its own
+			reuses the inherited request, so all it needs is a new <entry>.
+		-->
+		<command name="by-user" description="List a user's posts, looked up by username.">
+			<arg name="username" required="true" description="Username, e.g. Bret."/>
+			<steps>
+				<step name="user">
+					<entry>
+						<path>/users</path>
+						<query>
+							<param name="username"><value name="arg.username"/></param>
+						</query>
+					</entry>
+				</step>
+			</steps>
+			<entry>
+				<path>/posts</path>
+				<query>
+					<param name="userId"><value expr="{{ (index .result.user 0).id }}"/></param>
+				</query>
+			</entry>
+			<fields footer="{{ len .data }} posts by {{ .arg.username }}">
+				<field name="id">id</field>
+				<field name="title">title</field>
+			</fields>
+		</command>
 	</command>
 
 	<!-- Hybrid: a <run> can be a plain shell command, not an HTTP request. -->
 	<command name="whoami" description="Print the current username (a plain shell alias, no HTTP).">
 		<run>id -un</run>
+	</command>
+
+	<!--
+		A hand-off to the shared download queue. The step finds the URLs; the
+		<download> hands them over and the queue fetches them concurrently,
+		carrying the auth declared here. It stands in for the leaf's run, so the
+		root request does not also fire.
+	-->
+	<command name="archive" description="Download an album's photo records to a directory.">
+		<arg name="album" type="int" required="true" description="Album id."/>
+		<flag name="limit" type="int" default="5" description="How many to fetch."/>
+		<steps>
+			<step name="album">
+				<entry>
+					<path>/photos</path>
+					<query>
+						<param name="albumId"><value name="arg.album"/></param>
+						<param name="_limit"><value name="flag.limit"/></param>
+					</query>
+				</entry>
+			</step>
+		</steps>
+		<download over="result.album">
+			<url><value name="var.base_url"/>/photos/<value name="id"/></url>
+			<to>album-<value name="arg.album"/>/<value name="id"/>.json</to>
+			<!--
+				Optional digest check, in its per-record form: jsonplaceholder
+				publishes no digests, so this renders empty and NOTHING IS
+				VERIFIED here. Against an API that does publish them, drop the
+				<if> so a missing digest fails instead of being skipped.
+			-->
+			<hash algo="sha256"><if test="sha256"><value name="sha256"/></if></hash>
+			<header name="Accept">application/json</header>
+			<if test="env.PHOTO_TOKEN">
+				<header name="Authorization">Bearer <value name="env.PHOTO_TOKEN"/></header>
+				<cookie name="session"><value name="env.PHOTO_SESSION"/></cookie>
+			</if>
+		</download>
+	</command>
+
+	<!--
+		The same hand-off carried by the curl transport instead of the built-in
+		client, for an endpoint a program has to reach. The program's stdout is
+		streamed to the file, so the size it can fetch is not bounded by memory.
+	-->
+	<command name="fetch-via-curl" description="Download one photo record through the curl transport. Needs curl on PATH.">
+		<arg name="id" type="int" required="true" description="Photo id."/>
+		<download transport="curl">
+			<url><value name="var.base_url"/>/photos/<value name="arg.id"/></url>
+			<to>photo-<value name="arg.id"/>.json</to>
+			<header name="Accept">application/json</header>
+		</download>
 	</command>
 
 </config>

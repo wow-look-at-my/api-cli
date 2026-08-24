@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
+	"sort"
 	"strings"
 )
 
@@ -14,16 +16,18 @@ import (
 // context composed of args, flags, environment, vars, and the leaf's entry
 // variables. The rendered command is then executed.
 type Config struct {
-	Schema      string             `json:"$schema,omitempty"`
-	Name        string             `json:"name"`
-	Description string             `json:"description,omitempty"`
-	Vars        map[string]any     `json:"vars,omitempty"`
-	Command     *Cmd               `json:"command,omitempty"`
-	Request     *Request           `json:"request,omitempty"`
-	Cwd         string             `json:"cwd,omitempty"`
-	Stdin       string             `json:"stdin,omitempty"`
-	Formats     map[string]*Format `json:"formats,omitempty"`
-	Commands    []Command          `json:"commands,omitempty"`
+	Schema      string                `json:"$schema,omitempty"`
+	Name        string                `json:"name"`
+	Description string                `json:"description,omitempty"`
+	Vars        map[string]any        `json:"vars,omitempty"`
+	Command     *Cmd                  `json:"command,omitempty"`
+	Request     *Request              `json:"request,omitempty"`
+	Cwd         string                `json:"cwd,omitempty"`
+	Stdin       string                `json:"stdin,omitempty"`
+	Formats     map[string]*Format    `json:"formats,omitempty"`
+	Transports  map[string]*Transport `json:"transports,omitempty"`
+	Downloads   *Downloads            `json:"downloads,omitempty"`
+	Commands    []Command             `json:"commands,omitempty"`
 }
 
 // Command is a node in the CLI tree. A node is a leaf iff it has no
@@ -47,10 +51,11 @@ type Config struct {
 // The rendered string is fed to the child process's stdin. When empty/unset,
 // the child inherits the parent process's stdin.
 //
-// `steps` run sequentially before the leaf's own command. Each step's stdout
-// is captured and parsed as JSON (or kept as a raw string if not valid JSON),
-// then stored in `.result.<name>` for use by subsequent steps and the final
-// command template.
+// `steps` run sequentially before the leaf's own run. A step runs a command or
+// a request — the same fork as `<run>` — and defaults to the leaf's effective
+// run when it declares neither. Each step's output is captured and parsed as
+// JSON (or kept as a raw string if not valid JSON), then stored in
+// `.result.<name>` for use by subsequent steps and the final run.
 type Command struct {
 	Name          string          `json:"name"`
 	Description   string          `json:"description,omitempty"`
@@ -68,6 +73,7 @@ type Command struct {
 	Confirm       string          `json:"confirm,omitempty"`
 	Format        *FormatRef      `json:"format,omitempty"`
 	Fields        *Fields         `json:"fields,omitempty"`
+	Downloads     []Download      `json:"downloads,omitempty"`
 	Commands      []Command       `json:"commands,omitempty"`
 }
 
@@ -167,6 +173,7 @@ type Step struct {
 	When    string          `json:"when,omitempty"`
 	Entry   json.RawMessage `json:"entry,omitempty"`
 	Command *Cmd            `json:"command,omitempty"`
+	Request *Request        `json:"request,omitempty"`
 	Cwd     string          `json:"cwd,omitempty"`
 	Stdin   string          `json:"stdin,omitempty"`
 }
@@ -278,8 +285,31 @@ type Request struct {
 	QueryFrom string    `json:"queryFrom,omitempty"` // context path to a map of params (<query from=>)
 	Query     []Param   `json:"query,omitempty"`     // explicit <param> children
 	Headers   []Header  `json:"headers,omitempty"`
-	Body      string    `json:"body,omitempty"`     // template; empty means no body
-	Response  *Response `json:"response,omitempty"` // nil means stream the raw body
+	Body      string    `json:"body,omitempty"`      // template; empty means no body
+	Response  *Response `json:"response,omitempty"`  // nil means stream the raw body
+	Transport string    `json:"transport,omitempty"` // registry name; empty means the config default
+}
+
+// Transport is a user-supplied program that performs requests in place of the
+// built-in net/http client — for APIs whose authentication or wire format is
+// easier to delegate to an existing tool than to reproduce here.
+//
+// The program receives the fully-rendered request at `.request` (method, url,
+// body, headers, header_lines) on top of the leaf's own data context, so its
+// argv is written with the same placeholders as any other command. Its stdout
+// is the response body and feeds `<response jq=>` exactly like a built-in
+// response; a non-zero exit fails the request.
+//
+// Stdin is the request body unless the transport declares its own `<stdin>`.
+// Either way it is explicit: a transport never inherits the user's terminal,
+// so a program that reads stdin cannot hang waiting for one.
+type Transport struct {
+	Name     string `json:"name"`
+	Command  *Cmd   `json:"command,omitempty"`
+	Cwd      string `json:"cwd,omitempty"`
+	Stdin    string `json:"stdin,omitempty"`
+	StdinSet bool   `json:"stdinSet,omitempty"` // distinguishes <stdin/> (send nothing) from no <stdin> (send the body)
+	Default  bool   `json:"default,omitempty"`
 }
 
 // Defined reports whether the request has anything to execute (a URL).
@@ -345,33 +375,20 @@ type Field struct {
 	ShowIn    string `json:"showIn,omitempty"`
 }
 
-var reservedCommandNames = map[string]bool{
-	"help":       true,
-	"completion": true,
-	"__complete": true,
-	"docs":       true,
-}
+// reservedCommandNames are the names cobra owns. A config cannot declare one.
+var reservedCommandNames = []string{"help", "completion", "__complete", "docs"}
 
-var validFlagTypes = map[string]bool{
-	"":             true, // empty defaults to "string"
-	"string":       true,
-	"bool":         true,
-	"int":          true,
-	"string-slice": true,
-}
+// validFlagTypes are the accepted <flag type=> values. The empty string
+// defaults to "string".
+var validFlagTypes = []string{"", "string", "bool", "int", "string-slice"}
 
-var validArgTypes = map[string]bool{
-	"":       true, // defaults to "string"
-	"string": true,
-	"int":    true,
-}
+// validArgTypes are the accepted <arg type=> values. The empty string defaults
+// to "string".
+var validArgTypes = []string{"", "string", "int"}
 
-var validFormatInputs = map[string]bool{
-	"":      true, // defaults to "json"
-	"json":  true,
-	"lines": true,
-	"raw":   true,
-}
+// validFormatInputs are the accepted <format input=> values. The empty string
+// defaults to "json".
+var validFormatInputs = []string{"", "json", "lines", "raw"}
 
 // Load reads and parses an XML config file. The XML element tree is mapped to
 // the Config model by parseConfigXML (see xmlsource.go); node placeholders
@@ -405,31 +422,77 @@ func validate(cfg *Config) error {
 			return err
 		}
 	}
+	if err := validateTransports(cfg.Transports); err != nil {
+		return err
+	}
+	if err := validateDownloadSettings(cfg.Downloads); err != nil {
+		return err
+	}
 	if cfg.Command.Defined() && cfg.Request.Defined() {
 		return fmt.Errorf("top-level: a <run> is either a command or a request, not both")
 	}
-	if err := validateRequest(cfg.Request, "request"); err != nil {
+	if err := validateRequest(cfg.Request, "request", cfg.Transports); err != nil {
 		return err
 	}
 	seen := map[string]bool{}
 	hasRootRun := cfg.Command.Defined() || cfg.Request.Defined()
 	for i, c := range cfg.Commands {
 		where := fmt.Sprintf("commands[%d]", i)
-		if err := validateCommand(&c, where, seen, hasRootRun, cfg.Formats); err != nil {
+		if err := validateCommand(&c, where, seen, hasRootRun, cfg.Formats, cfg.Transports); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+// validateTransports checks the transport registry: every entry needs a
+// command to run, and at most one may claim the default.
+func validateTransports(transports map[string]*Transport) error {
+	names := make([]string, 0, len(transports))
+	for name := range transports {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	defaulted := ""
+	for _, name := range names {
+		where := fmt.Sprintf("transports[%q]", name)
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("transports: empty name")
+		}
+		if name == builtinTransportName {
+			return fmt.Errorf("%s: %q is reserved for the built-in HTTP client", where, builtinTransportName)
+		}
+		t := transports[name]
+		if t == nil || !t.Command.Defined() {
+			return fmt.Errorf("%s: <transport> requires a <run> command", where)
+		}
+		if !t.Default {
+			continue
+		}
+		if defaulted != "" {
+			return fmt.Errorf("%s: transport %q is already the default; only one may be", where, defaulted)
+		}
+		defaulted = name
+	}
+	return nil
+}
+
 // validateRequest checks a request's invariants. A nil request is fine
 // (no request configured at this node).
-func validateRequest(r *Request, where string) error {
+func validateRequest(r *Request, where string, transports map[string]*Transport) error {
 	if r == nil {
 		return nil
 	}
 	if strings.TrimSpace(r.URL) == "" {
 		return fmt.Errorf("%s: <request> requires a <url>", where)
+	}
+	name := strings.TrimSpace(r.Transport)
+	if name == "" || name == builtinTransportName {
+		return nil
+	}
+	if _, ok := transports[name]; !ok {
+		return fmt.Errorf("%s: references unknown transport %q", where, name)
 	}
 	return nil
 }
@@ -438,22 +501,22 @@ func validateFormat(f *Format, where string) error {
 	if f == nil {
 		return fmt.Errorf("%s: empty format", where)
 	}
-	if !validFormatInputs[f.Input] {
+	if !slices.Contains(validFormatInputs, f.Input) {
 		return fmt.Errorf("%s: input %q must be one of json|lines|raw", where, f.Input)
 	}
 	if len(f.Views) == 0 {
 		return fmt.Errorf("%s: at least one view is required", where)
 	}
-	viewNames := map[string]bool{}
+	viewNames := make([]string, 0, len(f.Views))
 	for i, v := range f.Views {
 		vw := fmt.Sprintf("%s.views[%d]", where, i)
 		if strings.TrimSpace(v.Name) == "" {
 			return fmt.Errorf("%s: name required", vw)
 		}
-		if viewNames[v.Name] {
+		if slices.Contains(viewNames, v.Name) {
 			return fmt.Errorf("%s: duplicate view name %q", vw, v.Name)
 		}
-		viewNames[v.Name] = true
+		viewNames = append(viewNames, v.Name)
 		if strings.TrimSpace(v.Template) == "" {
 			return fmt.Errorf("%s: template required", vw)
 		}
@@ -465,14 +528,14 @@ func validateFormat(f *Format, where string) error {
 // an ancestor has a command template available (we need at least one to reach
 // a leaf). formats is the top-level format registry; named refs resolve into
 // it.
-func validateCommand(c *Command, where string, siblings map[string]bool, inheritedRun bool, formats map[string]*Format) error {
+func validateCommand(c *Command, where string, siblings map[string]bool, inheritedRun bool, formats map[string]*Format, transports map[string]*Transport) error {
 	if strings.TrimSpace(c.Name) == "" {
 		return fmt.Errorf("%s: \"name\" is required", where)
 	}
 	if strings.ContainsAny(c.Name, " \t\n/") {
 		return fmt.Errorf("%s: name %q must not contain whitespace or slashes", where, c.Name)
 	}
-	if reservedCommandNames[c.Name] {
+	if slices.Contains(reservedCommandNames, c.Name) {
 		return fmt.Errorf("%s: name %q is reserved by cobra", where, c.Name)
 	}
 	if siblings[c.Name] {
@@ -487,20 +550,20 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		return fmt.Errorf("%s: passthrough is only allowed on leaves", where)
 	}
 
-	argNames := map[string]bool{}
+	argNames := make([]string, 0, len(c.Args))
 	requiredAfterOptional := false
 	for i, a := range c.Args {
 		aw := fmt.Sprintf("%s.args[%d]", where, i)
 		if strings.TrimSpace(a.Name) == "" {
 			return fmt.Errorf("%s: name required", aw)
 		}
-		if !validArgTypes[a.Type] {
+		if !slices.Contains(validArgTypes, a.Type) {
 			return fmt.Errorf("%s: type %q must be one of string|int", aw, a.Type)
 		}
-		if argNames[a.Name] {
+		if slices.Contains(argNames, a.Name) {
 			return fmt.Errorf("%s: duplicate arg name %q", aw, a.Name)
 		}
-		argNames[a.Name] = true
+		argNames = append(argNames, a.Name)
 		if a.Variadic && i != len(c.Args)-1 {
 			return fmt.Errorf("%s: variadic arg %q must be the last arg", aw, a.Name)
 		}
@@ -511,28 +574,28 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		}
 	}
 
-	flagNames := map[string]bool{}
-	flagShorts := map[string]bool{}
+	flagNames := make([]string, 0, len(c.Flags))
+	flagShorts := make([]string, 0, len(c.Flags))
 	for i, fl := range c.Flags {
 		fw := fmt.Sprintf("%s.flags[%d]", where, i)
 		if strings.TrimSpace(fl.Name) == "" {
 			return fmt.Errorf("%s: name required", fw)
 		}
-		if !validFlagTypes[fl.Type] {
+		if !slices.Contains(validFlagTypes, fl.Type) {
 			return fmt.Errorf("%s: type %q must be one of string|bool|int|string-slice", fw, fl.Type)
 		}
-		if flagNames[fl.Name] {
+		if slices.Contains(flagNames, fl.Name) {
 			return fmt.Errorf("%s: duplicate flag name %q", fw, fl.Name)
 		}
-		flagNames[fl.Name] = true
+		flagNames = append(flagNames, fl.Name)
 		if fl.Short != "" {
 			if len(fl.Short) != 1 {
 				return fmt.Errorf("%s: short %q must be a single character", fw, fl.Short)
 			}
-			if flagShorts[fl.Short] {
+			if slices.Contains(flagShorts, fl.Short) {
 				return fmt.Errorf("%s: duplicate short %q", fw, fl.Short)
 			}
-			flagShorts[fl.Short] = true
+			flagShorts = append(flagShorts, fl.Short)
 		}
 		if strings.HasPrefix(fl.Name, "no-") {
 			return fmt.Errorf("%s: flag name %q cannot start with \"no-\" (reserved for bool negation)", fw, fl.Name)
@@ -544,7 +607,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 			if peer == fl.Name {
 				return fmt.Errorf("%s: flag %q conflicts with itself", fw, fl.Name)
 			}
-			if !flagNames[peer] {
+			if !slices.Contains(flagNames, peer) {
 				return fmt.Errorf("%s: flag %q conflicts with unknown flag %q", fw, fl.Name, peer)
 			}
 		}
@@ -553,7 +616,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	if c.Command.Defined() && c.Request.Defined() {
 		return fmt.Errorf("%s: a <run> is either a command or a request, not both", where)
 	}
-	if err := validateRequest(c.Request, where+".request"); err != nil {
+	if err := validateRequest(c.Request, where+".request", transports); err != nil {
 		return err
 	}
 	if c.Fields != nil && c.Format.Defined() {
@@ -563,12 +626,17 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		return fmt.Errorf("%s: <fields> is only allowed on leaves (nodes with no subcommands)", where)
 	}
 
+	if err := validateDownloads(c, where, transports); err != nil {
+		return err
+	}
+
 	haveRun := inheritedRun || c.Command.Defined() || c.Request.Defined()
 
-	// Leaf: must have something to run available.
+	// Leaf: must have something to do. A <download> leaf is that something —
+	// the hand-off is the action, so it needs no run of its own.
 	if len(c.Commands) == 0 {
-		if !haveRun {
-			return fmt.Errorf("%s: leaf has no command/request and no ancestor defines one", where)
+		if !haveRun && len(c.Downloads) == 0 {
+			return fmt.Errorf("%s: leaf has no command/request/download and no ancestor defines one", where)
 		}
 	}
 
@@ -582,16 +650,22 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	if len(c.Preconditions) > 0 && len(c.Commands) > 0 {
 		return fmt.Errorf("%s: `preconditions` is only allowed on leaves (nodes with no subcommands)", where)
 	}
-	stepNames := map[string]bool{}
+	stepNames := make([]string, 0, len(c.Steps))
 	for i, s := range c.Steps {
 		sw := fmt.Sprintf("%s.steps[%d]", where, i)
 		if strings.TrimSpace(s.Name) == "" {
 			return fmt.Errorf("%s: name required", sw)
 		}
-		if stepNames[s.Name] {
+		if slices.Contains(stepNames, s.Name) {
 			return fmt.Errorf("%s: duplicate step name %q", sw, s.Name)
 		}
-		stepNames[s.Name] = true
+		stepNames = append(stepNames, s.Name)
+		if s.Command.Defined() && s.Request.Defined() {
+			return fmt.Errorf("%s: a <run> is either a command or a request, not both", sw)
+		}
+		if err := validateRequest(s.Request, sw+".request", transports); err != nil {
+			return err
+		}
 	}
 
 	if c.Format.Defined() {
@@ -610,7 +684,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	childSeen := map[string]bool{}
 	for i, child := range c.Commands {
 		cw := fmt.Sprintf("%s.commands[%d]", where, i)
-		if err := validateCommand(&child, cw, childSeen, haveRun, formats); err != nil {
+		if err := validateCommand(&child, cw, childSeen, haveRun, formats, transports); err != nil {
 			return err
 		}
 	}

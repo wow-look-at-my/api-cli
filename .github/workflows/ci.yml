@@ -28,41 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      # The schema is an XML 1.1 document too, and a pattern covers a file added later.
+      - uses: wow-look-at-my/xml-validator@master
+        # No schema= here: --schema overflows the stack on the recursive <command> grammar.
         with:
-          go-version: stable
-      - name: Validate XML configs and schema (well-formedness, XML 1.1)
-        run: |
-          go install github.com/wow-look-at-my/xml-validator@latest
-          xv="$(go env GOPATH)/bin/xml-validator"
-          "$xv" api.example.xml
-          "$xv" api.schema.xsd
-          "$xv" samples/github/github.xml
-
-  docker:
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: wow-look-at-my/actions@cache-download#latest
-        with:
-          name: go-build-test
-      - name: Log in to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      - name: Build and push
-        run: |
-          branch_tag="$(echo "${{ github.ref_name }}" | tr '/' '-')"
-          tags="--tag ghcr.io/${{ github.repository_owner }}/github:${branch_tag}"
-          if [ "${{ github.ref }}" = "refs/heads/master" ]; then
-            tags="${tags} --tag ghcr.io/${{ github.repository_owner }}/github:latest"
-          fi
-          docker buildx create --use
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --file samples/github/Dockerfile.github \
-            ${tags} \
-            --push \
-            .
+          files: '**/*.xml **/*.xsd'

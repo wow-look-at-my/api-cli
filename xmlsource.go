@@ -9,19 +9,18 @@ import (
 
 // parseConfigXML maps an XML config document to the Config model.
 //
-// The document is first tokenized into a small order-preserving DOM (xnode, see
-// xmldom.go), then walked to build the structs. Node placeholders
-// (<value>/<if>/<for>) that appear in element content are compiled to Go
-// text/template source (xmlcompile.go), so the rest of the runtime renders them
-// exactly like any other template string. Unknown elements and attributes are
-// rejected to catch typos early.
+// api-dsl tokenizes the document into an order-preserving DOM (xnode), and this
+// file walks that DOM to build the structs. api-dsl also compiles the
+// placeholders (<value>/<if>/<for>) in element content to Go text/template
+// source, so the rest of the runtime renders them like any other template
+// string. Unknown elements and attributes are rejected to catch a typo early.
 func parseConfigXML(src []byte) (*Config, error) {
 	root, err := parseDOM(src)
 	if err != nil {
 		return nil, err
 	}
-	if root.name != "config" {
-		return nil, fmt.Errorf("root element must be <config>, got <%s>", root.name)
+	if root.Name() != "config" {
+		return nil, fmt.Errorf("root element must be <config>, got <%s>", root.Name())
 	}
 	return buildConfig(root)
 }
@@ -30,9 +29,9 @@ func buildConfig(root *xnode) (*Config, error) {
 	if err := checkAttrs(root, "name", "schema"); err != nil {
 		return nil, err
 	}
-	cfg := &Config{Name: root.attr("name"), Schema: root.attr("schema")}
-	for _, child := range root.children() {
-		switch child.name {
+	cfg := &Config{Name: root.Attr("name"), Schema: root.Attr("schema")}
+	for _, child := range root.Children() {
+		switch child.Name() {
 		case "description":
 			if err := checkAttrs(child); err != nil {
 				return nil, err
@@ -72,6 +71,18 @@ func buildConfig(root *xnode) (*Config, error) {
 				return nil, err
 			}
 			cfg.Formats = f
+		case "transports":
+			t, err := buildTransports(child)
+			if err != nil {
+				return nil, err
+			}
+			cfg.Transports = t
+		case "downloads":
+			d, err := buildDownloads(child)
+			if err != nil {
+				return nil, err
+			}
+			cfg.Downloads = d
 		case "command":
 			c, err := buildCommandNode(child)
 			if err != nil {
@@ -79,7 +90,7 @@ func buildConfig(root *xnode) (*Config, error) {
 			}
 			cfg.Commands = append(cfg.Commands, *c)
 		default:
-			return nil, fmt.Errorf("<config>: unexpected child element <%s>", child.name)
+			return nil, fmt.Errorf("<config>: unexpected child element <%s>", child.Name())
 		}
 	}
 	return cfg, nil
@@ -87,14 +98,14 @@ func buildConfig(root *xnode) (*Config, error) {
 
 func buildVars(n *xnode) (map[string]any, error) {
 	out := map[string]any{}
-	for _, child := range n.children() {
-		if child.name != "var" {
-			return nil, fmt.Errorf("<vars>: unexpected child element <%s>", child.name)
+	for _, child := range n.Children() {
+		if child.Name() != "var" {
+			return nil, fmt.Errorf("<vars>: unexpected child element <%s>", child.Name())
 		}
 		if err := checkAttrs(child, "name"); err != nil {
 			return nil, err
 		}
-		name := child.attr("name")
+		name := child.Attr("name")
 		if name == "" {
 			return nil, fmt.Errorf("<var>: name= is required")
 		}
@@ -113,9 +124,9 @@ func buildRun(n *xnode) (*Cmd, *Request, error) {
 	if err := checkAttrs(n); err != nil {
 		return nil, nil, err
 	}
-	elems := n.children()
+	elems := n.Children()
 	for _, e := range elems {
-		if e.name == "request" {
+		if e.Name() == "request" {
 			if len(elems) != 1 {
 				return nil, nil, fmt.Errorf("<run>: <request> must be the only child")
 			}
@@ -125,7 +136,7 @@ func buildRun(n *xnode) (*Cmd, *Request, error) {
 	}
 	hasArgv := false
 	for _, e := range elems {
-		if e.name == "argv" {
+		if e.Name() == "argv" {
 			hasArgv = true
 			break
 		}
@@ -133,8 +144,8 @@ func buildRun(n *xnode) (*Cmd, *Request, error) {
 	if hasArgv {
 		var argv []string
 		for _, e := range elems {
-			if e.name != "argv" {
-				return nil, nil, fmt.Errorf("<run>: cannot mix <argv> with <%s>", e.name)
+			if e.Name() != "argv" {
+				return nil, nil, fmt.Errorf("<run>: cannot mix <argv> with <%s>", e.Name())
 			}
 			s, err := compileTextElem(e)
 			if err != nil {
@@ -152,15 +163,18 @@ func buildRun(n *xnode) (*Cmd, *Request, error) {
 }
 
 func buildRequest(n *xnode) (*Request, error) {
-	if err := checkAttrs(n, "method"); err != nil {
+	if err := checkAttrs(n, "method", "transport"); err != nil {
 		return nil, err
 	}
-	req := &Request{Method: strings.TrimSpace(n.attr("method"))}
+	req := &Request{
+		Method:    strings.TrimSpace(n.Attr("method")),
+		Transport: strings.TrimSpace(n.Attr("transport")),
+	}
 	if req.Method == "" {
 		req.Method = "GET"
 	}
-	for _, child := range n.children() {
-		switch child.name {
+	for _, child := range n.Children() {
+		switch child.Name() {
 		case "url":
 			s, err := compileTextElem(child)
 			if err != nil {
@@ -181,10 +195,10 @@ func buildRequest(n *xnode) (*Request, error) {
 			if err := checkAttrs(child, "test"); err != nil {
 				return nil, err
 			}
-			test := child.attr("test")
-			for _, inner := range child.children() {
-				if inner.name != "header" {
-					return nil, fmt.Errorf("<request><if>: only <header> children are supported, got <%s>", inner.name)
+			test := child.Attr("test")
+			for _, inner := range child.Children() {
+				if inner.Name() != "header" {
+					return nil, fmt.Errorf("<request><if>: only <header> children are supported, got <%s>", inner.Name())
 				}
 				h, err := buildHeader(inner, test)
 				if err != nil {
@@ -202,9 +216,9 @@ func buildRequest(n *xnode) (*Request, error) {
 			if err := checkAttrs(child, "jq"); err != nil {
 				return nil, err
 			}
-			req.Response = &Response{JQ: strings.TrimSpace(child.attr("jq"))}
+			req.Response = &Response{JQ: strings.TrimSpace(child.Attr("jq"))}
 		default:
-			return nil, fmt.Errorf("<request>: unexpected child element <%s>", child.name)
+			return nil, fmt.Errorf("<request>: unexpected child element <%s>", child.Name())
 		}
 	}
 	return req, nil
@@ -214,7 +228,7 @@ func buildHeader(n *xnode, when string) (Header, error) {
 	if err := checkAttrs(n, "name"); err != nil {
 		return Header{}, err
 	}
-	name := n.attr("name")
+	name := n.Attr("name")
 	if name == "" {
 		return Header{}, fmt.Errorf("<header>: name= is required")
 	}
@@ -229,9 +243,9 @@ func buildQuery(n *xnode, req *Request) error {
 	if err := checkAttrs(n, "from"); err != nil {
 		return err
 	}
-	req.QueryFrom = strings.TrimSpace(n.attr("from"))
-	for _, child := range n.children() {
-		switch child.name {
+	req.QueryFrom = strings.TrimSpace(n.Attr("from"))
+	for _, child := range n.Children() {
+		switch child.Name() {
 		case "param":
 			p, err := buildParam(child, "")
 			if err != nil {
@@ -242,10 +256,10 @@ func buildQuery(n *xnode, req *Request) error {
 			if err := checkAttrs(child, "test"); err != nil {
 				return err
 			}
-			test := child.attr("test")
-			for _, inner := range child.children() {
-				if inner.name != "param" {
-					return fmt.Errorf("<query><if>: only <param> children are supported, got <%s>", inner.name)
+			test := child.Attr("test")
+			for _, inner := range child.Children() {
+				if inner.Name() != "param" {
+					return fmt.Errorf("<query><if>: only <param> children are supported, got <%s>", inner.Name())
 				}
 				p, err := buildParam(inner, test)
 				if err != nil {
@@ -254,7 +268,7 @@ func buildQuery(n *xnode, req *Request) error {
 				req.Query = append(req.Query, p)
 			}
 		default:
-			return fmt.Errorf("<query>: unexpected child element <%s>", child.name)
+			return fmt.Errorf("<query>: unexpected child element <%s>", child.Name())
 		}
 	}
 	return nil
@@ -264,7 +278,7 @@ func buildParam(n *xnode, when string) (Param, error) {
 	if err := checkAttrs(n, "name"); err != nil {
 		return Param{}, err
 	}
-	name := n.attr("name")
+	name := n.Attr("name")
 	if name == "" {
 		return Param{}, fmt.Errorf("<param>: name= is required")
 	}
@@ -279,10 +293,10 @@ func buildFields(n *xnode) (*Fields, error) {
 	if err := checkAttrs(n, "over", "footer"); err != nil {
 		return nil, err
 	}
-	f := &Fields{Over: strings.TrimSpace(n.attr("over")), Footer: n.attr("footer")}
-	for _, child := range n.children() {
-		if child.name != "field" {
-			return nil, fmt.Errorf("<fields>: unexpected child element <%s>", child.name)
+	f := &Fields{Over: strings.TrimSpace(n.Attr("over")), Footer: n.Attr("footer")}
+	for _, child := range n.Children() {
+		if child.Name() != "field" {
+			return nil, fmt.Errorf("<fields>: unexpected child element <%s>", child.Name())
 		}
 		fld, err := buildField(child)
 		if err != nil {
@@ -297,7 +311,7 @@ func buildField(n *xnode) (Field, error) {
 	if err := checkAttrs(n, "name", "default", "truncate", "firstline", "priority", "show_in", "expr"); err != nil {
 		return Field{}, err
 	}
-	name := n.attr("name")
+	name := n.Attr("name")
 	if name == "" {
 		return Field{}, fmt.Errorf("<field>: name= is required")
 	}
@@ -308,10 +322,10 @@ func buildField(n *xnode) (Field, error) {
 	fld := Field{
 		Name:      name,
 		Path:      path,
-		Expr:      n.attr("expr"),
-		Default:   n.attr("default"),
-		FirstLine: n.attr("firstline") == "true",
-		ShowIn:    strings.TrimSpace(n.attr("show_in")),
+		Expr:      n.Attr("expr"),
+		Default:   n.Attr("default"),
+		FirstLine: n.Attr("firstline") == "true",
+		ShowIn:    strings.TrimSpace(n.Attr("show_in")),
 	}
 	if fld.Expr != "" && fld.Path != "" {
 		return Field{}, fmt.Errorf("<field %q>: cannot set both a source path and expr=", name)
@@ -319,14 +333,14 @@ func buildField(n *xnode) (Field, error) {
 	if fld.Expr == "" && fld.Path == "" {
 		return Field{}, fmt.Errorf("<field %q>: needs a source path or expr=", name)
 	}
-	if t := n.attr("truncate"); t != "" {
+	if t := n.Attr("truncate"); t != "" {
 		v, err := strconv.Atoi(t)
 		if err != nil {
 			return Field{}, fmt.Errorf("<field %q>: truncate=%q must be an integer", name, t)
 		}
 		fld.Truncate = v
 	}
-	if p := n.attr("priority"); p != "" {
+	if p := n.Attr("priority"); p != "" {
 		v, err := strconv.Atoi(p)
 		if err != nil {
 			return Field{}, fmt.Errorf("<field %q>: priority=%q must be an integer", name, p)
@@ -338,14 +352,14 @@ func buildField(n *xnode) (Field, error) {
 
 func buildFormats(n *xnode) (map[string]*Format, error) {
 	out := map[string]*Format{}
-	for _, child := range n.children() {
-		if child.name != "format" {
-			return nil, fmt.Errorf("<formats>: unexpected child element <%s>", child.name)
+	for _, child := range n.Children() {
+		if child.Name() != "format" {
+			return nil, fmt.Errorf("<formats>: unexpected child element <%s>", child.Name())
 		}
 		if err := checkAttrs(child, "name", "input", "when"); err != nil {
 			return nil, err
 		}
-		name := child.attr("name")
+		name := child.Attr("name")
 		if name == "" {
 			return nil, fmt.Errorf("<format>: name= is required")
 		}
@@ -359,10 +373,10 @@ func buildFormats(n *xnode) (map[string]*Format, error) {
 }
 
 func buildFormat(n *xnode) (*Format, error) {
-	f := &Format{Input: n.attr("input"), When: n.attr("when")}
-	for _, child := range n.children() {
-		if child.name != "view" {
-			return nil, fmt.Errorf("<format>: unexpected child element <%s>", child.name)
+	f := &Format{Input: n.Attr("input"), When: n.Attr("when")}
+	for _, child := range n.Children() {
+		if child.Name() != "view" {
+			return nil, fmt.Errorf("<format>: unexpected child element <%s>", child.Name())
 		}
 		if err := checkAttrs(child, "name", "when", "default"); err != nil {
 			return nil, err
@@ -372,9 +386,9 @@ func buildFormat(n *xnode) (*Format, error) {
 			return nil, err
 		}
 		f.Views = append(f.Views, View{
-			Name:     child.attr("name"),
-			When:     child.attr("when"),
-			Default:  child.attr("default") == "true",
+			Name:     child.Attr("name"),
+			When:     child.Attr("when"),
+			Default:  child.Attr("default") == "true",
 			Template: tmpl,
 		})
 	}
@@ -386,12 +400,12 @@ func buildCommandNode(n *xnode) (*Command, error) {
 		return nil, err
 	}
 	c := &Command{
-		Name:        n.attr("name"),
-		Description: n.attr("description"),
-		Passthrough: n.attr("passthrough") == "true",
-		Confirm:     n.attr("confirm"),
+		Name:        n.Attr("name"),
+		Description: n.Attr("description"),
+		Passthrough: n.Attr("passthrough") == "true",
+		Confirm:     n.Attr("confirm"),
 	}
-	for _, child := range n.children() {
+	for _, child := range n.Children() {
 		if err := addCommandChild(c, child); err != nil {
 			return nil, err
 		}
@@ -401,7 +415,7 @@ func buildCommandNode(n *xnode) (*Command, error) {
 
 // addCommandChild dispatches one child element of a <command> into the Command.
 func addCommandChild(c *Command, child *xnode) error {
-	switch child.name {
+	switch child.Name() {
 	case "arg":
 		a, err := buildArg(child)
 		if err != nil {
@@ -445,9 +459,9 @@ func addCommandChild(c *Command, child *xnode) error {
 		}
 		c.Confirm = s
 	case "preconditions":
-		for _, p := range child.children() {
-			if p.name != "precondition" {
-				return fmt.Errorf("<preconditions>: unexpected child element <%s>", p.name)
+		for _, p := range child.Children() {
+			if p.Name() != "precondition" {
+				return fmt.Errorf("<preconditions>: unexpected child element <%s>", p.Name())
 			}
 			s, err := compileTextElem(p)
 			if err != nil {
@@ -456,9 +470,9 @@ func addCommandChild(c *Command, child *xnode) error {
 			c.Preconditions = append(c.Preconditions, s)
 		}
 	case "steps":
-		for _, s := range child.children() {
-			if s.name != "step" {
-				return fmt.Errorf("<steps>: unexpected child element <%s>", s.name)
+		for _, s := range child.Children() {
+			if s.Name() != "step" {
+				return fmt.Errorf("<steps>: unexpected child element <%s>", s.Name())
 			}
 			step, err := buildStep(s)
 			if err != nil {
@@ -484,6 +498,12 @@ func addCommandChild(c *Command, child *xnode) error {
 			return err
 		}
 		c.Format = ref
+	case "download":
+		d, err := buildDownload(child)
+		if err != nil {
+			return err
+		}
+		c.Downloads = append(c.Downloads, d)
 	case "command":
 		sub, err := buildCommandNode(child)
 		if err != nil {
@@ -491,7 +511,7 @@ func addCommandChild(c *Command, child *xnode) error {
 		}
 		c.Commands = append(c.Commands, *sub)
 	default:
-		return fmt.Errorf("<command %q>: unexpected child element <%s>", c.Name, child.name)
+		return fmt.Errorf("<command %q>: unexpected child element <%s>", c.Name, child.Name())
 	}
 	return nil
 }
@@ -501,11 +521,11 @@ func buildArg(n *xnode) (Arg, error) {
 		return Arg{}, err
 	}
 	return Arg{
-		Name:        n.attr("name"),
-		Type:        n.attr("type"),
-		Required:    n.attr("required") == "true",
-		Variadic:    n.attr("variadic") == "true",
-		Description: n.attr("description"),
+		Name:        n.Attr("name"),
+		Type:        n.Attr("type"),
+		Required:    n.Attr("required") == "true",
+		Variadic:    n.Attr("variadic") == "true",
+		Description: n.Attr("description"),
 	}, nil
 }
 
@@ -514,21 +534,21 @@ func buildFlag(n *xnode) (Flag, error) {
 		return Flag{}, err
 	}
 	fl := Flag{
-		Name:        n.attr("name"),
-		Short:       n.attr("short"),
-		Type:        n.attr("type"),
-		Required:    n.attr("required") == "true",
-		Description: n.attr("description"),
+		Name:        n.Attr("name"),
+		Short:       n.Attr("short"),
+		Type:        n.Attr("type"),
+		Required:    n.Attr("required") == "true",
+		Description: n.Attr("description"),
 	}
-	if c := strings.TrimSpace(n.attr("conflicts")); c != "" {
+	if c := strings.TrimSpace(n.Attr("conflicts")); c != "" {
 		for _, p := range strings.Split(c, ",") {
 			if p = strings.TrimSpace(p); p != "" {
 				fl.Conflicts = append(fl.Conflicts, p)
 			}
 		}
 	}
-	if n.hasAttr("default") {
-		def := n.attr("default")
+	if n.HasAttr("default") {
+		def := n.Attr("default")
 		switch fl.Type {
 		case "bool":
 			fl.Default = def == "true"
@@ -557,18 +577,15 @@ func buildStep(n *xnode) (Step, error) {
 	if err := checkAttrs(n, "name", "when"); err != nil {
 		return Step{}, err
 	}
-	s := Step{Name: n.attr("name"), When: n.attr("when")}
-	for _, child := range n.children() {
-		switch child.name {
+	s := Step{Name: n.Attr("name"), When: n.Attr("when")}
+	for _, child := range n.Children() {
+		switch child.Name() {
 		case "run":
 			cmd, req, err := buildRun(child)
 			if err != nil {
 				return Step{}, err
 			}
-			if req != nil {
-				return Step{}, fmt.Errorf("<step %q>: <request> is not supported in steps; use a command", s.Name)
-			}
-			s.Command = cmd
+			s.Command, s.Request = cmd, req
 		case "entry":
 			raw, err := buildEntry(child)
 			if err != nil {
@@ -588,7 +605,7 @@ func buildStep(n *xnode) (Step, error) {
 			}
 			s.Stdin = v
 		default:
-			return Step{}, fmt.Errorf("<step %q>: unexpected child element <%s>", s.Name, child.name)
+			return Step{}, fmt.Errorf("<step %q>: unexpected child element <%s>", s.Name, child.Name())
 		}
 	}
 	return s, nil
@@ -598,7 +615,7 @@ func buildFormatRef(n *xnode) (*FormatRef, error) {
 	if err := checkAttrs(n, "ref", "input", "when"); err != nil {
 		return nil, err
 	}
-	if ref := n.attr("ref"); ref != "" {
+	if ref := n.Attr("ref"); ref != "" {
 		return &FormatRef{Name: ref}, nil
 	}
 	f, err := buildFormat(n)
@@ -623,12 +640,12 @@ func buildEntry(n *xnode) (json.RawMessage, error) {
 
 func entryObject(n *xnode) (map[string]any, error) {
 	out := map[string]any{}
-	for _, child := range n.children() {
+	for _, child := range n.Children() {
 		v, err := entryValue(child)
 		if err != nil {
 			return nil, err
 		}
-		out[child.name] = v
+		out[child.Name()] = v
 	}
 	return out, nil
 }
@@ -639,8 +656,8 @@ func entryObject(n *xnode) (map[string]any, error) {
 //   - otherwise (text / placeholders)     -> a template string
 func entryValue(n *xnode) (any, error) {
 	var structural []*xnode
-	for _, c := range n.children() {
-		if !placeholderNames[c.name] {
+	for _, c := range n.Children() {
+		if !isPlaceholder(c.Name()) {
 			structural = append(structural, c)
 		}
 	}
@@ -649,7 +666,7 @@ func entryValue(n *xnode) (any, error) {
 	}
 	allParams := true
 	for _, c := range structural {
-		if c.name != "param" {
+		if c.Name() != "param" {
 			allParams = false
 			break
 		}
@@ -660,7 +677,7 @@ func entryValue(n *xnode) (any, error) {
 			if err := checkAttrs(c, "name"); err != nil {
 				return nil, err
 			}
-			name := c.attr("name")
+			name := c.Attr("name")
 			if name == "" {
 				return nil, fmt.Errorf("<param>: name= is required")
 			}
