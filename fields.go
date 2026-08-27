@@ -3,17 +3,18 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 // knownSinks are the representations a Fields declaration can be rendered as.
-var knownSinks = []string{
+var knownSinks = set.Of(
 	"table", "list", "lines",
 	"raw", "json", "markdown", "csv",
 	"timeline",
-}
+)
 
 // record is one row of output. obj is the object (object record), the entry
 // value (when walking a map), or a scalar. key is the entry key when isEntry.
@@ -41,7 +42,7 @@ func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width 
 	if sink == "" {
 		sink = defaultSink(shape)
 	}
-	if !slices.Contains(knownSinks, sink) {
+	if !knownSinks.Contains(sink) {
 		return "", fmt.Errorf("unknown representation %q", sink)
 	}
 

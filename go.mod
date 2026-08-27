@@ -14,7 +14,7 @@ require (
 	golang.org/x/text v0.37.0
 )
 
-require github.com/wow-look-at-my/go-containers v0.0.0-20260826161058-40a3d1ef3d41
+require github.com/wow-look-at-my/go-containers v0.0.0-20260826161058-40a3d1ef3d41 // go-toolchain:auto-branch
 
 require (
 	github.com/Masterminds/goutils v1.1.1 // indirect

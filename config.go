@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/wow-look-at-my/go-containers/set"
 	"os"
-	"slices"
 	"sort"
 	"strings"
 )
@@ -377,19 +376,19 @@ type Field struct {
 }
 
 // reservedCommandNames are the names cobra owns. A config cannot declare one.
-var reservedCommandNames = []string{"help", "completion", "__complete", "docs"}
+var reservedCommandNames = set.Of("help", "completion", "__complete", "docs")
 
 // validFlagTypes are the accepted <flag type=> values. The empty string
 // defaults to "string".
-var validFlagTypes = []string{"", "string", "bool", "int", "string-slice"}
+var validFlagTypes = set.Of("", "string", "bool", "int", "string-slice")
 
 // validArgTypes are the accepted <arg type=> values. The empty string defaults
 // to "string".
-var validArgTypes = []string{"", "string", "int"}
+var validArgTypes = set.Of("", "string", "int")
 
 // validFormatInputs are the accepted <format input=> values. The empty string
 // defaults to "json".
-var validFormatInputs = []string{"", "json", "lines", "raw"}
+var validFormatInputs = set.Of("", "json", "lines", "raw")
 
 // Load reads and parses an XML config file. The XML element tree is mapped to
 // the Config model by parseConfigXML (see xmlsource.go); node placeholders
@@ -502,7 +501,7 @@ func validateFormat(f *Format, where string) error {
 	if f == nil {
 		return fmt.Errorf("%s: empty format", where)
 	}
-	if !slices.Contains(validFormatInputs, f.Input) {
+	if !validFormatInputs.Contains(f.Input) {
 		return fmt.Errorf("%s: input %q must be one of json|lines|raw", where, f.Input)
 	}
 	if len(f.Views) == 0 {
@@ -536,7 +535,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	if strings.ContainsAny(c.Name, " \t\n/") {
 		return fmt.Errorf("%s: name %q must not contain whitespace or slashes", where, c.Name)
 	}
-	if slices.Contains(reservedCommandNames, c.Name) {
+	if reservedCommandNames.Contains(c.Name) {
 		return fmt.Errorf("%s: name %q is reserved by cobra", where, c.Name)
 	}
 	if siblings[c.Name] {
@@ -558,7 +557,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		if strings.TrimSpace(a.Name) == "" {
 			return fmt.Errorf("%s: name required", aw)
 		}
-		if !slices.Contains(validArgTypes, a.Type) {
+		if !validArgTypes.Contains(a.Type) {
 			return fmt.Errorf("%s: type %q must be one of string|int", aw, a.Type)
 		}
 		if argNames.Contains(a.Name) {
@@ -582,7 +581,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		if strings.TrimSpace(fl.Name) == "" {
 			return fmt.Errorf("%s: name required", fw)
 		}
-		if !slices.Contains(validFlagTypes, fl.Type) {
+		if !validFlagTypes.Contains(fl.Type) {
 			return fmt.Errorf("%s: type %q must be one of string|bool|int|string-slice", fw, fl.Type)
 		}
 		if flagNames.Contains(fl.Name) {
