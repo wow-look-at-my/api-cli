@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/wow-look-at-my/go-containers/set"
 	"os"
 	"slices"
 	"sort"
@@ -507,16 +508,16 @@ func validateFormat(f *Format, where string) error {
 	if len(f.Views) == 0 {
 		return fmt.Errorf("%s: at least one view is required", where)
 	}
-	viewNames := make([]string, 0, len(f.Views))
+	viewNames := set.New[string]()
 	for i, v := range f.Views {
 		vw := fmt.Sprintf("%s.views[%d]", where, i)
 		if strings.TrimSpace(v.Name) == "" {
 			return fmt.Errorf("%s: name required", vw)
 		}
-		if slices.Contains(viewNames, v.Name) {
+		if viewNames.Contains(v.Name) {
 			return fmt.Errorf("%s: duplicate view name %q", vw, v.Name)
 		}
-		viewNames = append(viewNames, v.Name)
+		viewNames.Add(v.Name)
 		if strings.TrimSpace(v.Template) == "" {
 			return fmt.Errorf("%s: template required", vw)
 		}
@@ -550,7 +551,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		return fmt.Errorf("%s: passthrough is only allowed on leaves", where)
 	}
 
-	argNames := make([]string, 0, len(c.Args))
+	argNames := set.New[string]()
 	requiredAfterOptional := false
 	for i, a := range c.Args {
 		aw := fmt.Sprintf("%s.args[%d]", where, i)
@@ -560,10 +561,10 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		if !slices.Contains(validArgTypes, a.Type) {
 			return fmt.Errorf("%s: type %q must be one of string|int", aw, a.Type)
 		}
-		if slices.Contains(argNames, a.Name) {
+		if argNames.Contains(a.Name) {
 			return fmt.Errorf("%s: duplicate arg name %q", aw, a.Name)
 		}
-		argNames = append(argNames, a.Name)
+		argNames.Add(a.Name)
 		if a.Variadic && i != len(c.Args)-1 {
 			return fmt.Errorf("%s: variadic arg %q must be the last arg", aw, a.Name)
 		}
@@ -574,8 +575,8 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		}
 	}
 
-	flagNames := make([]string, 0, len(c.Flags))
-	flagShorts := make([]string, 0, len(c.Flags))
+	flagNames := set.New[string]()
+	flagShorts := set.New[string]()
 	for i, fl := range c.Flags {
 		fw := fmt.Sprintf("%s.flags[%d]", where, i)
 		if strings.TrimSpace(fl.Name) == "" {
@@ -584,18 +585,18 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		if !slices.Contains(validFlagTypes, fl.Type) {
 			return fmt.Errorf("%s: type %q must be one of string|bool|int|string-slice", fw, fl.Type)
 		}
-		if slices.Contains(flagNames, fl.Name) {
+		if flagNames.Contains(fl.Name) {
 			return fmt.Errorf("%s: duplicate flag name %q", fw, fl.Name)
 		}
-		flagNames = append(flagNames, fl.Name)
+		flagNames.Add(fl.Name)
 		if fl.Short != "" {
 			if len(fl.Short) != 1 {
 				return fmt.Errorf("%s: short %q must be a single character", fw, fl.Short)
 			}
-			if slices.Contains(flagShorts, fl.Short) {
+			if flagShorts.Contains(fl.Short) {
 				return fmt.Errorf("%s: duplicate short %q", fw, fl.Short)
 			}
-			flagShorts = append(flagShorts, fl.Short)
+			flagShorts.Add(fl.Short)
 		}
 		if strings.HasPrefix(fl.Name, "no-") {
 			return fmt.Errorf("%s: flag name %q cannot start with \"no-\" (reserved for bool negation)", fw, fl.Name)
@@ -607,7 +608,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 			if peer == fl.Name {
 				return fmt.Errorf("%s: flag %q conflicts with itself", fw, fl.Name)
 			}
-			if !slices.Contains(flagNames, peer) {
+			if !flagNames.Contains(peer) {
 				return fmt.Errorf("%s: flag %q conflicts with unknown flag %q", fw, fl.Name, peer)
 			}
 		}
@@ -650,16 +651,16 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	if len(c.Preconditions) > 0 && len(c.Commands) > 0 {
 		return fmt.Errorf("%s: `preconditions` is only allowed on leaves (nodes with no subcommands)", where)
 	}
-	stepNames := make([]string, 0, len(c.Steps))
+	stepNames := set.New[string]()
 	for i, s := range c.Steps {
 		sw := fmt.Sprintf("%s.steps[%d]", where, i)
 		if strings.TrimSpace(s.Name) == "" {
 			return fmt.Errorf("%s: name required", sw)
 		}
-		if slices.Contains(stepNames, s.Name) {
+		if stepNames.Contains(s.Name) {
 			return fmt.Errorf("%s: duplicate step name %q", sw, s.Name)
 		}
-		stepNames = append(stepNames, s.Name)
+		stepNames.Add(s.Name)
 		if s.Command.Defined() && s.Request.Defined() {
 			return fmt.Errorf("%s: a <run> is either a command or a request, not both", sw)
 		}
