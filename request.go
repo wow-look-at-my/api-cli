@@ -216,8 +216,9 @@ func renderHeaders(headers []Header, data map[string]any) ([]renderedHeader, err
 }
 
 // contextPath matches a bare dotted name — the `var.filter` form of a jq=
-// attribute. A jq program never has this shape: it starts with `.`, `$`, `[`,
-// `{`, a digit, or an operator.
+// attribute. A jq program almost always opens with `.`, `$`, `[`, `{`, a
+// digit, or an operator, none of which start a path. A bare builtin like
+// `length` is the one collision, and it reads as the path.
 var contextPath = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+)*$`)
 
 // jqProgram resolves a <response jq=> attribute to the program this invocation
@@ -243,7 +244,7 @@ func jqProgram(spec string, data map[string]any) (string, error) {
 
 	v, ok := lookupData(data, spec)
 	if !ok || v == nil {
-		return "", fmt.Errorf("response jq=%q resolved to nothing (a jq program starts with `.`; a context path must name a string)", spec)
+		return "", fmt.Errorf("response jq=%q resolved to nothing: a bare name is a context path and must name a string (write \". | %s\" to mean the jq builtin)", spec, spec)
 	}
 	s, ok := v.(string)
 	if !ok {

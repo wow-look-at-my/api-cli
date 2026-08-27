@@ -156,8 +156,11 @@ answer to `--limit`:
 <response jq=".[0:{{ .flag.limit }}]"/>
 ```
 
-A jq program never has the shape of a context path (it starts with `.`, `$`,
-`[`, `{`, a digit, or an operator), which is what keeps the three forms apart.
+What keeps the forms apart is that a jq program almost always opens with `.`,
+`$`, `[`, `{`, a digit, or an operator, none of which a context path can start
+with. The exception is a bare builtin: `jq="length"` reads as a path and fails,
+so write `jq=". | length"`.
+
 The shaped body is what the leaf prints, `--format=raw` included -- jq runs
 before any presentation layer, not as part of one.
 
