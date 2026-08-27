@@ -139,6 +139,26 @@
 			</entry>
 		</command>
 		<!--
+			The API has no title search, so the shaping happens here. jq= is a
+			template over this invocation's context, so the program the run
+			executes is built from the flags the run was given.
+		-->
+		<command name="search" description="List posts whose title contains a substring.">
+			<flag name="contains" type="string" description="Substring to match in the title."/>
+			<flag name="limit" type="int" default="5" description="Max results."/>
+			<run>
+				<request method="GET">
+					<url><value name="var.base_url"/>/posts</url>
+					<header name="Accept">application/json</header>
+					<response jq='[.[] | select(.title | contains("{{ .flag.contains }}"))][0:{{ .flag.limit }}]'/>
+				</request>
+			</run>
+			<fields footer="{{ len .data }} posts">
+				<field name="id">id</field>
+				<field name="title">title</field>
+			</fields>
+		</command>
+		<!--
 			Two requests, one command: the step looks the user up by name and
 			the leaf uses the id it found. A step with no <run> of its own
 			reuses the inherited request, so all it needs is a new <entry>.

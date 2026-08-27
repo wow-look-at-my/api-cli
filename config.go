@@ -334,9 +334,10 @@ type Header struct {
 	When  string `json:"when,omitempty"`
 }
 
-// Response shapes a JSON response body before output. JQ is a context path
-// (e.g. "var.filter") resolving to a jq program; the program is run over the
-// decoded body and the result(s) are emitted as JSON.
+// Response shapes a JSON response body before output. JQ is the jq program, as
+// a template, or a bare dotted context path naming one (e.g. "var.filter") —
+// see jqProgram. The program runs over the decoded body and the result(s) are
+// emitted as JSON.
 type Response struct {
 	JQ string `json:"jq,omitempty"`
 }

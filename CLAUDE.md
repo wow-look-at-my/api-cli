@@ -43,10 +43,10 @@ Do not add new third-party deps without a clear reason.
 | `config.go`                     | Schema structs (`Config`, `Command`, `Step`, `Arg`, `Flag`, `Cmd`, `Request`, `Param`, `Header`, `Response`, `Fields`, `Field`, `Format`, `View`, `FormatRef`); `Load` (bytes → `parseConfigXML` → `validate`); `validate`/`validateCommand`/`validateRequest`. |
 | `dsl.go`                        | The api-dsl boundary: `xnode` = `apidsl.Node`, plus `parseDOM`/`checkAttrs`/`compileContent`/`compileTextElem`/`textOf`/`isPlaceholder`/`envMap`/`lookupPath`/`mergeVars`/`isTruthy`/`templateTruthy`. An element's name is the method `Name()`, never a field. |
 | `xmlsource.go`                  | `parseConfigXML` + config builders (`buildConfig`, `buildCommandNode`/`addCommandChild`, `buildRun`, `buildRequest`, `buildFields`, `buildEntry`, ...). `<entry>` is converted to a `json.RawMessage`. |
-| `build.go`                      | Builds the `cobra.Command` tree. Threads inheritance for run (`*Cmd`/`*Request`), `cwd`/`stdin`/`confirm`/`format`. `runLeaf`, `renderVars` (fixpoint — vars may reference other vars). |
+| `build.go`                      | Builds the `cobra.Command` tree. Threads inheritance for run (`*Cmd`/`*Request`), `cwd`/`stdin`/`confirm`/`format`. `runLeaf`, `resolveContext` (the leaf's data context: two var passes around the flag gather), `renderVars` (fixpoint — vars may reference other vars). |
 | `flags.go`                      | Declared `<arg>`/`<flag>` on both sides of a run: `registerFlag`/`registerConflicts` on the cobra command, `gatherArgs`/`gatherFlags`/`passthroughParse` back out into `.arg`/`.flag`. |
 | `exec.go`                       | Shell/argv execution: `doExec` (streaming), `captureExec` (steps), `captureExecCapped` (format path, 32 MiB cap), `parseResult`, `cappedTee`. `resolveArgv` renders a `*Cmd` to its final argv, for the caller that cannot execute where it renders (a download's transport). |
-| `request.go`                    | First-class HTTP: `prepareRequest` renders URL/query/headers/body into a `preparedRequest`; `runRequest` sends it via `doHTTP` (net/http) or a transport, then `applyJQ` (embedded gojq) for `<response jq=>`. `httpClient` is a package var (tests swap it for httptest). |
+| `request.go`                    | First-class HTTP: `prepareRequest` renders URL/query/headers/body into a `preparedRequest`; `runRequest` sends it via `doHTTP` (net/http) or a transport, then `applyJQ` (embedded gojq) for `<response jq=>`, whose program `jqProgram` resolves (template / context path / literal). `httpClient` is a package var (tests swap it for httptest). |
 | `transport.go`                  | `<transports>`: parsing (`buildTransports`), the package-level registry (`installTransports`, published by `newRoot`/`buildMCPServer`), selection (`resolveTransportNamed`: `transport=` > registry default > built-in; no runtime override by design), `runViaTransport` (requests), and `prepareDownloadTransport` (downloads: renders the program's argv at plan time). `preparedRequest.context` exposes `.request` to the program's argv. |
 | `steps.go`                      | `runSteps`: the one step loop, shared by the CLI and MCP paths (they take a `stepCapture` and an errOut). A step runs its own command/request or inherits the leaf's. |
 | `fields.go`                     | The `<fields>` auto-formatter: `renderFields` represents one declaration as table / list / lines / raw / json / markdown / csv / timeline, with `show_in` gating, `@key`/`@value` map walking, and priority-based column dropping. Reuses `align.go`. |
@@ -123,7 +123,15 @@ top-level `<downloads>` configures the shared download queue that leaf-level
    path or a scalar, and `<response jq=>` pointing at a missing var, each fail
    the run. These paths used to render one empty record over exit 0, which reads
    as an empty API rather than a broken config.
-6. **Templates use `missingkey=zero`.** Don't change this default.
+6. **Templates use `missingkey=zero`.** Don't change this default. The context
+   maps hold `any`, so a missing key renders `<no value>`, not "".
+6b. **A jq program is a template.** `jq=` renders against the leaf context; a
+   bare dotted name is a context path to a string instead (`jqProgram`,
+   `request.go`).
+6c. **Vars resolve twice per invocation** (`resolveContext`, `build.go`): once
+   flag-blind, to feed templated `<flag default=>`, then again over the finished
+   flag map. `.var` downstream is the second pass, so it sees this run's flags.
+   Both the CLI and MCP paths go through it.
 7. **Test redirection.** `execStdin/Stdout/Stderr`, `httpClient`, and
    `downloadClient` are package-level vars; tests swap them. The download queue
    is process-wide, so a test that swaps its client also calls
@@ -151,7 +159,7 @@ top-level `<downloads>` configures the shared download queue that leaf-level
   past 750.
 - **XML 1.1.** Shipped `*.xml`/`*.xsd` must declare `version="1.1"` (the CI `xml-validator` rejects 1.0 / missing declarations). api-dsl strips the declaration before it decodes, so an inline test snippet can omit it.
 - **The language is not ours to edit here.** A change to `<value>`/`<if>`/`<for>`, to the DOM, or to a shared template helper belongs in api-dsl. A helper that is only meaningful to a CLI belongs in `cliFuncs` (`render.go`).
-- **Sets are `[]string` + `slices.Contains`.** A `map[...]bool` used as a set is a vet error, not a style note. These collections are read once at boot or once per render, so the linear scan costs nothing; api-mirror does the same. Do not reach for a container dependency, and do not silence the analyzer with `map[...]struct{}`.
+- **Sets are `github.com/wow-look-at-my/go-containers/set`.** `set.Of(...)` for a fixed membership list, `set.New[T]()` for one built up. A `map[...]bool` or a `[]string` the code only asks membership of is a vet error, not a style note, and go-toolchain rewrites the latter in place. This dependency is why the module is on go 1.26.
 - **`spread` sentinel.** NUL/SOH markers delimit spread elements (`render.go` /
   `exec.go`).
 - **Number normalization.** `parseResult` (`exec.go`) normalizes JSON numbers to

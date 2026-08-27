@@ -16,28 +16,12 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 		return "error: " + err.Error(), true
 	}
 
-	envM := envMap()
-	preFlagData := map[string]any{
-		"arg":  argMap,
-		"flag": map[string]any{},
-		"env":  envM,
-	}
-	renderedVars, err := renderVars(leaf.vars, preFlagData)
-	if err != nil {
-		return fmt.Sprintf("error: render vars: %v", err), true
-	}
-	preFlagData["var"] = renderedVars
-
-	flagMap, err := mcpGatherFlags(leaf.node, arguments, preFlagData)
+	base := map[string]any{"arg": argMap, "env": envMap()}
+	data, err := resolveContext(leaf.vars, base, func(preFlag map[string]any) (map[string]any, error) {
+		return mcpGatherFlags(leaf.node, arguments, preFlag)
+	})
 	if err != nil {
 		return "error: " + err.Error(), true
-	}
-
-	data := map[string]any{
-		"arg":  argMap,
-		"flag": flagMap,
-		"env":  envM,
-		"var":  renderedVars,
 	}
 
 	for i, p := range leaf.node.Preconditions {

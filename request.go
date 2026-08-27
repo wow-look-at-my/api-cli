@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -214,27 +215,56 @@ func renderHeaders(headers []Header, data map[string]any) ([]renderedHeader, err
 	return out, nil
 }
 
-// applyJQ runs the jq program (resolved from the data context via jqPath) over
-// the JSON body and returns the result(s) as indented JSON. An empty program
-// pretty-prints the body unchanged.
-func applyJQ(jqPath string, raw []byte, data map[string]any) (string, error) {
+// contextPath matches a bare dotted name — the `var.filter` form of a jq=
+// attribute. A jq program never has this shape: it starts with `.`, `$`, `[`,
+// `{`, a digit, or an operator.
+var contextPath = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+)*$`)
+
+// jqProgram resolves a <response jq=> attribute to the program this invocation
+// runs. The attribute is a template, like <url> and <body>: one that carries a
+// placeholder renders against the leaf context, so the program can depend on
+// this run's args and flags. A bare dotted name is a context path instead,
+// which is how a config keeps its program in a <var>. Anything else is the
+// program itself.
+func jqProgram(spec string, data map[string]any) (string, error) {
+	spec = strings.TrimSpace(spec)
+	switch {
+	case spec == "":
+		return "", nil
+	case strings.Contains(spec, "{{"):
+		out, err := renderString(spec, data)
+		if err != nil {
+			return "", fmt.Errorf("render jq %q: %w", spec, err)
+		}
+		return strings.TrimSpace(out), nil
+	case !contextPath.MatchString(spec):
+		return spec, nil
+	}
+
+	v, ok := lookupData(data, spec)
+	if !ok || v == nil {
+		return "", fmt.Errorf("response jq=%q resolved to nothing (a jq program starts with `.`; a context path must name a string)", spec)
+	}
+	s, ok := v.(string)
+	if !ok {
+		return "", fmt.Errorf("response jq=%q is %s, not a jq program", spec, jsonTypeName(v))
+	}
+	return strings.TrimSpace(s), nil
+}
+
+// applyJQ runs the request's jq program over the JSON body and returns the
+// result(s) as indented JSON. An empty program pretty-prints the body
+// unchanged.
+func applyJQ(jqSpec string, raw []byte, data map[string]any) (string, error) {
 	var input any
 	if err := json.Unmarshal(raw, &input); err != nil {
 		// Not JSON: return the raw body untouched.
 		return string(raw), nil
 	}
 
-	program := ""
-	if jqPath != "" {
-		v, ok := lookupData(data, jqPath)
-		if !ok || v == nil {
-			return "", fmt.Errorf("response jq=%q resolved to nothing", jqPath)
-		}
-		s, ok := v.(string)
-		if !ok {
-			return "", fmt.Errorf("response jq=%q is %s, not a jq program", jqPath, jsonTypeName(v))
-		}
-		program = strings.TrimSpace(s)
+	program, err := jqProgram(jqSpec, data)
+	if err != nil {
+		return "", err
 	}
 	if program == "" {
 		return marshalJSON(input)
