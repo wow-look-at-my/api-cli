@@ -132,7 +132,37 @@ requests through your own program instead, see [Transports](#transports).
 | `<query><param name="k">v</param></query>` | Explicit params. Empty values are dropped. An enclosing `<if test=>` gates the params it wraps. |
 | `<header name="H">v</header>` | A header (value is a template). An enclosing `<if test=>` gates the headers it wraps. |
 | `<body>` | Request body (template); omit for no body. |
-| `<response jq="path"/>` | Shape the JSON body with the jq program at that context path. A path that names nothing, or names something other than a string, fails the run. Omit `<response>` to return the raw body verbatim (diffs, READMEs, ...). |
+| `<response jq="program"/>` | Shape the JSON body with a jq program. See below. Omit `<response>` to return the raw body verbatim (diffs, READMEs, ...). |
+
+`jq=` is a template, like `<url>` and `<body>`. It takes one of three forms,
+decided by what you write:
+
+| You write | It means |
+|-----------|----------|
+| `jq=".[] \| .name"` | The jq program itself. |
+| `jq=".[0:{{ .flag.limit }}]"` | A template. It renders against this invocation's context (`.arg`, `.flag`, `.var`, `.entry`, `.env`), so the program depends on the flags this run was given. |
+| `jq="var.filter"` | A bare dotted name is a context path. It must name a string, which is the program; a path that names nothing, or names something other than a string, fails the run. |
+
+The path form is how a config keeps a long program out of the attribute. The
+var it names is itself rendered against this run's flags, so both of these
+answer to `--limit`:
+
+```xml
+<vars>
+	<var name="filter">.[0:<value name="flag.limit"/>]</var>
+</vars>
+...
+<response jq="var.filter"/>
+<response jq=".[0:{{ .flag.limit }}]"/>
+```
+
+What keeps the forms apart is that a jq program almost always opens with `.`,
+`$`, `[`, `{`, a digit, or an operator, none of which a context path can start
+with. The exception is a bare builtin: `jq="length"` reads as a path and fails,
+so write `jq=". | length"`.
+
+The shaped body is what the leaf prints, `--format=raw` included -- jq runs
+before any presentation layer, not as part of one.
 
 A non-2xx/3xx status prints the body to stderr and exits non-zero (like
 `curl -f`). The root `<run>` is typically the shared request; per-leaf `<run>`
@@ -640,12 +670,21 @@ sprig:
 
 ## Template semantics
 
-- Parsed with `missingkey=zero` -- missing map keys don't error. Use
-  `{{default "" .x}}`, `{{if .x}}...{{end}}`, or `{{required "msg" .x}}`.
+- Parsed with `missingkey=zero` -- missing map keys don't error. Every context
+  map holds `any`, whose zero value is nil, so a missing key **prints
+  `<no value>`**, not an empty string. Reach for `{{default "" .x}}`,
+  `{{if .x}}...{{end}}`, or `{{required "msg" .x}}` when that matters. A
+  declared `<flag>` is always present, default included, so `<no value>` in
+  practice means the path is wrong.
 - `<entry>` is rendered first (without `.entry` in scope); every string leaf is
   rendered independently and exposed as `.entry`.
 - `<vars>` resolve to a fixpoint, so a var can reference another var
   (`var.filter` can interpolate `var.noise`).
+- A var may read `.flag`, and a `<flag default=>` may read `.var`. Vars
+  therefore resolve twice per invocation: once without flags, which is the
+  context a templated flag default renders against, and again over the finished
+  flag map. `.var` as anything downstream sees it -- a URL, an entry, a jq
+  program -- is the second pass, so it carries this run's flags.
 
 ## Working directory and stdin
 

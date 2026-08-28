@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"regexp"
 	"strings"
@@ -168,59 +169,26 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 	}
 
 	var data map[string]any
+	var err error
 
 	if node.Passthrough {
 		flagMap, rest := passthroughParse(args, node.Flags)
-		envM := envMap()
-		preData := map[string]any{
-			"arg":  map[string]any{},
-			"flag": map[string]any{},
-			"env":  envM,
-			"rest": rest,
-		}
-		renderedVars, err := renderVars(vars, preData)
-		if err != nil {
-			return fmt.Errorf("render vars: %w", err)
-		}
-		data = map[string]any{
-			"arg":  map[string]any{},
-			"flag": flagMap,
-			"env":  envM,
-			"var":  renderedVars,
-			"rest": rest,
-		}
+		base := map[string]any{"arg": map[string]any{}, "env": envMap(), "rest": rest}
+		data, err = resolveContext(vars, base, func(map[string]any) (map[string]any, error) {
+			return flagMap, nil
+		})
 	} else {
-		argMap, err := gatherArgs(node, args)
-		if err != nil {
+		var argMap map[string]any
+		if argMap, err = gatherArgs(node, args); err != nil {
 			return err
 		}
-
-		// Templated flag defaults render against {arg, env, var} — not other
-		// flags — so build vars from that partial context first, then resolve
-		// flags, then complete the data map.
-		envM := envMap()
-		preFlagData := map[string]any{
-			"arg":  argMap,
-			"flag": map[string]any{},
-			"env":  envM,
-		}
-		renderedVars, err := renderVars(vars, preFlagData)
-		if err != nil {
-			return fmt.Errorf("render vars: %w", err)
-		}
-		preFlagData["var"] = renderedVars
-
-		flagMap, err := gatherFlags(c, node, preFlagData)
-		if err != nil {
-			return err
-		}
-
-		data = map[string]any{
-			"arg":  argMap,
-			"flag": flagMap,
-			"env":  envM,
-			"var":  renderedVars,
-		}
+		base := map[string]any{"arg": argMap, "env": envMap()}
+		data, err = resolveContext(vars, base, func(preFlag map[string]any) (map[string]any, error) {
+			return gatherFlags(c, node, preFlag)
+		})
+	}
+	if err != nil {
+		return err
 	}
 
 	logVerbose("leaf %q: starting", node.Name)
@@ -372,6 +340,40 @@ func reportExecutions(c *cobra.Command, n int) {
 	if !quiet {
 		fmt.Fprintf(execStderr, "%d executions\n", n)
 	}
+}
+
+// resolveContext assembles a leaf's data context from its non-flag half (base:
+// .arg, .env, and .rest in passthrough mode), the flags this invocation
+// supplies, and the merged vars.
+//
+// Vars resolve twice, because the two halves depend on each other: a templated
+// flag default reads .var, and a var reads .flag. Pass one runs without flags
+// purely to feed those defaults. Pass two runs again over the original
+// templates once gather has produced the whole flag map, cobra's declared
+// defaults included. Everything downstream — a URL, an entry, a jq program
+// kept in a <var> — therefore sees this run's flags.
+func resolveContext(vars, base map[string]any, gather func(preFlag map[string]any) (map[string]any, error)) (map[string]any, error) {
+	preFlag := maps.Clone(base)
+	preFlag["flag"] = map[string]any{}
+	firstPass, err := renderVars(vars, preFlag)
+	if err != nil {
+		return nil, fmt.Errorf("render vars: %w", err)
+	}
+	preFlag["var"] = firstPass
+
+	flagMap, err := gather(preFlag)
+	if err != nil {
+		return nil, err
+	}
+
+	data := maps.Clone(base)
+	data["flag"] = flagMap
+	renderedVars, err := renderVars(vars, data)
+	if err != nil {
+		return nil, fmt.Errorf("render vars: %w", err)
+	}
+	data["var"] = renderedVars
+	return data, nil
 }
 
 // maxVarPasses caps the fixpoint iteration that resolves inter-var references.

@@ -3,8 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/wow-look-at-my/go-containers/set"
 	"os"
-	"slices"
 	"sort"
 	"strings"
 )
@@ -334,9 +334,10 @@ type Header struct {
 	When  string `json:"when,omitempty"`
 }
 
-// Response shapes a JSON response body before output. JQ is a context path
-// (e.g. "var.filter") resolving to a jq program; the program is run over the
-// decoded body and the result(s) are emitted as JSON.
+// Response shapes a JSON response body before output. JQ is the jq program, as
+// a template, or a bare dotted context path naming one (e.g. "var.filter") —
+// see jqProgram. The program runs over the decoded body and the result(s) are
+// emitted as JSON.
 type Response struct {
 	JQ string `json:"jq,omitempty"`
 }
@@ -376,19 +377,19 @@ type Field struct {
 }
 
 // reservedCommandNames are the names cobra owns. A config cannot declare one.
-var reservedCommandNames = []string{"help", "completion", "__complete", "docs"}
+var reservedCommandNames = set.Of("help", "completion", "__complete", "docs")
 
 // validFlagTypes are the accepted <flag type=> values. The empty string
 // defaults to "string".
-var validFlagTypes = []string{"", "string", "bool", "int", "string-slice"}
+var validFlagTypes = set.Of("", "string", "bool", "int", "string-slice")
 
 // validArgTypes are the accepted <arg type=> values. The empty string defaults
 // to "string".
-var validArgTypes = []string{"", "string", "int"}
+var validArgTypes = set.Of("", "string", "int")
 
 // validFormatInputs are the accepted <format input=> values. The empty string
 // defaults to "json".
-var validFormatInputs = []string{"", "json", "lines", "raw"}
+var validFormatInputs = set.Of("", "json", "lines", "raw")
 
 // Load reads and parses an XML config file. The XML element tree is mapped to
 // the Config model by parseConfigXML (see xmlsource.go); node placeholders
@@ -501,22 +502,22 @@ func validateFormat(f *Format, where string) error {
 	if f == nil {
 		return fmt.Errorf("%s: empty format", where)
 	}
-	if !slices.Contains(validFormatInputs, f.Input) {
+	if !validFormatInputs.Contains(f.Input) {
 		return fmt.Errorf("%s: input %q must be one of json|lines|raw", where, f.Input)
 	}
 	if len(f.Views) == 0 {
 		return fmt.Errorf("%s: at least one view is required", where)
 	}
-	viewNames := make([]string, 0, len(f.Views))
+	viewNames := set.New[string]()
 	for i, v := range f.Views {
 		vw := fmt.Sprintf("%s.views[%d]", where, i)
 		if strings.TrimSpace(v.Name) == "" {
 			return fmt.Errorf("%s: name required", vw)
 		}
-		if slices.Contains(viewNames, v.Name) {
+		if viewNames.Contains(v.Name) {
 			return fmt.Errorf("%s: duplicate view name %q", vw, v.Name)
 		}
-		viewNames = append(viewNames, v.Name)
+		viewNames.Add(v.Name)
 		if strings.TrimSpace(v.Template) == "" {
 			return fmt.Errorf("%s: template required", vw)
 		}
@@ -535,7 +536,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	if strings.ContainsAny(c.Name, " \t\n/") {
 		return fmt.Errorf("%s: name %q must not contain whitespace or slashes", where, c.Name)
 	}
-	if slices.Contains(reservedCommandNames, c.Name) {
+	if reservedCommandNames.Contains(c.Name) {
 		return fmt.Errorf("%s: name %q is reserved by cobra", where, c.Name)
 	}
 	if siblings[c.Name] {
@@ -550,20 +551,20 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		return fmt.Errorf("%s: passthrough is only allowed on leaves", where)
 	}
 
-	argNames := make([]string, 0, len(c.Args))
+	argNames := set.New[string]()
 	requiredAfterOptional := false
 	for i, a := range c.Args {
 		aw := fmt.Sprintf("%s.args[%d]", where, i)
 		if strings.TrimSpace(a.Name) == "" {
 			return fmt.Errorf("%s: name required", aw)
 		}
-		if !slices.Contains(validArgTypes, a.Type) {
+		if !validArgTypes.Contains(a.Type) {
 			return fmt.Errorf("%s: type %q must be one of string|int", aw, a.Type)
 		}
-		if slices.Contains(argNames, a.Name) {
+		if argNames.Contains(a.Name) {
 			return fmt.Errorf("%s: duplicate arg name %q", aw, a.Name)
 		}
-		argNames = append(argNames, a.Name)
+		argNames.Add(a.Name)
 		if a.Variadic && i != len(c.Args)-1 {
 			return fmt.Errorf("%s: variadic arg %q must be the last arg", aw, a.Name)
 		}
@@ -574,28 +575,28 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		}
 	}
 
-	flagNames := make([]string, 0, len(c.Flags))
-	flagShorts := make([]string, 0, len(c.Flags))
+	flagNames := set.New[string]()
+	flagShorts := set.New[string]()
 	for i, fl := range c.Flags {
 		fw := fmt.Sprintf("%s.flags[%d]", where, i)
 		if strings.TrimSpace(fl.Name) == "" {
 			return fmt.Errorf("%s: name required", fw)
 		}
-		if !slices.Contains(validFlagTypes, fl.Type) {
+		if !validFlagTypes.Contains(fl.Type) {
 			return fmt.Errorf("%s: type %q must be one of string|bool|int|string-slice", fw, fl.Type)
 		}
-		if slices.Contains(flagNames, fl.Name) {
+		if flagNames.Contains(fl.Name) {
 			return fmt.Errorf("%s: duplicate flag name %q", fw, fl.Name)
 		}
-		flagNames = append(flagNames, fl.Name)
+		flagNames.Add(fl.Name)
 		if fl.Short != "" {
 			if len(fl.Short) != 1 {
 				return fmt.Errorf("%s: short %q must be a single character", fw, fl.Short)
 			}
-			if slices.Contains(flagShorts, fl.Short) {
+			if flagShorts.Contains(fl.Short) {
 				return fmt.Errorf("%s: duplicate short %q", fw, fl.Short)
 			}
-			flagShorts = append(flagShorts, fl.Short)
+			flagShorts.Add(fl.Short)
 		}
 		if strings.HasPrefix(fl.Name, "no-") {
 			return fmt.Errorf("%s: flag name %q cannot start with \"no-\" (reserved for bool negation)", fw, fl.Name)
@@ -607,7 +608,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 			if peer == fl.Name {
 				return fmt.Errorf("%s: flag %q conflicts with itself", fw, fl.Name)
 			}
-			if !slices.Contains(flagNames, peer) {
+			if !flagNames.Contains(peer) {
 				return fmt.Errorf("%s: flag %q conflicts with unknown flag %q", fw, fl.Name, peer)
 			}
 		}
@@ -650,16 +651,16 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	if len(c.Preconditions) > 0 && len(c.Commands) > 0 {
 		return fmt.Errorf("%s: `preconditions` is only allowed on leaves (nodes with no subcommands)", where)
 	}
-	stepNames := make([]string, 0, len(c.Steps))
+	stepNames := set.New[string]()
 	for i, s := range c.Steps {
 		sw := fmt.Sprintf("%s.steps[%d]", where, i)
 		if strings.TrimSpace(s.Name) == "" {
 			return fmt.Errorf("%s: name required", sw)
 		}
-		if slices.Contains(stepNames, s.Name) {
+		if stepNames.Contains(s.Name) {
 			return fmt.Errorf("%s: duplicate step name %q", sw, s.Name)
 		}
-		stepNames = append(stepNames, s.Name)
+		stepNames.Add(s.Name)
 		if s.Command.Defined() && s.Request.Defined() {
 			return fmt.Errorf("%s: a <run> is either a command or a request, not both", sw)
 		}
