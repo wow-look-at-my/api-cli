@@ -242,13 +242,13 @@ func jqProgram(spec string, data map[string]any) (string, error) {
 		return spec, nil
 	}
 
-	v, ok := lookupData(data, spec)
+	v, ok := fields.Lookup(data, spec)
 	if !ok || v == nil {
 		return "", fmt.Errorf("response jq=%q resolved to nothing: a bare name is a context path and must name a string (write \". | %s\" to mean the jq builtin)", spec, spec)
 	}
 	s, ok := v.(string)
 	if !ok {
-		return "", fmt.Errorf("response jq=%q is %s, not a jq program", spec, jsonTypeName(v))
+		return "", fmt.Errorf("response jq=%q is %s, not a jq program", spec, fields.JSONTypeName(v))
 	}
 	return strings.TrimSpace(s), nil
 }
@@ -314,22 +314,10 @@ func applyJQ(jqSpec string, raw []byte, data map[string]any) (string, error) {
 	}
 }
 
-func marshalJSON(v any) (string, error) {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(v); err != nil {
-		return "", fmt.Errorf("encode json: %w", err)
-	}
-	return strings.TrimRight(buf.String(), "\n"), nil
-}
-
-func sortedKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
+// marshalJSON and sortedKeys live in the fields package, which needs them for
+// its json sink and its derived field list. They are aliased here so the call
+// sites in this file read as they always did.
+var (
+	marshalJSON = fields.MarshalJSON
+	sortedKeys  = fields.SortedKeys
+)

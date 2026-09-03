@@ -355,7 +355,7 @@ func downloadRecords(d *Download, data map[string]any, idx int) ([]map[string]an
 	if d.Over == "" {
 		return []map[string]any{data}, nil
 	}
-	src, ok := lookupData(data, d.Over)
+	src, ok := fields.Lookup(data, d.Over)
 	if !ok || src == nil {
 		return nil, fmt.Errorf("download[%d]: over=%q resolved to nothing", idx, d.Over)
 	}

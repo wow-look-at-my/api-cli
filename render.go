@@ -43,6 +43,26 @@ func cliFuncs() template.FuncMap {
 // construction, and safe for concurrent use.
 var renderer = apidsl.NewRenderer(cliFuncs())
 
+// The width-aware aligner and the <fields> renderer live in the fields package,
+// which is importable on its own. These aliases keep this CLI's call sites
+// reading as they did, and cliRenderer is what a field's expr and a footer
+// evaluate with: the shared renderer plus the helpers above.
+var (
+	padRight     = fields.PadRight
+	padLeft      = fields.PadLeft
+	displayWidth = fields.DisplayWidth
+	stripANSI    = fields.StripANSI
+	alignColumns = fields.AlignColumns
+)
+
+var cliRenderer fields.Renderer = func(tmpl string, data map[string]any) (string, error) {
+	return renderString(tmpl, data)
+}
+
+func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width int) (string, error) {
+	return fields.Render(cliRenderer, f, parsed, ctx, sink, width)
+}
+
 // renderString executes a text/template against data with the shared functions
 // plus cliFuncs.
 func renderString(tmpl string, data any) (string, error) {
