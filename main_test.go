@@ -80,6 +80,7 @@ func TestRun_InvalidConfigReturns2(t *testing.T) {
 }
 
 func TestRun_HappyPath(t *testing.T) {
+	t.Serial() // swaps execStdout/execStderr/exitCode, which are package-wide.
 	dir := t.TempDir()
 	cfg := `<config name="t">
 	<run>printf '%s' {{.arg.id}}</run>
@@ -226,6 +227,7 @@ func TestApplyEnvVars_BadFormat(t *testing.T) {
 }
 
 func TestRun_VarSetsEnv(t *testing.T) {
+	t.Serial() // swaps execStdout/execStderr/exitCode, which are package-wide.
 	dir := t.TempDir()
 	cfg := `<config name="t">
 	<run>printf '%s' {{.env.API_CLI_TEST_TOKEN}}</run>

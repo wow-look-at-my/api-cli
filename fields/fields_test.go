@@ -132,8 +132,7 @@ func TestFields_PriorityDrop(t *testing.T) {
 		{Name: "drop", Path: "b", Priority: -2},
 		{Name: "alsokeep", Path: "c", Priority: 0},
 	}}
-	// Narrow width forces the lowest-priority column out (full table is 20
-	// wide; 16 fits keep+alsokeep but not the priority -2 column).
+	// A width too narrow for the whole table forces the lowest-priority column out.
 	out, err := renderFields(testRenderer, f, parsed, fctx(parsed), "table", 16)
 	require.NoError(t, err)
 	assert.Contains(t, out, "keep")

@@ -7,13 +7,9 @@ import (
 	"golang.org/x/text/width"
 )
 
-// displayWidth returns the visual column width of s on a terminal.
-//
-//   - ANSI CSI / OSC / single-byte escape sequences contribute 0.
-//   - East Asian Wide and Fullwidth runes contribute 2.
-//   - Combining marks (Mn, Me) and format chars (Cf) contribute 0.
-//   - C0 / C1 control chars contribute 0.
-//   - Other printable runes contribute 1.
+// displayWidth returns the column width of s on a terminal. Escape sequences,
+// combining marks and control characters take no columns; runeWidth decides
+// the rest.
 func displayWidth(s string) int {
 	w := 0
 	i := 0
@@ -63,9 +59,9 @@ func runeWidth(r rune) int {
 	return 1
 }
 
-// skipEscape advances past an ANSI escape sequence beginning at s[i] (which
-// must be ESC = 0x1b). Returns the index of the first byte after the
-// sequence. Recognises CSI, OSC, and single-byte ESC + intro.
+// skipEscape advances past the ANSI escape sequence at s[i], which must be an
+// ESC, and returns the index just after it. It knows CSI, OSC, and ESC plus an
+// intro byte.
 func skipEscape(s string, i int) int {
 	// i points at ESC.
 	if i+1 >= len(s) {
@@ -102,9 +98,8 @@ func skipEscape(s string, i int) int {
 	}
 }
 
-// decodeRune is a tiny UTF-8 decoder that returns (r, byteLen). Avoids the
-// allocation overhead of utf8.DecodeRuneInString for large inputs and keeps
-// this file self-contained against std behaviour changes.
+// decodeRune reads the rune at the head of s and reports how many bytes it
+// took.
 func decodeRune(s string) (rune, int) {
 	if len(s) == 0 {
 		return 0, 0
@@ -133,13 +128,9 @@ func decodeRune(s string) (rune, int) {
 	}
 }
 
-// alignColumns formats a slice of tab-separated rows so columns align by
-// displayWidth. ASCII spaces pad to the maximum width per column, plus
-// `padding` extra spaces between columns (minimum 1). Each row terminates with
-// a newline. ANSI escape sequences pass through verbatim.
-//
-// Rows with fewer cells than the max are padded with empty trailing cells.
-// Trailing newlines on input rows are stripped.
+// alignColumns pads tab-separated rows with spaces so their columns line up by
+// displayWidth, leaving `padding` spaces of gutter. A short row gets empty
+// trailing cells, and escape sequences pass through.
 func alignColumns(rows []string, padding int) string {
 	if padding < 1 {
 		padding = 1

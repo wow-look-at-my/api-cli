@@ -10,21 +10,14 @@ import (
 	"github.com/wow-look-at-my/go-containers/set"
 )
 
-// timelineEventKeys are the field names the timeline sink understands. A record
-// becomes one timeline event by reading the fields with these names; any other
-// field is ignored. "date" makes a point event; "start"+"end" make a duration
-// event. The remaining keys are optional annotations.
+// timelineEventKeys are the field names the timeline sink reads off a record.
 var timelineEventKeys = set.Of("label", "date", "start", "end", "description", "color")
 
-// renderTimelineSink represents the records as a horizontal ASCII timeline,
-// rendered by the ascii-timeline library. Each record is one event; the field
-// names label/date/start/end/description/color select the event properties
-// (show_in still gates visibility). Records that resolve no placement on the
-// axis (no "date" and not both "start" and "end") are skipped.
-//
-// Color follows the format context's .tty (and the NO_COLOR env var); width
-// follows .width, where 0 means the library default. The event values reuse
-// cellValue, so default=/truncate=/firstline=/expr= all apply as usual.
+// renderTimelineSink draws the records as a horizontal ASCII timeline through
+// the ascii-timeline library. A record becomes an event, and a record that
+// resolves no placement on the axis is skipped. Color follows the context's
+// .tty and the NO_COLOR variable, width follows .width. Values come from
+// cellValue, so default=, truncate=, firstline= and expr= all apply.
 func renderTimelineSink(rnd Renderer, recs []record, fields []Field, ctx map[string]any) (string, error) {
 	inc := includedFields(fields, "timeline")
 
@@ -66,8 +59,7 @@ func renderTimelineSink(rnd Renderer, recs []record, fields []Field, ctx map[str
 	return tl.String(), nil
 }
 
-// timelineNoColor reports whether the timeline should drop ANSI color: when
-// stdout is not a TTY, or NO_COLOR is set (any non-empty value, NO_COLOR-style).
+// timelineNoColor drops color off a terminal, and whenever NO_COLOR is set.
 func timelineNoColor(ctx map[string]any) bool {
 	if os.Getenv("NO_COLOR") != "" {
 		return true
@@ -76,8 +68,8 @@ func timelineNoColor(ctx map[string]any) bool {
 	return !tty
 }
 
-// timelineWidth returns the axis width from the format context's .width
-// (the terminal width, or 0 when not a TTY — the library then uses its default).
+// timelineWidth reads the axis width from the format context. Off a terminal it
+// is unset, and the library falls back to its own default.
 func timelineWidth(ctx map[string]any) int {
 	w, _ := ctx["width"].(int)
 	return w

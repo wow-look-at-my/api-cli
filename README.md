@@ -692,6 +692,24 @@ ghr search repos 'language:go stars:>10000' --sort stars
 ghr repo languages golang/go --as=json
 ```
 
+## Using the formatter as a library
+
+The `<fields>` formatter is importable on its own, at
+`github.com/wow-look-at-my/api-cli/fields`. A program with decoded JSON gets the
+same table, list, JSON, Markdown, CSV, or timeline output without adopting the
+XML config language.
+
+```go
+f := &fields.Fields{Over: "items", List: []fields.Field{
+	{Name: "id", Path: "id"},
+	{Name: "name", Path: "name"},
+}}
+out, err := fields.Render(nil, f, body, map[string]any{"data": body}, "", 0)
+```
+
+The first argument evaluates `expr=` and `footer=` templates, and may be nil for
+a declaration that uses neither. See `docs/fields-package.md`.
+
 ## Development
 
 ```sh

@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wow-look-at-my/api-cli/fields"
 	"github.com/wow-look-at-my/go-containers/set"
 )
 
@@ -45,7 +46,7 @@ func readmeLine(t *testing.T, marker string) string {
 func TestDocs_ReadmeNamesEverySink(t *testing.T) {
 	row := readmeLine(t, "| `--as <sink>`")
 	forcing := readmeSection(t, "### Forcing a representation")
-	for _, sink := range knownSinks.Values() {
+	for _, sink := range fields.Sinks() {
 		assert.Contains(t, row, sink, "the --as row omits the %q sink", sink)
 		assert.Contains(t, forcing, sink, "the forcing section omits the %q sink", sink)
 	}
@@ -56,7 +57,7 @@ func TestDocs_ReadmeNamesEverySink(t *testing.T) {
 func TestDocs_AsFlagUsageNamesEverySink(t *testing.T) {
 	t.Serial() // newRoot publishes the transport registry and the download settings.
 	usage := newRoot(nil).PersistentFlags().Lookup("as").Usage
-	for _, sink := range knownSinks.Values() {
+	for _, sink := range fields.Sinks() {
 		assert.Contains(t, usage, sink, "--as usage omits the %q sink", sink)
 	}
 }

@@ -16,8 +16,8 @@ var knownSinks = set.Of(
 	"timeline",
 )
 
-// record is one row of output. obj is the object (object record), the entry
-// value (when walking a map), or a scalar. key is the entry key when isEntry.
+// record is a row of output. obj holds an object, a map entry's value, or a
+// scalar; key carries the entry's key while isEntry.
 type record struct {
 	obj     any
 	key     string
@@ -25,8 +25,8 @@ type record struct {
 }
 
 // renderFields represents a Fields declaration as the chosen sink. An empty
-// sink auto-selects from the data shape. width (>0) enables priority-based
-// column dropping for tables.
+// sink follows the data shape, and a positive width lets a table drop columns
+// by priority.
 func renderFields(rnd Renderer, f *Fields, parsed any, ctx map[string]any, sink string, width int) (string, error) {
 	recs, shape, err := resolveRecords(f, parsed, ctx)
 	if err != nil {
@@ -84,8 +84,8 @@ func renderFields(rnd Renderer, f *Fields, parsed any, ctx map[string]any, sink 
 	return out, nil
 }
 
-// humanSink reports whether a footer line should follow the body. Markdown and
-// csv are structured outputs, so a trailing prose footer would corrupt them.
+// humanSink reports whether a footer may follow the body. A structured sink
+// would be corrupted by trailing prose.
 func humanSink(sink string) bool {
 	switch sink {
 	case "table", "list", "lines":
@@ -247,10 +247,6 @@ func displayValue(v any) string {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Sinks
-// ---------------------------------------------------------------------------
-
 func renderRawSink(recs []record) string {
 	var b strings.Builder
 	for _, r := range recs {
@@ -264,8 +260,8 @@ func renderLinesSink(rnd Renderer, recs []record, fields []Field, ctx map[string
 	inc := includedFields(fields, "lines")
 	var b strings.Builder
 	for _, r := range recs {
-		// Scalar records print their value directly; only object records use the
-		// first declared field as the line.
+		// A scalar record prints its own value; an object record prints the
+		// leading declared field.
 		if _, isMap := r.obj.(map[string]any); len(inc) == 0 || !isMap {
 			b.WriteString(displayValue(r.obj))
 		} else {
@@ -438,12 +434,8 @@ func renderJSONSink(rnd Renderer, f *Fields, recs []record, fields []Field, shap
 	return marshalJSON(arr)
 }
 
-// ---------------------------------------------------------------------------
-// Table columns + priority dropping
-// ---------------------------------------------------------------------------
-
 type column struct {
-	cells    []string // cells[0] is the header, cells[1..] are rows
+	cells    []string // the header, then a cell per record
 	priority int
 	width    int
 }
@@ -469,9 +461,9 @@ func buildColumns(rnd Renderer, inc []Field, recs []record, ctx map[string]any) 
 	return cols, nil
 }
 
-// dropByPriority removes the lowest-priority columns until the table fits in
-// width, keeping at least one column. Ties drop the rightmost column first, so
-// document order is otherwise preserved. width <= 0 disables dropping.
+// dropByPriority removes the lowest-priority columns until the table fits the
+// width, never emptying it. A tie drops the rightmost, so document order
+// survives. A width that is not positive disables dropping.
 func dropByPriority(cols []column, width, padding int) []column {
 	if width <= 0 {
 		return cols

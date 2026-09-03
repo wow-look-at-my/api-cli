@@ -8,12 +8,10 @@ import (
 	"strings"
 )
 
-// MarshalJSON encodes v as indented JSON with HTML escaping off, so a URL in a
-// value survives the round trip legibly.
+// MarshalJSON encodes v indented, without HTML escaping, so a URL stays legible.
 func MarshalJSON(v any) (string, error) { return marshalJSON(v) }
 
-// SortedKeys returns m's keys in a stable order, which is what keeps a derived
-// field list and a rendered object from reshuffling between runs.
+// SortedKeys returns m's keys in a stable order, so output does not reshuffle.
 func SortedKeys(m map[string]any) []string { return sortedKeys(m) }
 
 // JSONTypeName names a decoded JSON value's type for an error message.
