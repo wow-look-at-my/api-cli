@@ -11,6 +11,7 @@ import (
 )
 
 func TestDocsCommand_PrintsReadme(t *testing.T) {
+	t.Serial()
 	var out bytes.Buffer
 	prev := execStdout
 	execStdout = &out
@@ -26,6 +27,7 @@ func TestDocsCommand_PrintsReadme(t *testing.T) {
 }
 
 func TestDocsCommand_Schema(t *testing.T) {
+	t.Serial()
 	var out bytes.Buffer
 	prev := execStdout
 	execStdout = &out
@@ -43,6 +45,7 @@ func TestDocsCommand_Schema(t *testing.T) {
 }
 
 func TestDocsCommand_Example(t *testing.T) {
+	t.Serial()
 	var out bytes.Buffer
 	prev := execStdout
 	execStdout = &out

@@ -195,7 +195,9 @@ func TestDownloadQueue_VerifiesEveryAlgorithm(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(body)
 	}))
-	defer srv.Close()
+	// Cleanup, not defer: the subtests below run in parallel, so they start
+	// after this function returns and a deferred Close beats them to it.
+	t.Cleanup(srv.Close)
 
 	dir := t.TempDir()
 	q := testQueue(t, srv, 2, 0)
@@ -275,6 +277,7 @@ func TestDownloadQueue_RespectsConcurrencyLimit(t *testing.T) {
 }
 
 func TestSharedQueue_IsReusedAcrossBatches(t *testing.T) {
+	t.Serial()
 	resetSharedQueue()
 	t.Cleanup(resetSharedQueue)
 
