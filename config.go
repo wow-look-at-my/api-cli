@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/wow-look-at-my/api-cli/fields"
 	"github.com/wow-look-at-my/go-containers/set"
 	"os"
 	"sort"
@@ -342,39 +343,13 @@ type Response struct {
 	JQ string `json:"jq,omitempty"`
 }
 
-// Fields declares the shape of a leaf's output records: which fields, with
-// optional rename / default / transform / compute. The renderer represents that
-// one declaration automatically as a table, a "Label: value" list, lines, JSON,
-// Markdown, or CSV, choosing a default from the data's shape (overridable with
-// --as). Built from a <fields> element.
-type Fields struct {
-	Over   string  `json:"over,omitempty"`   // context path to the records (default: the whole body)
-	Footer string  `json:"footer,omitempty"` // template for a trailing summary line
-	List   []Field `json:"fields,omitempty"`
-}
-
-// Field is one column/row in a Fields declaration.
-//
-//   - Path is a record-relative source path ("stargazers_count", "user.login"),
-//     or the sentinels "@key"/"@value" when Over walks a map.
-//   - Expr, if set, is a Go template evaluated with the record as "." and the
-//     whole format context as "$"; it overrides Path (a virtual field).
-//   - Default substitutes for an empty value; Truncate caps the string length;
-//     FirstLine keeps only the first line.
-//   - Priority orders width-constrained dropping (lowest dropped first; default 0).
-//   - ShowIn gates the field per representation: "" / "*" = all; an allowlist
-//     ("json,csv") shows only there; a negated list ("!json") shows everywhere
-//     except there. The two forms cannot be mixed.
-type Field struct {
-	Name      string `json:"name"`
-	Path      string `json:"path,omitempty"`
-	Expr      string `json:"expr,omitempty"`
-	Default   string `json:"default,omitempty"`
-	Truncate  int    `json:"truncate,omitempty"`
-	FirstLine bool   `json:"firstLine,omitempty"`
-	Priority  int    `json:"priority,omitempty"`
-	ShowIn    string `json:"showIn,omitempty"`
-}
+// Fields and Field are the fields package's own declarations. They are aliased
+// rather than redeclared so a <fields> element parses straight into the types
+// the renderer takes, and an importing program shares them.
+type (
+	Fields = fields.Fields
+	Field  = fields.Field
+)
 
 // reservedCommandNames are the names cobra owns. A config cannot declare one.
 var reservedCommandNames = set.Of("help", "completion", "__complete", "docs")

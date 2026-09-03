@@ -1,4 +1,4 @@
-package main
+package fields
 
 import (
 	"encoding/json"
@@ -27,7 +27,7 @@ type record struct {
 // renderFields represents a Fields declaration as the chosen sink. An empty
 // sink auto-selects from the data shape. width (>0) enables priority-based
 // column dropping for tables.
-func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width int) (string, error) {
+func renderFields(rnd Renderer,f *Fields, parsed any, ctx map[string]any, sink string, width int) (string, error) {
 	recs, shape, err := resolveRecords(f, parsed, ctx)
 	if err != nil {
 		return "", err
@@ -49,28 +49,31 @@ func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width 
 	var out string
 	switch sink {
 	case "json":
-		return renderJSONSink(f, recs, fieldsList, shape, parsed, ctx, derived)
+		return renderJSONSink(r, f, recs, fieldsList, shape, parsed, ctx, derived)
 	case "raw":
 		out = renderRawSink(recs)
 	case "lines":
-		out, err = renderLinesSink(recs, fieldsList, ctx)
+		out, err = renderLinesSink(r, recs, fieldsList, ctx)
 	case "list":
-		out, err = renderListSink(recs, fieldsList, ctx, sink)
+		out, err = renderListSink(r, recs, fieldsList, ctx, sink)
 	case "table":
-		out, err = renderTableSink(recs, fieldsList, ctx, sink, width)
+		out, err = renderTableSink(r, recs, fieldsList, ctx, sink, width)
 	case "markdown":
-		out, err = renderMarkdownSink(recs, fieldsList, ctx, sink)
+		out, err = renderMarkdownSink(r, recs, fieldsList, ctx, sink)
 	case "csv":
-		out, err = renderCSVSink(recs, fieldsList, ctx, sink)
+		out, err = renderCSVSink(r, recs, fieldsList, ctx, sink)
 	case "timeline":
-		out, err = renderTimelineSink(recs, fieldsList, ctx)
+		out, err = renderTimelineSink(r, recs, fieldsList, ctx)
 	}
 	if err != nil {
 		return "", err
 	}
 
 	if f.Footer != "" && humanSink(sink) && strings.TrimSpace(out) != "" {
-		foot, ferr := renderString(f.Footer, ctx)
+		if rnd == nil {
+			return "", fmt.Errorf("render footer: no renderer")
+		}
+		foot, ferr := rnd(f.Footer, ctx)
 		if ferr != nil {
 			return "", fmt.Errorf("render footer: %w", ferr)
 		}
@@ -155,8 +158,8 @@ func showIn(spec, sink string) bool {
 
 // cellValue computes a field's display string for a record, applying default,
 // firstline, and truncate.
-func cellValue(fld Field, rec record, ctx map[string]any) (string, error) {
-	raw, err := rawFieldValue(fld, rec, ctx)
+func cellValue(rnd Renderer,fld Field, rec record, ctx map[string]any) (string, error) {
+	raw, err := rawFieldValue(rnd, fld, rec, ctx)
 	if err != nil {
 		return "", err
 	}
@@ -179,7 +182,7 @@ func cellValue(fld Field, rec record, ctx map[string]any) (string, error) {
 }
 
 // rawFieldValue resolves a field's underlying value (before display coercion).
-func rawFieldValue(fld Field, rec record, ctx map[string]any) (any, error) {
+func rawFieldValue(rnd Renderer,fld Field, rec record, ctx map[string]any) (any, error) {
 	switch fld.Path {
 	case "@key":
 		return rec.key, nil
@@ -187,7 +190,10 @@ func rawFieldValue(fld Field, rec record, ctx map[string]any) (any, error) {
 		return rec.obj, nil
 	}
 	if fld.Expr != "" {
-		return renderString(fld.Expr, exprData(rec, ctx))
+		if rnd == nil {
+			return nil, fmt.Errorf("field %q has an expr but no renderer", fld.Name)
+		}
+		return rnd(fld.Expr, exprData(rec, ctx))
 	}
 	if fld.Path == "" {
 		return rec.obj, nil
@@ -254,7 +260,7 @@ func renderRawSink(recs []record) string {
 	return b.String()
 }
 
-func renderLinesSink(recs []record, fields []Field, ctx map[string]any) (string, error) {
+func renderLinesSink(rnd Renderer,recs []record, fields []Field, ctx map[string]any) (string, error) {
 	inc := includedFields(fields, "lines")
 	var b strings.Builder
 	for _, r := range recs {
@@ -263,7 +269,7 @@ func renderLinesSink(recs []record, fields []Field, ctx map[string]any) (string,
 		if _, isMap := r.obj.(map[string]any); len(inc) == 0 || !isMap {
 			b.WriteString(displayValue(r.obj))
 		} else {
-			v, err := cellValue(inc[0], r, ctx)
+			v, err := cellValue(rnd, inc[0], r, ctx)
 			if err != nil {
 				return "", err
 			}
@@ -274,7 +280,7 @@ func renderLinesSink(recs []record, fields []Field, ctx map[string]any) (string,
 	return b.String(), nil
 }
 
-func renderListSink(recs []record, fields []Field, ctx map[string]any, sink string) (string, error) {
+func renderListSink(rnd Renderer,recs []record, fields []Field, ctx map[string]any, sink string) (string, error) {
 	inc := includedFields(fields, sink)
 	maxLabel := 0
 	for _, fld := range inc {
@@ -288,7 +294,7 @@ func renderListSink(recs []record, fields []Field, ctx map[string]any, sink stri
 			b.WriteByte('\n')
 		}
 		for _, fld := range inc {
-			v, err := cellValue(fld, r, ctx)
+			v, err := cellValue(rnd, fld, r, ctx)
 			if err != nil {
 				return "", err
 			}
@@ -300,12 +306,12 @@ func renderListSink(recs []record, fields []Field, ctx map[string]any, sink stri
 	return b.String(), nil
 }
 
-func renderTableSink(recs []record, fields []Field, ctx map[string]any, sink string, width int) (string, error) {
+func renderTableSink(rnd Renderer,recs []record, fields []Field, ctx map[string]any, sink string, width int) (string, error) {
 	inc := includedFields(fields, sink)
 	if len(inc) == 0 {
 		return "", nil
 	}
-	cols, err := buildColumns(inc, recs, ctx)
+	cols, err := buildColumns(rnd, inc, recs, ctx)
 	if err != nil {
 		return "", err
 	}
@@ -321,7 +327,7 @@ func renderTableSink(recs []record, fields []Field, ctx map[string]any, sink str
 	return alignColumns(rows, 2), nil
 }
 
-func renderMarkdownSink(recs []record, fields []Field, ctx map[string]any, sink string) (string, error) {
+func renderMarkdownSink(rnd Renderer,recs []record, fields []Field, ctx map[string]any, sink string) (string, error) {
 	inc := includedFields(fields, sink)
 	if len(inc) == 0 {
 		return "", nil
@@ -338,7 +344,7 @@ func renderMarkdownSink(recs []record, fields []Field, ctx map[string]any, sink 
 	for _, r := range recs {
 		cells := make([]string, len(inc))
 		for i, fld := range inc {
-			v, err := cellValue(fld, r, ctx)
+			v, err := cellValue(rnd, fld, r, ctx)
 			if err != nil {
 				return "", err
 			}
@@ -349,7 +355,7 @@ func renderMarkdownSink(recs []record, fields []Field, ctx map[string]any, sink 
 	return b.String(), nil
 }
 
-func renderCSVSink(recs []record, fields []Field, ctx map[string]any, sink string) (string, error) {
+func renderCSVSink(rnd Renderer,recs []record, fields []Field, ctx map[string]any, sink string) (string, error) {
 	inc := includedFields(fields, sink)
 	if len(inc) == 0 {
 		return "", nil
@@ -363,7 +369,7 @@ func renderCSVSink(recs []record, fields []Field, ctx map[string]any, sink strin
 	for _, r := range recs {
 		cells := make([]string, len(inc))
 		for i, fld := range inc {
-			v, err := cellValue(fld, r, ctx)
+			v, err := cellValue(rnd, fld, r, ctx)
 			if err != nil {
 				return "", err
 			}
@@ -381,7 +387,7 @@ func csvQuote(s string) string {
 	return s
 }
 
-func renderJSONSink(f *Fields, recs []record, fields []Field, shape string, parsed any, ctx map[string]any, derived bool) (string, error) {
+func renderJSONSink(rnd Renderer,f *Fields, recs []record, fields []Field, shape string, parsed any, ctx map[string]any, derived bool) (string, error) {
 	if derived {
 		// No projection: emit the selected records as-is.
 		switch shape {
@@ -401,7 +407,7 @@ func renderJSONSink(f *Fields, recs []record, fields []Field, shape string, pars
 	project := func(r record) (any, error) {
 		m := make(map[string]any, len(inc))
 		for _, fld := range inc {
-			raw, err := rawFieldValue(fld, r, ctx)
+			raw, err := rawFieldValue(rnd, fld, r, ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -442,14 +448,14 @@ type column struct {
 	width    int
 }
 
-func buildColumns(inc []Field, recs []record, ctx map[string]any) ([]column, error) {
+func buildColumns(rnd Renderer,inc []Field, recs []record, ctx map[string]any) ([]column, error) {
 	cols := make([]column, len(inc))
 	for ci, fld := range inc {
 		c := column{cells: make([]string, len(recs)+1), priority: fld.Priority}
 		c.cells[0] = fld.Name
 		c.width = displayWidth(fld.Name)
 		for ri, r := range recs {
-			v, err := cellValue(fld, r, ctx)
+			v, err := cellValue(rnd, fld, r, ctx)
 			if err != nil {
 				return nil, err
 			}

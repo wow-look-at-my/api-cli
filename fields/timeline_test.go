@@ -1,4 +1,4 @@
-package main
+package fields
 
 import (
 	"encoding/json"
@@ -35,7 +35,7 @@ func TestTimeline_PointEventsNoColor(t *testing.T) {
 		{Name: "label", Path: "name"},
 		{Name: "date", Path: "when"},
 	}}
-	out, err := renderFields(f, parsed, tctx(parsed, false, 0), "timeline", 0)
+	out, err := renderFields(testRenderer, f,parsed, tctx(parsed, false, 0), "timeline", 0)
 	require.NoError(t, err)
 
 	assert.Contains(t, out, "# Timeline") // default header
@@ -54,7 +54,7 @@ func TestTimeline_DurationEvents(t *testing.T) {
 		{Name: "start", Path: "from"},
 		{Name: "end", Path: "to"},
 	}}
-	out, err := renderFields(f, parsed, tctx(parsed, false, 0), "timeline", 0)
+	out, err := renderFields(testRenderer, f,parsed, tctx(parsed, false, 0), "timeline", 0)
 	require.NoError(t, err)
 	assert.Contains(t, out, "█") // duration bar
 	assert.Contains(t, out, "Build")
@@ -69,7 +69,7 @@ func TestTimeline_SkipsRecordsWithoutPlacement(t *testing.T) {
 		{Name: "label", Path: "name"},
 		{Name: "date", Path: "when"},
 	}}
-	out, err := renderFields(f, parsed, tctx(parsed, false, 0), "timeline", 0)
+	out, err := renderFields(testRenderer, f,parsed, tctx(parsed, false, 0), "timeline", 0)
 	require.NoError(t, err)
 	assert.Contains(t, out, "Has date")
 	assert.NotContains(t, out, "No date")
@@ -78,7 +78,7 @@ func TestTimeline_SkipsRecordsWithoutPlacement(t *testing.T) {
 func TestTimeline_AllSkippedRendersNoEvents(t *testing.T) {
 	parsed := []any{map[string]any{"name": "x"}}
 	f := &Fields{List: []Field{{Name: "label", Path: "name"}}}
-	out, err := renderFields(f, parsed, tctx(parsed, false, 0), "timeline", 0)
+	out, err := renderFields(testRenderer, f,parsed, tctx(parsed, false, 0), "timeline", 0)
 	require.NoError(t, err)
 	assert.Contains(t, out, "(no events)")
 }
@@ -90,7 +90,7 @@ func TestTimeline_ColorOnTTY(t *testing.T) {
 		{Name: "label", Path: "name"},
 		{Name: "date", Path: "when"},
 	}}
-	out, err := renderFields(f, parsed, tctx(parsed, true, 80), "timeline", 0)
+	out, err := renderFields(testRenderer, f,parsed, tctx(parsed, true, 80), "timeline", 0)
 	require.NoError(t, err)
 	assert.Contains(t, out, "\x1b[") // tty + no NO_COLOR => ANSI color present
 }
@@ -102,7 +102,7 @@ func TestTimeline_NoColorEnvForcesPlain(t *testing.T) {
 		{Name: "label", Path: "name"},
 		{Name: "date", Path: "when"},
 	}}
-	out, err := renderFields(f, parsed, tctx(parsed, true, 80), "timeline", 0)
+	out, err := renderFields(testRenderer, f,parsed, tctx(parsed, true, 80), "timeline", 0)
 	require.NoError(t, err)
 	assert.NotContains(t, out, "\x1b[") // NO_COLOR wins even on a TTY
 }
@@ -118,7 +118,7 @@ func TestTimeline_WidthFromContext(t *testing.T) {
 	}}
 	// tty=false keeps color off so the axis line is plain (no ANSI escapes to
 	// inflate the rune count); width is applied independently of color.
-	out, err := renderFields(f, parsed, tctx(parsed, false, 40), "timeline", 0)
+	out, err := renderFields(testRenderer, f,parsed, tctx(parsed, false, 40), "timeline", 0)
 	require.NoError(t, err)
 	line := axisLine(out)
 	require.NotEmpty(t, line)
@@ -135,7 +135,7 @@ func TestTimeline_ColorFieldAndDescription(t *testing.T) {
 		{Name: "description", Path: "note"},
 		{Name: "color", Path: "hue"},
 	}}
-	out, err := renderFields(f, parsed, tctx(parsed, false, 0), "timeline", 0)
+	out, err := renderFields(testRenderer, f,parsed, tctx(parsed, false, 0), "timeline", 0)
 	require.NoError(t, err)
 	assert.Contains(t, out, "Kickoff")
 	assert.Contains(t, out, "first") // description rendered after the date
@@ -148,7 +148,7 @@ func TestTimeline_ShowInGating(t *testing.T) {
 		{Name: "label", Path: "name", ShowIn: "!timeline"},
 		{Name: "date", Path: "when"},
 	}}
-	out, err := renderFields(f, parsed, tctx(parsed, false, 0), "timeline", 0)
+	out, err := renderFields(testRenderer, f,parsed, tctx(parsed, false, 0), "timeline", 0)
 	require.NoError(t, err)
 	assert.NotContains(t, out, "Kickoff") // label gated out of the timeline
 	assert.Contains(t, out, "●")          // still placed by its date
@@ -161,7 +161,7 @@ func TestTimeline_DerivedFieldsFromMatchingKeys(t *testing.T) {
 		map[string]any{"label": "Kickoff", "date": "2024-01-08"},
 	}
 	f := &Fields{}
-	out, err := renderFields(f, parsed, tctx(parsed, false, 0), "timeline", 0)
+	out, err := renderFields(testRenderer, f,parsed, tctx(parsed, false, 0), "timeline", 0)
 	require.NoError(t, err)
 	assert.Contains(t, out, "Kickoff")
 	assert.Contains(t, out, "●")
@@ -173,7 +173,7 @@ func TestTimeline_BadDateErrors(t *testing.T) {
 		{Name: "label", Path: "name"},
 		{Name: "date", Path: "when"},
 	}}
-	_, err := renderFields(f, parsed, tctx(parsed, false, 0), "timeline", 0)
+	_, err := renderFields(testRenderer, f,parsed, tctx(parsed, false, 0), "timeline", 0)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "timeline:")
 }
@@ -186,7 +186,7 @@ func TestTimeline_ExprAndDefaultApply(t *testing.T) {
 		{Name: "date", Path: "d"},
 		{Name: "color", Default: "magenta"},
 	}}
-	out, err := renderFields(f, parsed, tctx(parsed, false, 0), "timeline", 0)
+	out, err := renderFields(testRenderer, f,parsed, tctx(parsed, false, 0), "timeline", 0)
 	require.NoError(t, err)
 	assert.Contains(t, out, "2024-03-01 milestone")
 }

@@ -1,4 +1,4 @@
-package main
+package fields
 
 import (
 	"encoding/json"
@@ -25,7 +25,7 @@ var timelineEventKeys = set.Of("label", "date", "start", "end", "description", "
 // Color follows the format context's .tty (and the NO_COLOR env var); width
 // follows .width, where 0 means the library default. The event values reuse
 // cellValue, so default=/truncate=/firstline=/expr= all apply as usual.
-func renderTimelineSink(recs []record, fields []Field, ctx map[string]any) (string, error) {
+func renderTimelineSink(rnd Renderer, recs []record, fields []Field, ctx map[string]any) (string, error) {
 	inc := includedFields(fields, "timeline")
 
 	events := make([]map[string]string, 0, len(recs))
@@ -35,7 +35,7 @@ func renderTimelineSink(recs []record, fields []Field, ctx map[string]any) (stri
 			if !timelineEventKeys.Contains(fld.Name) {
 				continue
 			}
-			v, err := cellValue(fld, r, ctx)
+			v, err := cellValue(rnd, fld, r, ctx)
 			if err != nil {
 				return "", err
 			}
