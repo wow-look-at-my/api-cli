@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/spf13/pflag"
-	"github.com/wow-look-at-my/go-containers/set"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 // The README and the XSD ship inside the binary (`api-cli docs`), and both
