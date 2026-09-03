@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/spf13/pflag"
+	"github.com/wow-look-at-my/go-containers/set"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -100,25 +101,25 @@ func TestDocs_DeclaredTypesAreDocumented(t *testing.T) {
 
 // documentedNonPersistent are flags the README's table lists that cobra owns
 // rather than newRoot: --version comes from root.Version.
-var documentedNonPersistent = map[string]bool{"version": true}
+var documentedNonPersistent = set.Of("version")
 
 func TestDocs_GlobalFlagsTableMatchesTheRoot(t *testing.T) {
 	table := readmeSection(t, "## Global flags")
-	documented := map[string]bool{}
+	documented := set.New[string]()
 	rowFlag := regexp.MustCompile("^\\| `--([a-z-]+)")
 	for _, line := range strings.Split(table, "\n") {
 		if m := rowFlag.FindStringSubmatch(line); m != nil {
-			documented[m[1]] = true
+			documented.Add(m[1])
 		}
 	}
-	require.NotEmpty(t, documented, "the Global flags table lists no flags")
+	require.False(t, documented.IsEmpty(), "the Global flags table lists no flags")
 
 	newRoot(nil).PersistentFlags().VisitAll(func(f *pflag.Flag) {
-		assert.True(t, documented[f.Name], "global flag --%s has no row in the README", f.Name)
+		assert.True(t, documented.Contains(f.Name), "global flag --%s has no row in the README", f.Name)
 	})
 	root := newRoot(nil).PersistentFlags()
-	for name := range documented {
-		if documentedNonPersistent[name] {
+	for _, name := range documented.Values() {
+		if documentedNonPersistent.Contains(name) {
 			continue
 		}
 		assert.NotNil(t, root.Lookup(name), "the README documents --%s, which the root does not register", name)
