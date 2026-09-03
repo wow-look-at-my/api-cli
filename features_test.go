@@ -300,7 +300,7 @@ func setInteractive(t *testing.T) {
 }
 
 func TestIntegration_ConfirmAcceptY(t *testing.T) {
-	serial(t)
+	t.Serial()
 	cfg := &Config{
 		Name: "t",
 		Commands: []Command{{
@@ -320,7 +320,7 @@ func TestIntegration_ConfirmAcceptY(t *testing.T) {
 }
 
 func TestIntegration_ConfirmAcceptYes(t *testing.T) {
-	serial(t)
+	t.Serial()
 	cfg := &Config{
 		Name: "t",
 		Commands: []Command{{
@@ -340,7 +340,7 @@ func TestIntegration_ConfirmAcceptYes(t *testing.T) {
 }
 
 func TestIntegration_ConfirmRejectN(t *testing.T) {
-	serial(t)
+	t.Serial()
 	cfg := &Config{
 		Name: "t",
 		Commands: []Command{{
@@ -360,7 +360,7 @@ func TestIntegration_ConfirmRejectN(t *testing.T) {
 }
 
 func TestIntegration_ConfirmRejectEOF(t *testing.T) {
-	serial(t)
+	t.Serial()
 	cfg := &Config{
 		Name: "t",
 		Commands: []Command{{
@@ -436,7 +436,7 @@ func TestIntegration_ConfirmInherited(t *testing.T) {
 }
 
 func TestIntegration_ConfirmLeafOverridesGroup(t *testing.T) {
-	serial(t)
+	t.Serial()
 	cfg := &Config{
 		Name: "t",
 		Commands: []Command{{

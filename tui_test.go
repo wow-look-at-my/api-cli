@@ -133,7 +133,7 @@ func TestTUI_StopIsIdempotentAndRestoresTheCursor(t *testing.T) {
 
 func TestTUI_InterruptRestoresTheTerminal(t *testing.T) {
 	// The signal goes to the whole process, and `tuiExit` is a package var.
-	serial(t)
+	t.Serial()
 	var buf bytes.Buffer
 	tu := newTUI(&buf, 60, 24, 3, staticItems())
 
@@ -166,7 +166,7 @@ func TestTUI_InterruptRestoresTheTerminal(t *testing.T) {
 // through a real signal depends on which select case the runtime picks.
 func TestTUI_ARetiredDisplayIgnoresTheSignal(t *testing.T) {
 	// The signal goes to the whole process, and `tuiExit` is a package var.
-	serial(t)
+	t.Serial()
 	exited := make(chan int, 4)
 	prev := tuiExit
 	tuiExit = func(code int) { exited <- code }

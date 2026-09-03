@@ -263,7 +263,7 @@ func TestCappedTee_LargeWriteOverCapInOneShot(t *testing.T) {
 }
 
 func TestStdoutTTY_NonFileWriter(t *testing.T) {
-	serial(t)
+	t.Serial()
 	prev := execStdout
 	t.Cleanup(func() { execStdout = prev })
 	execStdout = io.Discard
@@ -372,7 +372,7 @@ func TestFormatRef_RoundTripJSON(t *testing.T) {
 // Ensure execStdout-as-os.Stderr-redirect doesn't accidentally pass for IsTerminal
 // in places where it shouldn't.
 func TestStdoutTTY_RedirectedFile(t *testing.T) {
-	serial(t)
+	t.Serial()
 	prev := execStdout
 	t.Cleanup(func() { execStdout = prev })
 	tmp, err := os.CreateTemp(t.TempDir(), "out")

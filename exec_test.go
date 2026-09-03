@@ -11,7 +11,7 @@ import (
 
 func captureExecStreams(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
-	serial(t)
+	t.Serial()
 	var out, err bytes.Buffer
 	prevOut, prevErr := execStdout, execStderr
 	execStdout = &out

@@ -54,7 +54,7 @@ func TestDocs_ReadmeNamesEverySink(t *testing.T) {
 // The flag's own usage string is the only sink list a user sees without the
 // README, so it carries the same obligation.
 func TestDocs_AsFlagUsageNamesEverySink(t *testing.T) {
-	serial(t) // newRoot publishes the transport registry and the download settings.
+	t.Serial() // newRoot publishes the transport registry and the download settings.
 	usage := newRoot(nil).PersistentFlags().Lookup("as").Usage
 	for _, sink := range knownSinks.Values() {
 		assert.Contains(t, usage, sink, "--as usage omits the %q sink", sink)
@@ -105,7 +105,7 @@ func TestDocs_DeclaredTypesAreDocumented(t *testing.T) {
 var documentedNonPersistent = set.Of("version")
 
 func TestDocs_GlobalFlagsTableMatchesTheRoot(t *testing.T) {
-	serial(t) // newRoot publishes the transport registry and the download settings.
+	t.Serial() // newRoot publishes the transport registry and the download settings.
 	table := readmeSection(t, "## Global flags")
 	documented := set.New[string]()
 	rowFlag := regexp.MustCompile("^\\| `--([a-z-]+)")

@@ -23,7 +23,7 @@ func execCmd(t *testing.T, cfg *Config, argv ...string) (int, string) {
 // execCmdFull is like execCmd but also returns what was written to stderr.
 func execCmdFull(t *testing.T, cfg *Config, argv ...string) (int, string, string) {
 	t.Helper()
-	serial(t)
+	t.Serial()
 	require.NoError(t, validate(cfg))
 
 	var out, errBuf bytes.Buffer
@@ -174,7 +174,7 @@ func TestIntegration_ExitCodePropagated(t *testing.T) {
 }
 
 func TestIntegration_StdinPassthrough(t *testing.T) {
-	serial(t)
+	t.Serial()
 	prev := execStdin
 	execStdin = strings.NewReader("piped\n")
 	t.Cleanup(func() { execStdin = prev })

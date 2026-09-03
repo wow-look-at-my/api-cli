@@ -267,7 +267,7 @@ func TestIntegration_BackcompatNoFormatBlockBehavesAsBefore(t *testing.T) {
 }
 
 func TestIntegration_OverflowSkipsFormatting(t *testing.T) {
-	serial(t)
+	t.Serial()
 	// Stress the cap by making it tiny and verifying that an overflow output
 	// streams unmodified instead of being formatted.
 	prev := execStdout

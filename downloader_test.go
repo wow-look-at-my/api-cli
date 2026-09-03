@@ -277,7 +277,7 @@ func TestDownloadQueue_RespectsConcurrencyLimit(t *testing.T) {
 }
 
 func TestSharedQueue_IsReusedAcrossBatches(t *testing.T) {
-	serial(t)
+	t.Serial()
 	resetSharedQueue()
 	t.Cleanup(resetSharedQueue)
 

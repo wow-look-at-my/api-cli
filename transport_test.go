@@ -76,7 +76,7 @@ func TestTransport_ExplicitStdinOverridesBody(t *testing.T) {
 // A transport never inherits the process's stdin: a program that reads stdin
 // with no body configured sees EOF rather than the user's terminal.
 func TestTransport_EmptyStdinIsClosedNotInherited(t *testing.T) {
-	serial(t)
+	t.Serial()
 	cfg := &Config{
 		Name:       "t",
 		Transports: map[string]*Transport{"fake": shellTransport("fake", `printf 'body=[%s]' "$(cat)"`, true)},

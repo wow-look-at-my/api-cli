@@ -379,7 +379,7 @@ func TestDownloadDest(t *testing.T) {
 }
 
 func TestResolveDownloadSettings(t *testing.T) {
-	serial(t)
+	t.Serial()
 	prev := downloadDefaults
 	t.Cleanup(func() { downloadDefaults = prev })
 
@@ -406,7 +406,7 @@ func TestResolveDownloadSettings(t *testing.T) {
 }
 
 func TestResolveDownloadSettings_UnsetFlagsLeaveConfigAlone(t *testing.T) {
-	serial(t)
+	t.Serial()
 	prev := downloadDefaults
 	t.Cleanup(func() { downloadDefaults = prev })
 

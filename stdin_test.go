@@ -205,7 +205,7 @@ func TestIntegration_StdinRenderErrorFails(t *testing.T) {
 }
 
 func TestIntegration_StdinEmptyPassesThrough(t *testing.T) {
-	serial(t)
+	t.Serial()
 	prev := execStdin
 	execStdin = strings.NewReader("piped\n")
 	t.Cleanup(func() { execStdin = prev })
