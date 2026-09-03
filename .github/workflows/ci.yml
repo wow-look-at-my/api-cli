@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: wow-look-at-my/actions@ste-lint#latest
       - uses: wow-look-at-my/go-toolchain@master
         with:
           autorelease: 'true'
@@ -24,12 +25,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./.github/scripts/demo-summary.sh
-
-  ste-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: wow-look-at-my/actions@ste-lint#latest
 
   validate-xml:
     runs-on: ubuntu-latest

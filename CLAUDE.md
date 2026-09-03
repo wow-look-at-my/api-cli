@@ -103,7 +103,7 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 ## Tooling
 
 - `go-toolchain` runs `go mod tidy`, vet, all tests with coverage, and the build. **Always run `go-toolchain`, never a bare `go ...`.** Coverage minimum 80%.
-- CI is `.github/workflows/ci.yml`. It holds the go-toolchain test and demo job, `ste-lint` over the markdown, and `validate-xml`. The build names no `os` and no `arch`, so it produces one fat APE that autoreleases to buildhost.
+- CI is `.github/workflows/ci.yml`. The `test` job runs `ste-lint` over the markdown, then go-toolchain, then the demo. A second job, `validate-xml`, checks the XML. The build names no `os` and no `arch`, so it produces one fat APE that autoreleases to buildhost.
 - `ste-lint` (`wow-look-at-my/actions@ste-lint#latest`) checks every `*.md` file against the mechanical subset of ASD-STE100. One paragraph is one line, and a sentence caps at 25 words. A contraction, a semicolon, a comma splice or the word "would" fails the job.
 
 ## Conventions
