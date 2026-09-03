@@ -52,8 +52,8 @@ func Render(r Renderer, f *Fields, parsed any, ctx map[string]any, sink string, 
 	return renderFields(r, f, parsed, ctx, sink, width)
 }
 
-// Sinks reports the representation names Render accepts.
-func Sinks() []string { return knownSinks.Slice() }
+// KnownSink reports whether Render accepts sink as a representation name.
+func KnownSink(sink string) bool { return knownSinks.Contains(sink) }
 
 // Lookup resolves a dotted path against decoded JSON, walking maps by key and
 // lists by index, and reports whether it landed on anything.
