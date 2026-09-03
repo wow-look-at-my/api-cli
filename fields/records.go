@@ -1,4 +1,4 @@
-package main
+package fields
 
 import (
 	"encoding/json"
@@ -7,13 +7,12 @@ import (
 	"strings"
 )
 
-// lookupData resolves a dotted path through decoded JSON: maps by key, lists by
-// index (`response.0.name`). The DSL's own lookup walks maps only, which is
-// enough for a template context but not for a body that nests lists.
+// lookupData resolves a dotted path through decoded JSON, walking maps by key
+// and lists by index. The DSL's own lookup walks maps alone, which a body that
+// nests lists outgrows.
 //
-// found is false when a step names nothing. That is a different answer from a
-// value of nil, which a JSON null gives, and the caller that must fail loud
-// needs the two apart.
+// found is false when a step names nothing, which a JSON null does not do: a
+// caller that must fail loud needs to tell them apart.
 func lookupData(data any, path string) (value any, found bool) {
 	cur := data
 	for _, seg := range strings.Split(path, ".") {
@@ -77,13 +76,12 @@ func jsonTypeName(v any) string {
 	}
 }
 
-// overSource resolves a `<fields over=>` path. The path reads against the
-// response body first (`items`, `response.0.rows`), then against the whole
-// format context (`data.items`, `var.rows`), so both spellings work.
+// overSource resolves a `<fields over=>` path against the response body, then
+// against the whole format context, so both spellings work.
 //
-// A path that names nothing, or names a value that is neither a list nor a map,
-// is an error. The alternative is one empty record on the screen, which reads as
-// an API that returned nothing rather than as a config that points at nothing.
+// A path that names nothing, or a value that is neither a list nor a map, is an
+// error. The alternative puts an empty record on the screen, which reads as an
+// API that returned nothing rather than a config that points nowhere.
 func overSource(over string, parsed any, ctx map[string]any) (any, error) {
 	v, ok := lookupData(parsed, over)
 	if !ok {
@@ -123,9 +121,7 @@ func resolveRecords(f *Fields, parsed any, ctx map[string]any) ([]record, string
 		for _, el := range v {
 			recs = append(recs, record{obj: el})
 		}
-		// Scalars (lines) only when no element is an object and no fields are
-		// declared. A declared field list, or any object element (e.g. a null
-		// row among objects), keeps the table shape; missing values render empty.
+		// A declared list, or an object element, keeps the table shape.
 		if !hasMap && len(f.List) == 0 {
 			return recs, "array-scalars", nil
 		}
@@ -145,8 +141,8 @@ func resolveRecords(f *Fields, parsed any, ctx map[string]any) ([]record, string
 	}
 }
 
-// fieldsWalkMap reports whether any field reads @key/@value, the signal that a
-// map should be walked entry-by-entry rather than treated as a single record.
+// fieldsWalkMap reports whether a field reads @key or @value, which asks for a
+// map to be walked entry by entry instead of read as a lone record.
 func fieldsWalkMap(f *Fields) bool {
 	for _, fld := range f.List {
 		if fld.Path == "@key" || fld.Path == "@value" {

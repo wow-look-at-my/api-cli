@@ -16,6 +16,7 @@ import (
 // control ./api.xml's existence.
 func chdir(t *testing.T, dir string) {
 	t.Helper()
+	t.Serial()
 	prev, err := os.Getwd()
 	require.NoError(t, err)
 	require.NoError(t, os.Chdir(dir))
@@ -79,6 +80,7 @@ func TestRun_InvalidConfigReturns2(t *testing.T) {
 }
 
 func TestRun_HappyPath(t *testing.T) {
+	t.Serial() // swaps execStdout/execStderr/exitCode, which are package-wide.
 	dir := t.TempDir()
 	cfg := `<config name="t">
 	<run>printf '%s' {{.arg.id}}</run>
@@ -225,6 +227,7 @@ func TestApplyEnvVars_BadFormat(t *testing.T) {
 }
 
 func TestRun_VarSetsEnv(t *testing.T) {
+	t.Serial() // swaps execStdout/execStderr/exitCode, which are package-wide.
 	dir := t.TempDir()
 	cfg := `<config name="t">
 	<run>printf '%s' {{.env.API_CLI_TEST_TOKEN}}</run>

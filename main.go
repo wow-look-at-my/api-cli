@@ -111,7 +111,7 @@ func newRoot(cfg *Config) *cobra.Command {
 	root.PersistentFlags().Bool("no-format", false, "Disable output formatting (synonym for --format=raw).")
 	root.PersistentFlags().String("format", "auto", "Output formatting mode: raw|auto|always.")
 	root.PersistentFlags().String("view", "", "Select a named view from the active format (overrides selectors).")
-	root.PersistentFlags().String("as", "", "Force a <fields> representation: table|list|lines|json|markdown|csv|timeline (default: auto).")
+	root.PersistentFlags().String("as", "", "Force a <fields> representation: table|list|lines|raw|json|markdown|csv|timeline (default: auto).")
 	root.PersistentFlags().Int("concurrency", defaultConcurrency, "Parallel downloads for <download> hand-offs.")
 	root.PersistentFlags().String("download-dir", ".", "Base directory for <download> destinations.")
 	root.PersistentFlags().Int("log-lines", 0, "Height of the download TUI's log region (default: min(15, half the terminal)).")

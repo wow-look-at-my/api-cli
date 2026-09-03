@@ -6,11 +6,11 @@ package main
 
 import (
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 func registerFlag(cmd *cobra.Command, f Flag) {
@@ -63,7 +63,7 @@ func registerFlag(cmd *cobra.Command, f Flag) {
 // exclusion machinery. Each unordered pair is registered once.
 func registerConflicts(cmd *cobra.Command, flags []Flag) {
 	type pair struct{ a, b string }
-	seen := make([]pair, 0, len(flags))
+	seen := set.New[pair]()
 	for _, f := range flags {
 		for _, peer := range f.Conflicts {
 			a, b := f.Name, peer
@@ -71,10 +71,10 @@ func registerConflicts(cmd *cobra.Command, flags []Flag) {
 				a, b = b, a
 			}
 			p := pair{a, b}
-			if slices.Contains(seen, p) {
+			if seen.Contains(p) {
 				continue
 			}
-			seen = append(seen, p)
+			seen.Add(p)
 			cmd.MarkFlagsMutuallyExclusive(a, b)
 		}
 	}

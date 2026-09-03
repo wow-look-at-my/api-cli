@@ -1,4 +1,4 @@
-package main
+package fields
 
 import (
 	"testing"
@@ -14,7 +14,7 @@ func TestDisplayWidth_ASCII(t *testing.T) {
 		{"", 0},
 		{"hello", 5},
 		{"a b c", 5},
-		{"\t\n", 0}, // tab and newline are control chars; width 0
+		{"\t\n", 0}, // a control character takes no column
 	}
 	for _, c := range cases {
 		assert.Equal(t, c.want, displayWidth(c.in), "input %q", c.in)
@@ -25,16 +25,16 @@ func TestDisplayWidth_StripsANSI(t *testing.T) {
 	// SGR-bracketed text — only the visible glyphs count.
 	assert.Equal(t, 5, displayWidth("\x1b[31mhello\x1b[0m"))
 	assert.Equal(t, 5, displayWidth("\x1b[1;31;42mhello\x1b[0m"))
-	// ANSI alone has zero width.
+	// An escape on its own has no width.
 	assert.Equal(t, 0, displayWidth("\x1b[31m\x1b[0m"))
-	// OSC sequence (e.g. setting window title).
+	// An OSC sequence, as a window title uses.
 	assert.Equal(t, 2, displayWidth("\x1b]0;title\x07OK"))
 	// ESC + single intro byte.
 	assert.Equal(t, 2, displayWidth("\x1bcOK"))
 }
 
 func TestDisplayWidth_CJKWide(t *testing.T) {
-	// Each CJK wide char is 2 columns.
+	// A CJK wide character is double width.
 	assert.Equal(t, 4, displayWidth("日本"))
 	assert.Equal(t, 6, displayWidth("a日b本"))
 	// Fullwidth digits.
@@ -42,7 +42,7 @@ func TestDisplayWidth_CJKWide(t *testing.T) {
 }
 
 func TestDisplayWidth_CombiningMarks(t *testing.T) {
-	// "é" composed as e + combining acute: width 1, not 2.
+	// "é" composed as e plus a combining acute stays a single column.
 	assert.Equal(t, 1, displayWidth("é"))
 }
 
@@ -66,14 +66,13 @@ func TestAlignColumns_ASCII(t *testing.T) {
 }
 
 func TestAlignColumns_WithANSIEscapes(t *testing.T) {
-	// Coloured first cell — alignment must be by visible width, not by byte length.
+	// A coloured cell aligns by its visible width, never by its byte length.
 	rows := []string{
 		"ID\tNAME",
 		"\x1b[31m1\x1b[0m\tAda",
 		"42\tHopper",
 	}
 	out := alignColumns(rows, 2)
-	// Display widths: ID=2, NAME=4. After alignment: 2-wide ID col, then NAME.
 	want := "ID  NAME\n" +
 		"\x1b[31m1\x1b[0m   Ada\n" +
 		"42  Hopper\n"
@@ -87,7 +86,7 @@ func TestAlignColumns_WithCJK(t *testing.T) {
 		"Bob\tNYC",
 	}
 	out := alignColumns(rows, 2)
-	// NAME col width = 4. CITY col width = 4 (東京 = 4 cells).
+	// The wide CITY value sets that column's width, so NYC pads out to match.
 	want := "NAME  CITY\n" +
 		"Ada   東京\n" +
 		"Bob   NYC\n"
@@ -124,9 +123,9 @@ func TestPadLeft_ASCII(t *testing.T) {
 }
 
 func TestPadRight_DisplayWidthAware(t *testing.T) {
-	// "日" is 2 cells wide, so pad to 5 means add 3 spaces.
+	// A wide rune costs its own columns, so the padding is short by that much.
 	assert.Equal(t, "日   ", padRight(5, "日"))
-	// ANSI: only visible chars count, so pad uses displayWidth("\x1b[31mab\x1b[0m") = 2.
+	// The escapes cost nothing, so only the visible characters set the padding.
 	assert.Equal(t, "\x1b[31mab\x1b[0m   ", padRight(5, "\x1b[31mab\x1b[0m"))
 }
 

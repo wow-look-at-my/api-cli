@@ -1,24 +1,13 @@
 # api-cli
 
-A declarative command-line alias system. You write an **XML** config describing
-a tree of commands (subcommands, args, flags, user-defined variables); the tool
-builds a cobra command tree from it. Each leaf either runs a command (shell or
-argv) or performs a first-class HTTP **request**, then renders the result --
-optionally through the **fields** auto-formatter. Help at every level, shell tab
-completion, and strong templating come for free.
+A declarative command-line alias system. You write an **XML** config that describes a tree of commands: subcommands, args, flags and your own variables. The tool builds a cobra command tree from it. Each leaf runs a command (shell or argv) or makes a first-class HTTP **request**. It then renders the result, optionally through the **fields** auto-formatter. Help at every level, shell tab completion and strong templating come for free.
 
-It is a *hybrid* tool. HTTP requests are first-class (`<run><request>`, no
-`curl`/`jq` subprocess needed), but the general shell/argv execution engine is
-fully retained, so non-HTTP aliases (git, tar, ...) work just as well.
+It is a *hybrid* tool. HTTP requests are first-class (`<run><request>`, with no `curl` or `jq` subprocess). The general shell and argv execution engine stays, so non-HTTP aliases (git, tar, ...) work as well.
 
 Two example configs ship in this repo:
 
-- [`api.example.xml`](./api.example.xml) -- a minimal demo against
-  `jsonplaceholder.typicode.com`.
-- [`samples/github/github.xml`](./samples/github/github.xml) -- a real,
-  read-only wrapper for the GitHub REST API with table/detail views and
-  aggressive noise-trimming (drops every `*url` field with `jq`, cutting
-  response size by 50-70%). See [GitHub example](#github-example) below.
+- [`api.example.xml`](./api.example.xml) -- a minimal demo against `jsonplaceholder.typicode.com`.
+- [`samples/github/github.xml`](./samples/github/github.xml) -- a real, read-only wrapper for the GitHub REST API, with table and detail views. It trims the noise hard: `jq` drops each `*url` field, which cuts the response by 50-70%. See [GitHub example](#github-example) below.
 
 ## Install
 
@@ -30,10 +19,7 @@ Drop the binary on your `$PATH`.
 
 ## Recommended setup
 
-`api-cli` is the engine; each API or alias group you wrap gets its own thin
-wrapper script on your `$PATH` that pins the config. That gives you a stable
-top-level command name (with help, completion, and templating all flowing
-through it) without rebuilding the binary per use case.
+`api-cli` is the engine. Each API or alias group you wrap gets its own thin wrapper script on your `$PATH`, and that script pins the config. You get a stable top-level command name, with help, completion and templating behind it, and you rebuild the binary for nothing.
 
 1. Put the `api-cli` binary on your `$PATH`.
 2. Save your config somewhere stable, e.g. `~/.config/myapi/api.xml`.
@@ -45,8 +31,7 @@ through it) without rebuilding the binary per use case.
    api-cli --config ~/.config/myapi/api.xml "$@"
    ```
 
-Now `myapi users get 1` works from anywhere. Repeat per API to maintain
-several wrappers from one `api-cli` install.
+Now `myapi users get 1` works from anywhere. Repeat the steps per API, and keep several wrappers over one `api-cli` install.
 
 ## Quickstart
 
@@ -72,24 +57,17 @@ Every leaf renders its templates against a data context:
 | `.entry`   | The leaf's `<entry>` (path/query/...), with string leaves templated first.   |
 | `.rest`    | Passthrough leftovers (passthrough mode only).                               |
 
-A leaf runs whatever its closest `<run>` ancestor defines, then presents the
-output. `<run>` comes in three forms:
+A leaf runs what its closest `<run>` ancestor gives it, then presents the output. `<run>` comes in three forms.
 
-- **A request** -- `<run><request>...</request></run>` performs an HTTP call (see
-  [Requests](#requests)).
-- **A shell command** -- `<run>echo hi {{.arg.x}}</run>` runs via `/bin/sh -c`.
-- **An argv list** -- `<run><argv>echo</argv><argv>{{.arg.x}}</argv></run>` execs
-  directly with no shell (safe; no quoting concerns).
+- **A request** -- `<run><request>...</request></run>` makes an HTTP call. See [Requests](#requests).
+- **A shell command** -- `<run>echo hi {{.arg.x}}</run>` runs through `/bin/sh -c`.
+- **An argv list** -- `<run><argv>echo</argv><argv>{{.arg.x}}</argv></run>` execs directly, with no shell. That is the safe form, because no quoting applies.
 
-`<run>` inherits down the tree: the closest ancestor that defines one wins, and
-a node overrides it for its subtree. Defining a request clears an inherited
-command and vice versa.
+`<run>` inherits down the tree. The closest ancestor that declares one wins, and a node overrides it for its own subtree. A request clears an inherited command, and a command clears an inherited request.
 
 ## Placeholders
 
-Element content can interleave plain text with three placeholder elements that
-compile to Go `text/template` source. You can always drop to a raw template
-with `expr=` (or just type `{{ ... }}` in the text).
+Element content can mix plain text with three placeholder elements that compile to Go `text/template` source. You can always drop to a raw template with `expr=`, or type `{{ ... }}` in the text.
 
 | Placeholder | Compiles to | Notes |
 |-------------|-------------|-------|
@@ -97,7 +75,7 @@ with `expr=` (or just type `{{ ... }}` in the text).
 | `<value name="x" default="-"/>` | `{{ .x | default "-" }}` | Fallback for an empty value. |
 | `<value name="x" as="urlpath"/>` | `{{ urlpath .x }}` | Wrap with any template helper. |
 | `<value expr="{{ or .a .b }}"/>` | `{{ or .a .b }}` | Verbatim template escape hatch. |
-| `<if test="var.token">A<else/>B</if>` | `{{ if truthy .var.token }}A{{ else }}B{{ end }}` | `test=` is a context path; truthy unless empty/`false`/`0`/`no`. |
+| `<if test="var.token">A<else/>B</if>` | `{{ if truthy .var.token }}A{{ else }}B{{ end }}` | `test=` is a context path. It is truthy unless it is empty, `false`, `0` or `no`. |
 | `<if test="arg.tag" eq="latest">...</if>` | `{{ if eq (printf "%v" .arg.tag) "latest" }}...{{ end }}` | `eq=` compares to a literal. |
 | `<for each="items">...</for>` | `{{ range .items }}...{{ end }}` | Iterate; `.` rebinds to each element (`<value name="field"/>` reads the element). |
 
@@ -107,10 +85,7 @@ with `expr=` (or just type `{{ ... }}` in the text).
 
 ## Requests
 
-A `<request>` is built entirely from templates and executed with the Go HTTP
-client -- no `curl`. JSON responses can be shaped with an embedded `jq` engine
-([gojq](https://github.com/itchyny/gojq)); no `jq` binary is required. To send
-requests through your own program instead, see [Transports](#transports).
+Templates build the whole `<request>`, and the Go HTTP client performs it. There is no `curl`. An embedded `jq` engine ([gojq](https://github.com/itchyny/gojq)) shapes a JSON response, so no `jq` binary is necessary. To send requests through your own program instead, see [Transports](#transports).
 
 ```xml
 <run>
@@ -132,19 +107,36 @@ requests through your own program instead, see [Transports](#transports).
 | `<query><param name="k">v</param></query>` | Explicit params. Empty values are dropped. An enclosing `<if test=>` gates the params it wraps. |
 | `<header name="H">v</header>` | A header (value is a template). An enclosing `<if test=>` gates the headers it wraps. |
 | `<body>` | Request body (template); omit for no body. |
-| `<response jq="path"/>` | Shape the JSON body with the jq program at that context path. A path that names nothing, or names something other than a string, fails the run. Omit `<response>` to return the raw body verbatim (diffs, READMEs, ...). |
+| `<response jq="program"/>` | Shape the JSON body with a jq program. See below. A `<response/>` with no `jq=` pretty-prints the JSON instead. Leave `<response>` out to return the raw body verbatim (diffs, READMEs, ...). |
 
-A non-2xx/3xx status prints the body to stderr and exits non-zero (like
-`curl -f`). The root `<run>` is typically the shared request; per-leaf `<run>`
-overrides it (e.g. a `POST`, or a raw-body download).
+`jq=` is a template, like `<url>` and `<body>`. What you write selects one of three forms.
+
+| You write | It means |
+|-----------|----------|
+| `jq=".[] \| .name"` | The jq program itself. |
+| `jq=".[0:{{ .flag.limit }}]"` | A template. It renders against this invocation's context (`.arg`, `.flag`, `.var`, `.entry`, `.env`), so the program depends on the flags this run was given. |
+| `jq="var.filter"` | A bare dotted name is a context path. It must name a string, and that string is the program. A path that names nothing, or names anything but a string, fails the run. |
+
+The path form keeps a long program out of the attribute. The var it names renders against this run's flags too, so both of these answer to `--limit`.
+
+```xml
+<vars>
+	<var name="filter">.[0:<value name="flag.limit"/>]</var>
+</vars>
+...
+<response jq="var.filter"/>
+<response jq=".[0:{{ .flag.limit }}]"/>
+```
+
+One property keeps the forms apart. A jq program almost always opens with `.`, `$`, `[`, `{`, a digit or an operator, and a context path starts with none of those. A bare builtin is the exception: `jq="length"` reads as a path and fails, so write `jq=". | length"`.
+
+The shaped body is what the leaf prints, `--format=raw` included. jq runs before every presentation layer, and never as part of one.
+
+A status of 400 or more prints the body to stderr and exits non-zero, like `curl -f`. The root `<run>` usually holds the shared request. A leaf's own `<run>` overrides it, for example with a `POST` or a raw-body download.
 
 ## Transports
 
-Some APIs authenticate in a way that is painful to reproduce -- a signing
-scheme, a session dance, an mTLS setup -- and you already have a program that
-does it. A `<transport>` is that program, wired in as the thing that *performs*
-requests. Everything else stays: the same `<request>` syntax, `<response jq=>`,
-`<fields>`, steps, MCP.
+Some APIs authenticate in a way that is painful to reproduce: a signing scheme, a session dance, an mTLS setup. You usually have a program that already does it. A `<transport>` is that program, wired in as the thing that *performs* requests. Everything else stays the same: the `<request>` syntax, `<response jq=>`, `<fields>`, steps and MCP.
 
 ```xml
 <transports>
@@ -158,8 +150,7 @@ requests. Everything else stays: the same `<request>` syntax, `<response jq=>`,
 </transports>
 ```
 
-The program receives the fully rendered request on top of the leaf's usual
-context, and its **stdout is the response body**:
+The program gets the fully rendered request on top of the leaf's usual context. Its **stdout is the response body**.
 
 | Placeholder | Value |
 |-------------|-------|
@@ -169,38 +160,22 @@ context, and its **stdout is the response body**:
 | `.request.headers` | Map of rendered header name -> value. |
 | `.request.header_lines` | `["Accept: application/json", ...]`, for splatting. |
 
-- **The body goes to the program's stdin** unless the transport declares its own
-  `<stdin>`. Either way stdin is explicit -- a transport never inherits your
-  terminal, so a program that reads stdin cannot hang waiting for one.
-- **A non-zero exit fails the request**, like a 4xx from the built-in client.
-  The program's stderr passes through untouched.
-- **Which transport runs**: the request's `transport=` attribute, else the
-  registry's `default="true"` entry, else the built-in client. There is no
-  runtime override -- how a request reaches its endpoint is a property of that
-  endpoint, not a user preference. The name `http` is reserved for the built-in
-  client, so `transport="http"` on one request opts it out of a default
-  transport (the public endpoint in an otherwise internal API).
-- `<cwd>` sets the program's working directory. A transport's `<run>` must be a
-  command -- it is what performs a request, so it cannot be one.
+- **The body goes to the program's stdin** unless the transport declares its own `<stdin>`. Stdin is explicit either way. A transport never inherits your terminal, so a program that reads stdin cannot hang and wait for one.
+- **A non-zero exit fails the request**, as a 4xx from the built-in client does. The program's stderr passes through untouched.
+- **Which transport runs**: the request's `transport=` attribute, then the registry's `default="true"` entry, then the built-in client. There is no override at run time. How a request reaches its endpoint is a property of that endpoint, not a user preference. The name `http` belongs to the built-in client, so `transport="http"` on one request opts that request out of a default transport. That is the public endpoint in an otherwise internal API.
+- `<cwd>` sets the program's working directory. A transport's `<run>` must be a command. It is the thing that performs a request. It cannot be one.
 
-To build repeated flags, assemble a list and `spread` it:
+To build repeated flags, assemble a list and `spread` it.
 
 ```xml
 <argv><value expr="{{ $h := list }}{{ range .request.header_lines }}{{ $h = concat $h (list &quot;-H&quot; .) }}{{ end }}{{ spread $h }}"/></argv>
 ```
 
-An empty `spread` contributes no argument at all, so it is also how you make an
-argument conditional -- `{{ spread (ternary (list "--data-binary" "@-") (list) (ne .request.body "")) }}`
-adds two arguments only when there is a body. A plain `<if>` would leave an
-empty string in the argv instead. See the `curl` transport in
-[`api.example.xml`](./api.example.xml) for both together.
+An empty `spread` contributes no argument at all. That makes it the way to write a conditional argument. `{{ spread (ternary (list "--data-binary" "@-") (list) (ne .request.body "")) }}` adds two arguments only when a body exists. A plain `<if>` leaves an empty string in the argv instead. See the `curl` transport in [`api.example.xml`](./api.example.xml) for both together.
 
 ## Downloads
 
-A step can work a URL out -- parse it from a listing, sign it, follow a redirect
--- and then hand it to a shared downloader instead of printing it. One queue
-serves the whole run, fetching four at a time by default and carrying whatever
-auth the steps established.
+A step can work a URL out: parse it from a listing, sign it, or follow a redirect. It then hands the URL to a shared downloader in place of printing it. One queue serves the whole run. It fetches four files at a time by default. It also carries the auth the steps established.
 
 ```xml
 <downloads concurrency="8" dir="./out"/>
@@ -221,9 +196,7 @@ auth the steps established.
 </command>
 ```
 
-On a terminal this draws a live display: a line per transfer with percentage,
-sizes, rate and ETA, an aggregate `TOTAL` row, and a height-capped,
-self-scrolling log region carrying the steps' and the downloader's output.
+On a terminal this draws a live display. Each transfer gets a line with its percentage, sizes, rate and ETA. An aggregate `TOTAL` row follows. Below that sits a height-capped log region that scrolls itself. It carries the output of the steps and of the downloader.
 
 ```
 downloads: 3 active, 3 queued, 0 done
@@ -236,96 +209,54 @@ downloads: 3 active, 3 queued, 0 done
  downloaded ubuntu-25.04.iso (6.0 MiB)
 ```
 
-Piped, there is no display: progress stays line-based on stderr and the
-destination paths go to stdout, one per line, for whatever reads them next.
+In a pipe there is no display. Progress stays line-based on stderr, and the destination paths go to stdout, one per line, for whatever reads them next.
 
-- **`<download>` is the leaf's action.** It runs after the steps and stands in
-  for the leaf's `<run>`, so an inherited request does not fire on the way.
-- **`over=`** repeats the declaration per record of a list, with the record's
-  keys promoted (`<value name="name"/>`) and the record itself at `.item`. An
-  empty list downloads nothing; a path that resolves to nothing is an error.
-- **`<url>` may render several lines** -- what a `<for>` loop produces -- and
-  each line becomes its own download.
-- **`<to>`** is a file path, or a directory when it ends in `/`, names an
-  existing one, or serves several URLs. Empty means the download directory,
-  named by the URL or the response's `Content-Disposition`.
-- **A relative `<to>` resolves under the download directory** (`dir=`, or
-  `--download-dir`); an absolute one is taken as-is.
-- **Auth rides along**: `<header>` and `<cookie>` render against the same
-  context, take `<if test=>`, and cookies fold into one `Cookie` header.
-- **Failures are loud.** A 4xx is the answer; a 5xx or a network fault retries
-  at a fixed one-second cadence. Anything still failing names its URL on stderr
-  and exits non-zero, while the other files carry on.
-- Bytes land in a `.part` sibling first, so an interrupted transfer never leaves
-  a truncated file wearing the real name.
-- **No resume.** Every attempt starts at byte zero, and a leftover `.part` is
-  overwritten rather than continued.
+- **`<download>` is the leaf's action.** It runs after the steps, and it stands in for the leaf's `<run>`. An inherited request therefore does not fire on the way.
+- **`when=`** is a Go-template predicate. A falsy render (empty, `false`, `0` or `no`) skips that declaration, so one leaf can carry a conditional set.
+- **`over=`** repeats the declaration per record of a list. It promotes the record's keys (`<value name="name"/>`) and puts the record itself at `.item`. An empty list downloads nothing. A path that resolves to nothing is an error.
+- **`<url>` can render several lines**, which is what a `<for>` loop produces. Each line becomes its own download.
+- **`<to>`** is a file path. It is a directory when it ends in `/`, when it names an existing directory, or when it serves several URLs. Leave it empty for the download directory, named by the URL or by the response's `Content-Disposition`.
+- **A relative `<to>` resolves under the download directory** (`dir=`, or `--download-dir`). An absolute one stands as it is.
+- **Auth rides along.** `<header>` and `<cookie>` render against the same context and take `<if test=>`. The cookies fold into one `Cookie` header.
+- **Mistakes fail before the first byte.** The plan step reports a `<url>` that renders to anything but an `http(s)` URL. It also reports two records whose `<to>` renders one file path. A mistyped path is therefore not a timeout minutes later, and a `<to>` that forgot to vary does not overwrite itself N times.
+- **Failures are loud.** A 4xx is the answer. A 5xx or a network fault retries at a fixed one-second cadence. A transfer that still fails names its URL on stderr and exits non-zero, while the other files carry on.
+- Bytes land in a `.part` sibling first, so an interrupted transfer never leaves a truncated file under the real name.
+- **No resume.** Every attempt starts at byte zero. A leftover `.part` is overwritten rather than continued.
 
 ### Downloading through a transport
 
-A `<download>` reaches its URL the same way a `<request>` does: over the
-built-in client, or over a [transport](#transports) program when the endpoint
-needs one.
+A `<download>` reaches its URL as a `<request>` does. It goes over the built-in client, or over a [transport](#transports) program when the endpoint needs one.
 
 ```xml
 <download transport="corp">…</download>
 ```
 
-- **Selection matches requests**: the `transport=` attribute, else the
-  registry's `default="true"` entry, else the built-in client. So a config whose
-  endpoints all need the program needs it for its files too, with nothing extra
-  to say. `transport="http"` opts one download back to the built-in client.
-- **The program is handed the same `.request` context** — `method`, `url`,
-  `headers`, `header_lines` — so one program serves requests and downloads
-  alike. `method` is `GET` and there is no body.
-- **Its stdout is streamed into the file**, not buffered as a response body:
-  that is the one way the two paths differ, and it is why a file larger than
-  memory is fine. The `.part` sibling, the byte counting, and the digest check
-  are the same code on both.
-- **A non-zero exit fails the download and is retried.** A program's exit code
-  is its own (curl says 22 for a 404 and 7 for a refused connection), so unlike
-  the built-in client this cannot tell an answer from a hiccup, and lets the
-  attempt limit end it. Its stderr goes to the log region.
-- The size is unknown up front — there is no `Content-Length` — so the display
-  shows `?%` for that file and marks the total as a floor.
+- **Selection matches requests**: the `transport=` attribute, then the registry's `default="true"` entry, then the built-in client. A config whose endpoints all need the program therefore needs it for its files too, and says nothing extra. `transport="http"` opts one download back to the built-in client.
+- **The program gets the same `.request` context** -- `method`, `url`, `headers` and `header_lines` -- so one program serves requests and downloads alike. `method` is `GET`, and there is no body.
+- **Its stdout streams into the file** rather than into a buffered response body. That is the one difference between the two paths. It is also why a file larger than memory is fine. The `.part` sibling, the byte count and the digest check are the same code on both.
+- **A non-zero exit fails the download, and the queue retries it.** A program owns its own exit codes. curl says 22 for a 404 and 7 for a refused connection. This path therefore cannot tell an answer from a hiccup, unlike the built-in client, and it lets the attempt limit end the transfer. Its stderr goes to the log region.
+- The size is unknown at the start, because there is no `Content-Length`. The display shows `?%` for that file, and it marks the total as a floor.
 
 ### Checking a download against a digest
 
-`<hash>` is optional; when present the file is verified as it streams, and one
-that does not match its digest is deleted rather than renamed into place.
+`<hash>` is optional. With one present, the queue verifies the file as it streams. A file that does not match its digest is deleted rather than renamed into place.
 
 ```xml
 <hash algo="sha256"><value name="digest"/></hash>
 ```
 
 - `algo=` is `sha256` (the default), `sha512`, `sha1`, or `md5`.
-- The body is a template like any other, so the digest usually comes from the
-  same manifest record as the URL, or from a step that fetched a `.sha256` file.
-- **A mismatch is final.** The bytes arrived intact, so refetching them cannot
-  change the digest; the run reports expected and actual, and exits non-zero.
-- A success says which algorithm passed (`downloaded x.iso (6.0 MiB, sha256
-  ok)`) — a check you cannot see happen is one you cannot trust ran.
-- **The digest must look like one.** A renamed manifest field renders as the
-  template engine's placeholder, and that is rejected before anything is
-  fetched, rather than quietly leaving the file unverified. A `sha256sum` line
-  (`<hex>  <name>`) is accepted, as is any capitalization.
-- **To make it optional per record**, render it empty for the records that have
-  no digest: `<hash><if test="sha256"><value name="sha256"/></if></hash>`.
+- The body is a template like any other. The digest therefore usually comes from the same manifest record as the URL, or from a step that fetched a `.sha256` file.
+- **A mismatch is final.** The bytes arrived intact, so a second fetch cannot change the digest. The run reports the expected value and the actual value, then exits non-zero.
+- A success names the algorithm that passed: `downloaded x.iso (6.0 MiB, sha256 ok)`. A check you cannot see happen is one you cannot trust.
+- **The digest must look like a digest.** A renamed manifest field renders as the template engine's placeholder. The plan step rejects that before it fetches anything, rather than leave the file unverified in silence. A `sha256sum` line (`<hex>  <name>`) is acceptable, in any capitalization.
+- **To make the check optional per record**, render the body empty for a record that carries no digest: `<hash><if test="sha256"><value name="sha256"/></if></hash>`.
 
-`<downloads>` sets the queue up once for the config: `concurrency` (default 4),
-`retries` (3; `0` means report a failure immediately), `dir` (`.`), and
-`log_lines` for the log region's height
-(default: `min(15, half the terminal)`). `--concurrency`, `--download-dir`,
-`--log-lines`, and `--no-tui` override them per invocation.
+`<downloads>` sets the queue up one time for the config. It takes `concurrency` (default 4), `retries` (default 3, where `0` reports a failure immediately), `dir` (default `.`), and `log_lines` for the height of the log region (default `min(15, half the terminal)`). `--concurrency`, `--download-dir`, `--log-lines` and `--no-tui` override those values per invocation.
 
 ## Output: fields
 
-A leaf can declare the *shape* of its output records once, via `<fields>`. The
-renderer then represents that one declaration automatically -- as a table, a
-`Label: value` list, JSON, Markdown, CSV, plain lines, or an
-[ASCII timeline](#timeline) -- choosing a default from the data's shape. You
-never write "table" anywhere; a runtime flag (`--as`) or a pipe can force any
-representation.
+A leaf declares the *shape* of its output records one time, in `<fields>`. The renderer then represents that one declaration by itself: a table, a `Label: value` list, JSON, Markdown, CSV, plain lines, or an [ASCII timeline](#timeline). It picks the default from the shape of the data. You never write "table" anywhere. A flag (`--as`) or a pipe forces any representation at run time.
 
 ```xml
 <fields over="data.items" footer="{{.data.total_count}} total">
@@ -343,8 +274,11 @@ Automatic representation, by data shape:
 |------|---------|-------------|
 | array of records | `table` | `json`, `markdown`, `csv`, `timeline` |
 | single record | `list` | `json` |
+| map walked by `@key`/`@value` | `table` | `json`, `markdown`, `csv` |
 | array of scalars | `lines` | `json` |
 | scalar / non-JSON | `raw` | -- |
+
+A map is one record unless some field reads `@key` or `@value`. That is the signal to walk it entry by entry. An array of scalars is `lines` only when the leaf declares no `<field>`. One declared field keeps the table shape.
 
 | `<field>` attribute | Meaning |
 |---------------------|---------|
@@ -354,36 +288,22 @@ Automatic representation, by data shape:
 | `default=` | Substitute for an empty value. |
 | `truncate="N"` | Cap the string to N characters. |
 | `firstline="true"` | Keep only the first line. |
-| `priority="N"` | Lowest priority columns are dropped first when a table is too narrow (default 0; ties keep document order). |
-| `show_in=` | Gate per sink: `""`/`*` = all; an allowlist (`json,csv`) shows only there; a negated list (`!json`) shows everywhere except there. |
+| `priority="N"` | The lowest priority column drops first when a table is too narrow. The default is 0. A tie drops the rightmost column first, and one column always survives. |
+| `show_in=` | Gate the field per sink. `""` and `*` mean every sink. An allowlist (`json,csv`) shows it only there. A negated list (`!json`) shows it everywhere else. |
 
-`<fields over="path"/>` selects where the records live (`data.items`, a map for
-`@key`/`@value`, `data.names` for scalars) rather than the whole body. The path
-reads against the body first (`items`), then against the whole context
-(`data.items`), so either spelling reaches the same records. A numeric step
-indexes a list (`pages.0.rows`). `footer=` adds a trailing summary line for the
-human sinks.
+`<fields over="path"/>` selects where the records live, in place of the whole body: `data.items`, a map for `@key` and `@value`, or `data.names` for scalars. The path reads against the body first (`items`), then against the whole context (`data.items`), so either spelling reaches the same records. A numeric step indexes a list (`pages.0.rows`). `footer=` adds a trailing summary line to the human sinks.
 
-**A path that names nothing is an error**, and so is one that names a scalar:
-the run exits non-zero and names the path. An empty table over exit 0 reads as
-an API that returned nothing, which is how a renamed field costs an afternoon.
-An empty **list** is a real answer and stays quiet.
+**A path that names nothing is an error**, and so is one that names a scalar. The run exits non-zero and names the path. An empty table over exit 0 reads as an API that returned nothing, which is how a renamed field costs an afternoon. An empty **list** is a real answer. It stays quiet.
 
-With **no** `<fields>` at all, a request leaf prints its (jq-shaped) JSON body;
-add `--as=table` to project nothing and table the raw keys.
+A request leaf with **no** `<fields>` at all prints its JSON body, as jq shaped it. Add `--as=table` to project nothing and to table the raw keys.
 
 ### Forcing a representation
 
-`--as=<sink>` forces `table | list | lines | raw | json | markdown | csv |
-timeline`. `--no-format` (or `--format=raw`, `NO_FORMAT=1`) returns the raw
-body. So `gh repo get x` is a list on a terminal, `gh repo get x --as=json | jq`
-is JSON, and `gh repo get x --no-format` is the unshaped response.
+`--as=<sink>` forces `table | list | lines | raw | json | markdown | csv | timeline`. `--no-format` returns the raw body, and `--format=raw` and `NO_FORMAT=1` do the same. So `gh repo get x` is a list on a terminal, `gh repo get x --as=json | jq` is JSON, and `gh repo get x --no-format` is the unshaped response.
 
 ### Timeline
 
-`--as=timeline` renders the records as a horizontal, annotated ASCII timeline
-(via [`ascii-timeline`](https://github.com/wow-look-at-my/ascii-timeline)). Each
-record becomes one event, and the **field name** selects what it contributes:
+`--as=timeline` renders the records as a horizontal ASCII timeline with annotations, through [`ascii-timeline`](https://github.com/wow-look-at-my/ascii-timeline). Each record becomes one event, and the **field name** selects what that field contributes.
 
 | Field name    | Event role                                              |
 |---------------|---------------------------------------------------------|
@@ -391,14 +311,9 @@ record becomes one event, and the **field name** selects what it contributes:
 | `start`+`end` | A **duration** event spanning the range (a `█` bar).    |
 | `label`       | Text shown next to the marker/bar.                      |
 | `description` | Dim text appended after the date.                       |
-| `color`       | Style spec (e.g. `green`, `bold cyan`); auto-assigned otherwise. |
+| `color`       | Style spec, for example `green` or `bold cyan`. The renderer assigns one when the field is absent. |
 
-Other field names are ignored, and `show_in=` still applies (use
-`show_in="timeline"` / `!timeline` to scope a field). Dates accept the many
-formats `ascii-timeline` understands (`2006-01-02`, `Jan 2, 2006`, RFC3339, ...).
-A record that resolves no `date` and no `start`+`end` pair is skipped, so partial
-data degrades gracefully. Color follows the terminal (off when piped or under
-`NO_COLOR`), and the axis uses the terminal width.
+The renderer ignores every other field name, and `show_in=` still applies. Use `show_in="timeline"` or `!timeline` to scope a field. A date can take any of the many formats `ascii-timeline` reads (`2006-01-02`, `Jan 2, 2006`, RFC3339, ...). The renderer skips a record that resolves no `date` and no `start` and `end` pair, so partial data still draws. Color follows the terminal, and goes off in a pipe or under `NO_COLOR`. The axis uses the terminal width.
 
 ```xml
 <fields>
@@ -423,10 +338,7 @@ Feb 8, 2026  →  Sep 2, 2026   (7 months)
                                               ● go1.25 (Sep 2, 2026)
 ```
 
-The sample's `repo commits` command similarly maps `commit.author.date` to a
-timeline. If the upstream JSON already has keys named `label`/`date`/`start`/
-`end`, you can even skip the `<fields>` block: `... --as=timeline` derives them
-directly.
+The sample's `repo commits` command maps `commit.author.date` to a timeline in the same way. When the upstream JSON already carries keys named `label`, `date`, `start` and `end`, you can leave the `<fields>` block out. `... --as=timeline` then derives them directly.
 
 ## Examples
 
@@ -470,7 +382,7 @@ directly.
 
 ### Generic aliases (non-HTTP)
 
-The engine doesn't care that a command is HTTP. A tiny git wrapper:
+The engine does not care whether a command is HTTP. Here is a small git wrapper.
 
 ```xml
 <config name="gx">
@@ -515,16 +427,12 @@ The engine doesn't care that a command is HTTP. A tiny git wrapper:
 
 ## Passthrough mode
 
-When a leaf sets `passthrough="true"`, the command accepts arbitrary positional
-args (everything after `--` in the wrapper script) and performs its own minimal
-flag extraction:
+A leaf that sets `passthrough="true"` accepts arbitrary positional args, which is everything after `--` in the wrapper script. It then does its own minimal flag extraction.
 
-1. Only declared `<flag>`s are recognized (matched with one or two leading
-   dashes, e.g. both `-o` and `--o`).
-2. Everything else -- unknown flags, their values, bare positionals -- is
-   collected into `.rest` (a `[]string`).
-3. Extracted flags do NOT appear in `.rest`, so `{{spread .rest}}` reconstructs
-   the original command line minus the captured flags.
+1. The parser recognizes a declared `<flag>` only, by name or by `short=`, with one or two leading dashes. Both `-o` and `--o` match.
+2. It collects everything else into `.rest`, a `[]string`. That covers an unknown flag, its value, and a bare positional.
+3. An extracted flag does NOT appear in `.rest`, so `{{spread .rest}}` rebuilds the original command line minus the captured flags.
+4. A bare `--`, and everything after it, goes into `.rest` verbatim. The wrapped command can mean something by it.
 
 ```xml
 <config name="cicc-cache">
@@ -543,21 +451,13 @@ flag extraction:
 # Wrapper script: exec api-cli --config cicc-cache.xml exec -- "$@"
 ```
 
-**Constraints:** `passthrough` is mutually exclusive with `<arg>`; leaf-only.
-Flags support `=` and next-arg syntax; `bool` flags consume no value;
-`string-slice` flags accumulate. Filter `.rest` with `filterSuffix` /
-`filterPrefix`.
+**Constraints:** `passthrough` and `<arg>` are mutually exclusive, and `passthrough` sits on a leaf only. A flag takes `=` syntax and next-arg syntax. A `bool` flag consumes no value, and a `string-slice` flag accumulates. Filter `.rest` with `filterSuffix` and `filterPrefix`.
 
 ## Result reuse across calls (steps)
 
-A leaf can declare `<steps>` -- pre-execution stages that run before the leaf's
-own run. Each step's output is captured and exposed under `.result.<name>` for
-later steps and the leaf's own `entry`/run. This enables indirection (resolve a
-name to an ID, then use it), joins, and fan-out pipelines.
+A leaf can declare `<steps>`, which are stages that run before the leaf's own run. Each step's output is captured and exposed at `.result.<name>`, for a later step and for the leaf's own `entry` and run. That gives you indirection, such as a name resolved to an ID and then used. It also gives you joins and fan-out pipelines.
 
-A step runs a command or a request -- the same fork as `<run>`. A step that
-declares neither inherits the leaf's effective run, so chaining two calls
-against an inherited `<request>` needs nothing but a second `<entry>`:
+A step runs a command or a request, the same fork as `<run>`. A step that declares neither one inherits the leaf's effective run. Two chained calls against an inherited `<request>` therefore need nothing but a second `<entry>`.
 
 ```xml
 <command name="user-posts" description="List posts for a user looked up by username.">
@@ -577,26 +477,17 @@ against an inherited `<request>` needs nothing but a second `<entry>`:
 </command>
 ```
 
-Mix freely: a `<step><run>` may be a shell command while the leaf performs a
-request, or the reverse.
+Mix the two freely. A `<step><run>` can be a shell command while the leaf makes a request, or the reverse.
 
-- Steps run in declaration order; each `entry` is rendered against the current
-  context including `.result.*` from prior steps.
-- Step output is parsed as JSON (with `UseNumber`); non-JSON is kept as a string.
-  A request step stores what the leaf would have printed, `<response jq=>`
-  shaping included.
+- Steps run in declaration order. Each `entry` renders against the current context, and that context includes `.result.*` from the prior steps.
+- Step output parses as JSON, with `UseNumber`. Output that is not JSON stays a string. A request step stores what the leaf prints, and that includes the `<response jq=>` shaping.
 - A non-zero step aborts the run with that exit code.
-- A `when` attribute (a Go-template predicate) skips a step when falsy (empty,
-  `false`, `0`, `no`); `.result.<name>` is then unset.
-- When more than one command runs, `N executions` is printed to stderr; suppress
-  with `--quiet`/`-q`.
+- A `when` attribute is a Go-template predicate. It skips the step on a falsy render (empty, `false`, `0` or `no`), and `.result.<name>` then stays unset.
+- More than one command in a run prints `N executions` to stderr. Suppress that line with `--quiet` or `-q`.
 
 ## Legacy formats and views
 
-Alongside `<fields>`, the older explicit `<format>`/`<view>` system (inspired by
-PowerShell's `.format.ps1xml`) is still available for cases where you want full
-control of the rendered template. A leaf uses `<fields>` *or* `<format>`, not
-both.
+The older explicit `<format>` and `<view>` system stays next to `<fields>`, for a case that needs full control of the rendered template. PowerShell's `.format.ps1xml` is its ancestor. A leaf uses `<fields>` *or* `<format>`, never both.
 
 ```xml
 <formats>
@@ -614,21 +505,16 @@ Name: {{.data.name}}
 </command>
 ```
 
-`input=` is `json` (default), `lines`, or `raw`. Formatting applies iff the
-author `when` predicate AND the user verdict agree; `--view=<name>` forces a
-view. An inline `<format>` (with `<view>` children, no `ref=`) overrides an
-inherited one. See [Global flags](#global-flags) for `--format`/`--no-format`.
+`input=` is `json` (the default), `lines` or `raw`. Formatting applies only when the author `when` predicate AND the user verdict agree. `--view=<name>` forces a view. An inline `<format>`, with `<view>` children and no `ref=`, overrides an inherited one. See [Global flags](#global-flags) for `--format` and `--no-format`.
 
 ## Template helpers
 
-Every [sprig v3](https://masterminds.github.io/sprig/) helper is available
-(`toJson`, `upper`, `default`, `required`, `regexReplaceAll`, ...). On top of
-sprig:
+Every [sprig v3](https://masterminds.github.io/sprig/) helper is available: `toJson`, `upper`, `default`, `required`, `regexReplaceAll` and the rest. On top of sprig you get these.
 
 | Helper        | Purpose                                                                                   |
 |---------------|-------------------------------------------------------------------------------------------|
-| `truthy`      | Truthiness used by `<if test=>` (nil/`false`/`0`/`no`/"" are falsy).                       |
-| `querystring` | Render a map as `?k=v&k=v` (URL-encoded). Empty values dropped.                            |
+| `truthy`      | The truthiness that `<if test=>` uses. nil, `false`, `0`, `no` and "" are falsy.           |
+| `querystring` | Render a map as `?k=v&k=v`, URL-encoded. It drops an empty value.                          |
 | `repeatkey`   | Repeated params for one key over a slice: `repeatkey "tag" .arg.tags`.                     |
 | `shellquote`  | POSIX single-quote a value for the shell form of a command.                               |
 | `urlpath`     | URL-escape a single path segment.                                                         |
@@ -640,21 +526,14 @@ sprig:
 
 ## Template semantics
 
-- Parsed with `missingkey=zero` -- missing map keys don't error. Use
-  `{{default "" .x}}`, `{{if .x}}...{{end}}`, or `{{required "msg" .x}}`.
-- `<entry>` is rendered first (without `.entry` in scope); every string leaf is
-  rendered independently and exposed as `.entry`.
-- `<vars>` resolve to a fixpoint, so a var can reference another var
-  (`var.filter` can interpolate `var.noise`).
+- The parser uses `missingkey=zero`, so a missing map key raises no error. Every context map holds `any`, whose zero value is nil, so a missing key **prints `<no value>`** rather than an empty string. Reach for `{{default "" .x}}`, `{{if .x}}...{{end}}` or `{{required "msg" .x}}` when that matters. A declared `<flag>` is always present, default included, so `<no value>` in practice means the path is wrong.
+- `<entry>` renders first, without `.entry` in scope. Every string leaf renders on its own, and the result becomes `.entry`.
+- `<vars>` resolve to a fixpoint, so one var can reference another. `var.filter` can interpolate `var.noise`.
+- A var can read `.flag`. A `<flag default=>` can read `.var`. Vars therefore resolve twice per invocation. The first pass runs without flags, and a templated flag default renders against that context. The second pass runs over the finished flag map. Everything downstream -- a URL, an entry, a jq program -- sees that second pass, which carries this run's flags.
 
 ## Working directory and stdin
 
-`<cwd>` and `<stdin>` may appear at the top level, on any `<command>`, and on any
-`<step>`. Both are templates and inherit down the tree (closest non-empty
-ancestor wins; a step overrides its leaf). `<cwd>` sets the child's working
-directory (default: the caller's cwd); `<stdin>` feeds a rendered string to the
-child's stdin (default: inherit the parent's stdin). These apply to shell/argv
-commands.
+`<cwd>` and `<stdin>` can sit at the top level, on any `<command>`, and on any `<step>`. Both are templates, and both inherit down the tree. The closest non-empty ancestor wins, and a step overrides its leaf. `<cwd>` sets the child's working directory, and defaults to the caller's own. `<stdin>` puts a rendered string on the child's stdin, and defaults to the parent's stdin. Both apply to a shell command and to an argv command.
 
 ```xml
 <config name="stack">
@@ -665,10 +544,7 @@ commands.
 
 ## Config format
 
-A config is **XML 1.1** (`<?xml version="1.1" encoding="UTF-8"?>`). Structural
-indentation is **tabs**; the loader dedents the common leading tabs from
-multi-line text content. Use CDATA (`<![CDATA[ ... ]]>`) for content with `<`,
-`&`, or a foreign language like a jq program.
+A config is **XML 1.1**: `<?xml version="1.1" encoding="UTF-8"?>`. Structural indentation is **tabs**. The loader removes the common leading tabs from multi-line text content. Use CDATA (`<![CDATA[ ... ]]>`) for content that holds `<` or `&`, or a foreign language such as a jq program.
 
 ```xml
 <?xml version="1.1" encoding="UTF-8"?>
@@ -681,18 +557,11 @@ multi-line text content. Use CDATA (`<![CDATA[ ... ]]>`) for content with `<`,
 </config>
 ```
 
-Attribute values are always raw (templates or context paths), so the double
-quotes Go templates need (`eq .x "y"`) are written with `'single quotes'` around
-the attribute, or escaped. The `schema=` attribute is an editor hint pointing at
-the XSD; the loader ignores it.
+An attribute value is always raw, a template or a context path. A Go template needs double quotes for `eq .x "y"`, so put `'single quotes'` around such an attribute, or escape the inner quotes. The `schema=` attribute is an editor hint that points at the XSD. The loader ignores it.
 
 ## Config schema
 
-An XSD reference for the grammar lives at [`api.schema.xsd`](./api.schema.xsd)
-(also printed by `api-cli docs schema`). It documents every element and
-attribute for editor tooling. It is a guide, not the enforcement point: the
-loader is authoritative (configs are validated by loading them), and a strict
-XSD validator cannot represent the recursive `<command>` grammar.
+An XSD reference for the grammar lives at [`api.schema.xsd`](./api.schema.xsd), and `api-cli docs schema` prints it. It documents each element and attribute, for editor tooling. It is a guide, and not the enforcement point. The loader is authoritative, because api-cli validates a config by loading it. A strict XSD validator also cannot express the recursive `<command>` grammar.
 
 ### Top-level elements
 
@@ -712,29 +581,25 @@ XSD validator cannot represent the recursive `<command>` grammar.
 
 | Attribute / child | Notes |
 |-------------------|-------|
-| `name=` (required) | Subcommand name. Not `help`, `completion`, `docs`. |
+| `name=` (required) | Subcommand name. No whitespace or slashes, and not `help`, `completion`, `__complete`, or `docs`. |
 | `description=` | Shown in help. |
 | `passthrough="true"` | Leaf-only. See [Passthrough mode](#passthrough-mode). |
-| `confirm=` (or `<confirm>`) | Prompt `<msg> [y/N]` before running; bypass with `--yes`. Inherited. |
+| `confirm=` (or `<confirm>`) | Prompt `<msg> [y/N]` before the run. `--yes` bypasses it. Off a terminal the run refuses rather than assume a yes. Inherited. |
 | `<arg>` / `<flag>` | Positional args / named flags. |
 | `<vars>` | Merged with ancestor vars (this node wins). |
 | `<run>` / `<cwd>` / `<stdin>` | Override the inherited executable / cwd / stdin. |
 | `<steps>` | Leaf-only. Pre-execution stages, each a command or a request. |
 | `<entry>` | Leaf-only. `<path>`, `<query>`, or user-defined keys -> `.entry`. |
 | `<preconditions><precondition>` | Leaf-only. A non-empty render is a fatal error message (exit 1). |
-| `<fields>` / `<format>` | Output shape (auto) / legacy format. Leaf-only; not both. |
+| `<fields>` / `<format>` | The automatic output shape, or a legacy format. Leaf-only, and never both. |
 | `<download over= when= transport=>` | Leaf-only, repeatable. Hands URLs to the download queue. See [Downloads](#downloads). |
 | `<command>` | Nested subcommands. |
 
 ### `<arg>` and `<flag>`
 
-`<arg name= type="string|int" required= variadic= description=/>`. A `variadic`
-arg (last only) collects the rest into a typed slice; pair with `spread`.
+`<arg name= type="string|int" required= variadic= description=/>`. A `variadic` arg comes last, and it collects the rest into a typed slice. Pair it with `spread`. A required arg cannot follow an optional one, because cobra counts positions and nothing can fill the gap.
 
-`<flag name= short= type="string|bool|int|string-slice" default= required=
-conflicts="a,b" description=/>`. A string `default` may itself be a template
-(rendered when the flag isn't set). A `bool` flag defaulting to `true` gets a
-hidden `--no-NAME` companion.
+`<flag name= short= type="string|bool|int|string-slice" default= required= conflicts="a,b" description=/>`. A string `default` can be a template itself. It renders when the user does not set the flag. A `bool` flag with a `true` default gets a hidden `--no-NAME` companion. A flag name therefore cannot start with `no-`. `short=` is one character.
 
 ## Global flags
 
@@ -742,7 +607,7 @@ hidden `--no-NAME` companion.
 |-------------------|-------|---------|-------|
 | `--config <path>` |       |         | Config file (XML). Falls back to `./api.xml`. |
 | `--version`       |       |         | Print the binary's version. Needs no config. |
-| `--mcp <transport>` |     |         | Run the config as an MCP server: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes a tool; HTTP/SSE also expose `GET /health`. Behaves like `--format=always`. |
+| `--mcp <transport>` |     |         | Run the config as an MCP server: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes a tool named for its command path, with underscores (`users_get`). The HTTP and SSE servers also answer `GET /health`. The server behaves as `--format=always` does, with `.tty` true and width 80. |
 | `--cors <level>`  |       | `strict`| CORS for the MCP HTTP/SSE server. See [CORS levels](#cors-levels). |
 | `--quiet`         | `-q`  | false   | Suppress the `N executions` line. |
 | `--yes`           | `-y`  | false   | Skip `confirm` prompts. |
@@ -750,7 +615,7 @@ hidden `--no-NAME` companion.
 | `--debug`         |       | false   | Full execution detail (implies `--verbose`). |
 | `--no-format`     |       | false   | Disable output formatting (= `--format=raw`). |
 | `--format <mode>` |       | `auto`  | `raw` / `auto` / `always`. |
-| `--as <sink>`     |       |         | Force a `<fields>` representation: `table|list|lines|json|markdown|csv|timeline`. |
+| `--as <sink>`     |       |         | Force a `<fields>` representation: `table|list|lines|raw|json|markdown|csv|timeline`. |
 | `--view <name>`   |       |         | Pick a named legacy view, bypassing predicate selection. |
 | `--var KEY=VALUE` |       |         | Set an env var before evaluation (so `{{.env.KEY}}` sees it). Repeatable. |
 | `--concurrency <n>` |     | `4`     | Parallel downloads. See [Downloads](#downloads). |
@@ -758,28 +623,24 @@ hidden `--no-NAME` companion.
 | `--log-lines <n>`  |      |         | Height of the download display's log region. Default: `min(15, half the terminal)`. |
 | `--no-tui`        |       | false   | Report download progress as plain lines instead of drawing the display. |
 
-Env vars (lower precedence than flags): `NO_FORMAT` (any value disables
-formatting), `API_CLI_FORMAT` (`raw`/`auto`/`always`).
+Two env vars apply, at a lower precedence than the flags. Any value of `NO_FORMAT` turns formatting off. `API_CLI_FORMAT` takes `raw`, `auto` or `always`.
 
 ## CORS levels
 
-When the MCP server runs over HTTP/SSE, `--cors <level>` controls which browser
-origins may talk to it (irrelevant for `--mcp=stdio`).
+With the MCP server on HTTP or SSE, `--cors <level>` controls which browser origins can talk to it. The level means nothing for `--mcp=stdio`.
 
 | Level         | Origins allowed | When to use |
 |---------------|-----------------|-------------|
 | `disabled`    | Any (`*`).      | Local prototyping only. |
 | `permissive`  | localhost/loopback + same-origin. | Local browser dev tools hitting a remote server. |
 | `strict`      | Same-origin only (default). | Single-tenant server with one frontend. |
-| `enabled`     | None (header never sent). | Locked down; non-browser clients only. |
+| `enabled`     | None. The header never goes out. | Locked down, for non-browser clients only. |
 
-Requests with no `Origin` header (curl, server-to-server, AI tools) always pass
-through; CORS only matters for browsers. `Access-Control-Allow-Credentials` is
-never emitted.
+A request with no `Origin` header always passes through. That covers curl, a server-to-server call and an AI tool, because CORS matters to a browser only. The server never sends `Access-Control-Allow-Credentials`.
 
 ## Built-in subcommands
 
-The `docs` subcommand prints embedded documentation; it works without a config.
+The `docs` subcommand prints the embedded documentation. It works with no config.
 
 | Command               | Output |
 |-----------------------|--------|
@@ -814,13 +675,12 @@ source <(./api-cli completion bash)
 
 ## GitHub example
 
-[`samples/github/github.xml`](./samples/github/github.xml) wraps the read-only
-slice of the GitHub REST API with first-class requests:
+[`samples/github/github.xml`](./samples/github/github.xml) wraps the read-only part of the GitHub REST API in first-class requests.
 
 - **Subcommands**: `user get|repos|orgs`, `repo get|issues|issue|prs|pr|pr-diff|pr-comments|releases|release|commits|commit|branches|tags|contents|readme|languages|topics`, `org get|members|repos`, `search repos|code|issues|users`, `rate-limit`.
 - **Token-aware**: picks up `$GITHUB_TOKEN` / `$GH_TOKEN` automatically (5000 vs 60 req/hr).
 - **Enterprise-ready**: set `$GITHUB_API_URL` for GitHub Enterprise Server.
-- **Noise stripping**: every response runs through an embedded `jq` `walk` that drops `*url` links, `node_id`s, `reactions`, `permissions`, duplicate counts, and more -- often ~80% fewer bytes. (`GITHUB_RAW=1` opts out.)
+- **Noise stripping**: each response goes through an embedded `jq` `walk`. It drops `*url` links, `node_id`s, `reactions`, `permissions`, duplicate counts and more. That often cuts about 80% of the bytes. `GITHUB_RAW=1` opts out.
 - **Fields views**: list endpoints become tables, single objects become `Label: value` lists, automatically by data shape.
 
 ```sh
@@ -855,6 +715,20 @@ CLI invocations map to HTTP requests:
 
 See `workers/README.md` for the full API mapping, deployment, and
 architecture details.
+
+## Using the formatter as a library
+
+The `<fields>` formatter is importable on its own, at `github.com/wow-look-at-my/api-cli/fields`. A program with decoded JSON gets the same table, list, JSON, Markdown, CSV, or timeline output, without the XML config language.
+
+```go
+f := &fields.Fields{Over: "items", List: []fields.Field{
+	{Name: "id", Path: "id"},
+	{Name: "name", Path: "name"},
+}}
+out, err := fields.Render(nil, f, body, map[string]any{"data": body}, "", 0)
+```
+
+The first argument evaluates `expr=` and `footer=` templates. It may be nil for a declaration that uses neither. See `docs/fields-package.md`.
 ## Development
 
 ```sh

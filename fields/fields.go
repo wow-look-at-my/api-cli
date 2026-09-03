@@ -1,22 +1,23 @@
-package main
+package fields
 
 import (
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 // knownSinks are the representations a Fields declaration can be rendered as.
-var knownSinks = []string{
+var knownSinks = set.Of(
 	"table", "list", "lines",
 	"raw", "json", "markdown", "csv",
 	"timeline",
-}
+)
 
-// record is one row of output. obj is the object (object record), the entry
-// value (when walking a map), or a scalar. key is the entry key when isEntry.
+// record is a row of output. obj holds an object, a map entry's value, or a
+// scalar; key carries the entry's key while isEntry.
 type record struct {
 	obj     any
 	key     string
@@ -24,9 +25,9 @@ type record struct {
 }
 
 // renderFields represents a Fields declaration as the chosen sink. An empty
-// sink auto-selects from the data shape. width (>0) enables priority-based
-// column dropping for tables.
-func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width int) (string, error) {
+// sink follows the data shape, and a positive width lets a table drop columns
+// by priority.
+func renderFields(rnd Renderer, f *Fields, parsed any, ctx map[string]any, sink string, width int) (string, error) {
 	recs, shape, err := resolveRecords(f, parsed, ctx)
 	if err != nil {
 		return "", err
@@ -41,35 +42,38 @@ func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width 
 	if sink == "" {
 		sink = defaultSink(shape)
 	}
-	if !slices.Contains(knownSinks, sink) {
+	if !knownSinks.Contains(sink) {
 		return "", fmt.Errorf("unknown representation %q", sink)
 	}
 
 	var out string
 	switch sink {
 	case "json":
-		return renderJSONSink(f, recs, fieldsList, shape, parsed, ctx, derived)
+		return renderJSONSink(rnd, f, recs, fieldsList, shape, parsed, ctx, derived)
 	case "raw":
 		out = renderRawSink(recs)
 	case "lines":
-		out, err = renderLinesSink(recs, fieldsList, ctx)
+		out, err = renderLinesSink(rnd, recs, fieldsList, ctx)
 	case "list":
-		out, err = renderListSink(recs, fieldsList, ctx, sink)
+		out, err = renderListSink(rnd, recs, fieldsList, ctx, sink)
 	case "table":
-		out, err = renderTableSink(recs, fieldsList, ctx, sink, width)
+		out, err = renderTableSink(rnd, recs, fieldsList, ctx, sink, width)
 	case "markdown":
-		out, err = renderMarkdownSink(recs, fieldsList, ctx, sink)
+		out, err = renderMarkdownSink(rnd, recs, fieldsList, ctx, sink)
 	case "csv":
-		out, err = renderCSVSink(recs, fieldsList, ctx, sink)
+		out, err = renderCSVSink(rnd, recs, fieldsList, ctx, sink)
 	case "timeline":
-		out, err = renderTimelineSink(recs, fieldsList, ctx)
+		out, err = renderTimelineSink(rnd, recs, fieldsList, ctx)
 	}
 	if err != nil {
 		return "", err
 	}
 
 	if f.Footer != "" && humanSink(sink) && strings.TrimSpace(out) != "" {
-		foot, ferr := renderString(f.Footer, ctx)
+		if rnd == nil {
+			return "", fmt.Errorf("render footer: no renderer")
+		}
+		foot, ferr := rnd(f.Footer, ctx)
 		if ferr != nil {
 			return "", fmt.Errorf("render footer: %w", ferr)
 		}
@@ -80,8 +84,8 @@ func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width 
 	return out, nil
 }
 
-// humanSink reports whether a footer line should follow the body. Markdown and
-// csv are structured outputs, so a trailing prose footer would corrupt them.
+// humanSink reports whether a footer may follow the body. A structured sink
+// would be corrupted by trailing prose.
 func humanSink(sink string) bool {
 	switch sink {
 	case "table", "list", "lines":
@@ -154,8 +158,8 @@ func showIn(spec, sink string) bool {
 
 // cellValue computes a field's display string for a record, applying default,
 // firstline, and truncate.
-func cellValue(fld Field, rec record, ctx map[string]any) (string, error) {
-	raw, err := rawFieldValue(fld, rec, ctx)
+func cellValue(rnd Renderer, fld Field, rec record, ctx map[string]any) (string, error) {
+	raw, err := rawFieldValue(rnd, fld, rec, ctx)
 	if err != nil {
 		return "", err
 	}
@@ -178,7 +182,7 @@ func cellValue(fld Field, rec record, ctx map[string]any) (string, error) {
 }
 
 // rawFieldValue resolves a field's underlying value (before display coercion).
-func rawFieldValue(fld Field, rec record, ctx map[string]any) (any, error) {
+func rawFieldValue(rnd Renderer, fld Field, rec record, ctx map[string]any) (any, error) {
 	switch fld.Path {
 	case "@key":
 		return rec.key, nil
@@ -186,7 +190,10 @@ func rawFieldValue(fld Field, rec record, ctx map[string]any) (any, error) {
 		return rec.obj, nil
 	}
 	if fld.Expr != "" {
-		return renderString(fld.Expr, exprData(rec, ctx))
+		if rnd == nil {
+			return nil, fmt.Errorf("field %q has an expr but no renderer", fld.Name)
+		}
+		return rnd(fld.Expr, exprData(rec, ctx))
 	}
 	if fld.Path == "" {
 		return rec.obj, nil
@@ -240,10 +247,6 @@ func displayValue(v any) string {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Sinks
-// ---------------------------------------------------------------------------
-
 func renderRawSink(recs []record) string {
 	var b strings.Builder
 	for _, r := range recs {
@@ -253,16 +256,16 @@ func renderRawSink(recs []record) string {
 	return b.String()
 }
 
-func renderLinesSink(recs []record, fields []Field, ctx map[string]any) (string, error) {
+func renderLinesSink(rnd Renderer, recs []record, fields []Field, ctx map[string]any) (string, error) {
 	inc := includedFields(fields, "lines")
 	var b strings.Builder
 	for _, r := range recs {
-		// Scalar records print their value directly; only object records use the
-		// first declared field as the line.
+		// A scalar record prints its own value; an object record prints the
+		// leading declared field.
 		if _, isMap := r.obj.(map[string]any); len(inc) == 0 || !isMap {
 			b.WriteString(displayValue(r.obj))
 		} else {
-			v, err := cellValue(inc[0], r, ctx)
+			v, err := cellValue(rnd, inc[0], r, ctx)
 			if err != nil {
 				return "", err
 			}
@@ -273,7 +276,7 @@ func renderLinesSink(recs []record, fields []Field, ctx map[string]any) (string,
 	return b.String(), nil
 }
 
-func renderListSink(recs []record, fields []Field, ctx map[string]any, sink string) (string, error) {
+func renderListSink(rnd Renderer, recs []record, fields []Field, ctx map[string]any, sink string) (string, error) {
 	inc := includedFields(fields, sink)
 	maxLabel := 0
 	for _, fld := range inc {
@@ -287,7 +290,7 @@ func renderListSink(recs []record, fields []Field, ctx map[string]any, sink stri
 			b.WriteByte('\n')
 		}
 		for _, fld := range inc {
-			v, err := cellValue(fld, r, ctx)
+			v, err := cellValue(rnd, fld, r, ctx)
 			if err != nil {
 				return "", err
 			}
@@ -299,12 +302,12 @@ func renderListSink(recs []record, fields []Field, ctx map[string]any, sink stri
 	return b.String(), nil
 }
 
-func renderTableSink(recs []record, fields []Field, ctx map[string]any, sink string, width int) (string, error) {
+func renderTableSink(rnd Renderer, recs []record, fields []Field, ctx map[string]any, sink string, width int) (string, error) {
 	inc := includedFields(fields, sink)
 	if len(inc) == 0 {
 		return "", nil
 	}
-	cols, err := buildColumns(inc, recs, ctx)
+	cols, err := buildColumns(rnd, inc, recs, ctx)
 	if err != nil {
 		return "", err
 	}
@@ -320,7 +323,7 @@ func renderTableSink(recs []record, fields []Field, ctx map[string]any, sink str
 	return alignColumns(rows, 2), nil
 }
 
-func renderMarkdownSink(recs []record, fields []Field, ctx map[string]any, sink string) (string, error) {
+func renderMarkdownSink(rnd Renderer, recs []record, fields []Field, ctx map[string]any, sink string) (string, error) {
 	inc := includedFields(fields, sink)
 	if len(inc) == 0 {
 		return "", nil
@@ -337,7 +340,7 @@ func renderMarkdownSink(recs []record, fields []Field, ctx map[string]any, sink 
 	for _, r := range recs {
 		cells := make([]string, len(inc))
 		for i, fld := range inc {
-			v, err := cellValue(fld, r, ctx)
+			v, err := cellValue(rnd, fld, r, ctx)
 			if err != nil {
 				return "", err
 			}
@@ -348,7 +351,7 @@ func renderMarkdownSink(recs []record, fields []Field, ctx map[string]any, sink 
 	return b.String(), nil
 }
 
-func renderCSVSink(recs []record, fields []Field, ctx map[string]any, sink string) (string, error) {
+func renderCSVSink(rnd Renderer, recs []record, fields []Field, ctx map[string]any, sink string) (string, error) {
 	inc := includedFields(fields, sink)
 	if len(inc) == 0 {
 		return "", nil
@@ -362,7 +365,7 @@ func renderCSVSink(recs []record, fields []Field, ctx map[string]any, sink strin
 	for _, r := range recs {
 		cells := make([]string, len(inc))
 		for i, fld := range inc {
-			v, err := cellValue(fld, r, ctx)
+			v, err := cellValue(rnd, fld, r, ctx)
 			if err != nil {
 				return "", err
 			}
@@ -380,7 +383,7 @@ func csvQuote(s string) string {
 	return s
 }
 
-func renderJSONSink(f *Fields, recs []record, fields []Field, shape string, parsed any, ctx map[string]any, derived bool) (string, error) {
+func renderJSONSink(rnd Renderer, f *Fields, recs []record, fields []Field, shape string, parsed any, ctx map[string]any, derived bool) (string, error) {
 	if derived {
 		// No projection: emit the selected records as-is.
 		switch shape {
@@ -400,7 +403,7 @@ func renderJSONSink(f *Fields, recs []record, fields []Field, shape string, pars
 	project := func(r record) (any, error) {
 		m := make(map[string]any, len(inc))
 		for _, fld := range inc {
-			raw, err := rawFieldValue(fld, r, ctx)
+			raw, err := rawFieldValue(rnd, fld, r, ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -431,24 +434,20 @@ func renderJSONSink(f *Fields, recs []record, fields []Field, shape string, pars
 	return marshalJSON(arr)
 }
 
-// ---------------------------------------------------------------------------
-// Table columns + priority dropping
-// ---------------------------------------------------------------------------
-
 type column struct {
-	cells    []string // cells[0] is the header, cells[1..] are rows
+	cells    []string // the header, then a cell per record
 	priority int
 	width    int
 }
 
-func buildColumns(inc []Field, recs []record, ctx map[string]any) ([]column, error) {
+func buildColumns(rnd Renderer, inc []Field, recs []record, ctx map[string]any) ([]column, error) {
 	cols := make([]column, len(inc))
 	for ci, fld := range inc {
 		c := column{cells: make([]string, len(recs)+1), priority: fld.Priority}
 		c.cells[0] = fld.Name
 		c.width = displayWidth(fld.Name)
 		for ri, r := range recs {
-			v, err := cellValue(fld, r, ctx)
+			v, err := cellValue(rnd, fld, r, ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -462,9 +461,9 @@ func buildColumns(inc []Field, recs []record, ctx map[string]any) ([]column, err
 	return cols, nil
 }
 
-// dropByPriority removes the lowest-priority columns until the table fits in
-// width, keeping at least one column. Ties drop the rightmost column first, so
-// document order is otherwise preserved. width <= 0 disables dropping.
+// dropByPriority removes the lowest-priority columns until the table fits the
+// width, never emptying it. A tie drops the rightmost, so document order
+// survives. A width that is not positive disables dropping.
 func dropByPriority(cols []column, width, padding int) []column {
 	if width <= 0 {
 		return cols

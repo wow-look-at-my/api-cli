@@ -182,6 +182,9 @@
     <xs:attribute name="test" type="xs:string" use="required"/>
   </xs:complexType>
 
+  <!-- jq= is the jq program, a template that renders against the leaf context
+       (.arg/.flag/.var/.entry/.env). A bare dotted name is a context path to a
+       string holding the program instead. -->
   <xs:complexType name="response">
     <xs:attribute name="jq" type="xs:string"/>
   </xs:complexType>
