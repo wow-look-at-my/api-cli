@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/wow-look-at-my/api-cli/fields"
+
 	"github.com/spf13/cobra"
 )
 

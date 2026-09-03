@@ -11,6 +11,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/wow-look-at-my/api-cli/fields"
 	apidsl "github.com/wow-look-at-my/api-dsl"
 )
 

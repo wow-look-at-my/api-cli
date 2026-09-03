@@ -1,4 +1,4 @@
-package fields
+package main
 
 import (
 	"bytes"
@@ -22,15 +22,15 @@ const probeBody = `{"count":3,"response":[` +
 func TestLookupData_IndexesLists(t *testing.T) {
 	data := parseResult(probeBody)
 
-	v, ok := lookupData(data, "response.0.name")
+	v, ok := fields.Lookup(data, "response.0.name")
 	require.True(t, ok)
 	assert.Equal(t, "alpha", v)
 
-	v, ok = lookupData(data, "response.2.detail.status")
+	v, ok = fields.Lookup(data, "response.2.detail.status")
 	require.True(t, ok)
 	assert.Equal(t, "ok", v)
 
-	v, ok = lookupData(data, "count")
+	v, ok = fields.Lookup(data, "count")
 	require.True(t, ok)
 	assert.Equal(t, int64(3), v)
 }
@@ -39,7 +39,7 @@ func TestLookupData_MissingIsNotFound(t *testing.T) {
 	data := parseResult(probeBody)
 
 	for _, path := range []string{"response.9.name", "response.-1.name", "response.first", "nope", "count.0"} {
-		_, ok := lookupData(data, path)
+		_, ok := fields.Lookup(data, path)
 		assert.False(t, ok, "path %q should not resolve", path)
 	}
 }
@@ -49,11 +49,11 @@ func TestLookupData_MissingIsNotFound(t *testing.T) {
 func TestLookupData_NullResolvesButMissingDoesNot(t *testing.T) {
 	data := parseResult(`{"a":null}`)
 
-	v, ok := lookupData(data, "a")
+	v, ok := fields.Lookup(data, "a")
 	assert.True(t, ok)
 	assert.Nil(t, v)
 
-	_, ok = lookupData(data, "b")
+	_, ok = fields.Lookup(data, "b")
 	assert.False(t, ok)
 }
 
@@ -65,7 +65,7 @@ func TestFields_OverBodyRelativeArray(t *testing.T) {
 		{Name: "status", Path: "detail.status"},
 	}}
 
-	out, err := renderFields(testRenderer, f, parsed, fctx(parsed), "", 0)
+	out, err := renderFields(f, parsed, fctx(parsed), "", 0)
 	require.NoError(t, err)
 	assert.Equal(t, "id  name   status\n1   alpha  ok\n2   beta   bad\n3   gamma  ok\n", out)
 }
@@ -75,7 +75,7 @@ func TestFields_OverContextRelativeArray(t *testing.T) {
 	parsed := parseResult(probeBody)
 	f := &Fields{Over: "data.response", List: []Field{{Name: "name", Path: "name"}}}
 
-	out, err := renderFields(testRenderer, f, parsed, fctx(parsed), "", 0)
+	out, err := renderFields(f, parsed, fctx(parsed), "", 0)
 	require.NoError(t, err)
 	assert.Equal(t, "name\nalpha\nbeta\ngamma\n", out)
 }
@@ -87,7 +87,7 @@ func TestFields_OverMapWalksEntries(t *testing.T) {
 		{Name: "bytes", Path: "@value"},
 	}}
 
-	out, err := renderFields(testRenderer, f, parsed, fctx(parsed), "", 0)
+	out, err := renderFields(f, parsed, fctx(parsed), "", 0)
 	require.NoError(t, err)
 	assert.Equal(t, "language  bytes\nGo        120\nRust      80\n", out)
 }
@@ -100,7 +100,7 @@ func TestFields_AbsolutePathIndexesArray(t *testing.T) {
 		{Name: "first", Path: "response.0.name"},
 	}}
 
-	out, err := renderFields(testRenderer, f, parsed, fctx(parsed), "", 0)
+	out, err := renderFields(f, parsed, fctx(parsed), "", 0)
 	require.NoError(t, err)
 	assert.Contains(t, out, "count: 3\n")
 	assert.Contains(t, out, "first: alpha\n")
@@ -110,7 +110,7 @@ func TestFields_OverMissingPathIsAnError(t *testing.T) {
 	parsed := parseResult(probeBody)
 	f := &Fields{Over: "responses", List: []Field{{Name: "name", Path: "name"}}}
 
-	_, err := renderFields(testRenderer, f, parsed, fctx(parsed), "", 0)
+	_, err := renderFields(f, parsed, fctx(parsed), "", 0)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `over="responses" resolved to nothing`)
 }
@@ -119,7 +119,7 @@ func TestFields_OverScalarIsAnError(t *testing.T) {
 	parsed := parseResult(probeBody)
 	f := &Fields{Over: "count", List: []Field{{Name: "name", Path: "name"}}}
 
-	_, err := renderFields(testRenderer, f, parsed, fctx(parsed), "", 0)
+	_, err := renderFields(f, parsed, fctx(parsed), "", 0)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `over="count" is a number, not a list or a map`)
 }
@@ -128,7 +128,7 @@ func TestFields_OverNullIsAnError(t *testing.T) {
 	parsed := parseResult(`{"items":null}`)
 	f := &Fields{Over: "items", List: []Field{{Name: "name", Path: "name"}}}
 
-	_, err := renderFields(testRenderer, f, parsed, fctx(parsed), "", 0)
+	_, err := renderFields(f, parsed, fctx(parsed), "", 0)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `over="items" is null, not a list or a map`)
 }
@@ -138,7 +138,7 @@ func TestFields_OverEmptyListRendersNothing(t *testing.T) {
 	parsed := parseResult(`{"items":[]}`)
 	f := &Fields{Over: "items", List: []Field{{Name: "name", Path: "name"}}}
 
-	out, err := renderFields(testRenderer, f, parsed, fctx(parsed), "", 0)
+	out, err := renderFields(f, parsed, fctx(parsed), "", 0)
 	require.NoError(t, err)
 	assert.Equal(t, "name\n", out)
 }

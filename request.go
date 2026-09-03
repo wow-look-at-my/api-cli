@@ -1,14 +1,13 @@
 package main
 
 import (
-	"bytes"
+	"github.com/wow-look-at-my/api-cli/fields"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
