@@ -2,8 +2,8 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,10 +15,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// writeJSON encodes v as the response body. A manifest carries server URLs and
+// digests, so it is marshaled rather than formatted into a string.
+func writeJSON(w http.ResponseWriter, v any) {
+	_ = json.NewEncoder(w).Encode(v)
+}
+
 // swapDownloadClient points the download queue at a test server. The queue
 // caches the client when it is built, so the shared one is dropped too.
 func swapDownloadClient(t *testing.T, srv *httptest.Server) {
 	t.Helper()
+	t.Serial()
 	prev := downloadClient
 	downloadClient = srv.Client()
 	resetSharedQueue()
@@ -42,9 +49,9 @@ func assetServer(t *testing.T) (*httptest.Server, func() (string, string)) {
 		switch r.URL.Path {
 		case "/index":
 			base := "http://" + r.Host
-			_ = json.NewEncoder(w).Encode(map[string]any{"assets": []map[string]string{
-				{"name": "one.txt", "url": base + "/files/one"},
-				{"name": "two.txt", "url": base + "/files/two"},
+			writeJSON(w, map[string]any{"assets": []any{
+				map[string]any{"name": "one.txt", "url": base + "/files/one"},
+				map[string]any{"name": "two.txt", "url": base + "/files/two"},
 			}})
 		case "/files/one":
 			_, _ = w.Write([]byte("first"))
@@ -134,9 +141,9 @@ func TestIntegration_DownloadVerifiesDigestsFromTheStep(t *testing.T) {
 		switch r.URL.Path {
 		case "/index":
 			base := "http://" + r.Host
-			_ = json.NewEncoder(w).Encode(map[string]any{"assets": []map[string]string{
-				{"name": "one.txt", "url": base + "/files/one", "sha256": fmt.Sprintf("%x", good)},
-				{"name": "two.txt", "url": base + "/files/two", "sha256": strings.Repeat("ff", 32)},
+			writeJSON(w, map[string]any{"assets": []any{
+				map[string]any{"name": "one.txt", "url": base + "/files/one", "sha256": hex.EncodeToString(good[:])},
+				map[string]any{"name": "two.txt", "url": base + "/files/two", "sha256": strings.Repeat("ff", 32)},
 			}})
 		case "/files/one":
 			_, _ = w.Write([]byte("first"))
