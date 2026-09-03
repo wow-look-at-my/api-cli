@@ -174,6 +174,7 @@ func TestIntegration_ExitCodePropagated(t *testing.T) {
 }
 
 func TestIntegration_StdinPassthrough(t *testing.T) {
+	serial(t)
 	prev := execStdin
 	execStdin = strings.NewReader("piped\n")
 	t.Cleanup(func() { execStdin = prev })
