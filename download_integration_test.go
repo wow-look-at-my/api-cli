@@ -2,7 +2,8 @@ package main
 
 import (
 	"crypto/sha256"
-	"fmt"
+	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,10 +15,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// writeJSON encodes v as the response body. A manifest carries server URLs and
+// digests, so it is marshaled rather than formatted into a string.
+func writeJSON(w http.ResponseWriter, v any) {
+	_ = json.NewEncoder(w).Encode(v)
+}
+
 // swapDownloadClient points the download queue at a test server. The queue
 // caches the client when it is built, so the shared one is dropped too.
 func swapDownloadClient(t *testing.T, srv *httptest.Server) {
 	t.Helper()
+	t.Serial()
 	prev := downloadClient
 	downloadClient = srv.Client()
 	resetSharedQueue()
@@ -40,8 +48,11 @@ func assetServer(t *testing.T) (*httptest.Server, func() (string, string)) {
 		}
 		switch r.URL.Path {
 		case "/index":
-			fmt.Fprintf(w, `{"assets":[{"name":"one.txt","url":"%s/files/one"},{"name":"two.txt","url":"%s/files/two"}]}`,
-				"http://"+r.Host, "http://"+r.Host)
+			base := "http://" + r.Host
+			writeJSON(w, map[string]any{"assets": []any{
+				map[string]any{"name": "one.txt", "url": base + "/files/one"},
+				map[string]any{"name": "two.txt", "url": base + "/files/two"},
+			}})
 		case "/files/one":
 			_, _ = w.Write([]byte("first"))
 		case "/files/two":
@@ -129,10 +140,11 @@ func TestIntegration_DownloadVerifiesDigestsFromTheStep(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/index":
-			fmt.Fprintf(w, `{"assets":[
-				{"name":"one.txt","url":"http://%s/files/one","sha256":"%x"},
-				{"name":"two.txt","url":"http://%s/files/two","sha256":"%s"}
-			]}`, r.Host, good, r.Host, strings.Repeat("ff", 32))
+			base := "http://" + r.Host
+			writeJSON(w, map[string]any{"assets": []any{
+				map[string]any{"name": "one.txt", "url": base + "/files/one", "sha256": hex.EncodeToString(good[:])},
+				map[string]any{"name": "two.txt", "url": base + "/files/two", "sha256": strings.Repeat("ff", 32)},
+			}})
 		case "/files/one":
 			_, _ = w.Write([]byte("first"))
 		default:
