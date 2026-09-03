@@ -10,7 +10,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wow-look-at-my/api-cli/fields"
 )
+
+// fctx builds a minimal format context with the parsed body at .data.
+func fctx(parsed any) map[string]any {
+	return map[string]any{"data": parsed, "tty": false, "width": 0}
+}
 
 // probeBody is the shape that made these bugs visible: a list of records under
 // a top-level key, each with a nested object.
@@ -22,15 +28,15 @@ const probeBody = `{"count":3,"response":[` +
 func TestLookupData_IndexesLists(t *testing.T) {
 	data := parseResult(probeBody)
 
-	v, ok := lookupData(data, "response.0.name")
+	v, ok := fields.Lookup(data, "response.0.name")
 	require.True(t, ok)
 	assert.Equal(t, "alpha", v)
 
-	v, ok = lookupData(data, "response.2.detail.status")
+	v, ok = fields.Lookup(data, "response.2.detail.status")
 	require.True(t, ok)
 	assert.Equal(t, "ok", v)
 
-	v, ok = lookupData(data, "count")
+	v, ok = fields.Lookup(data, "count")
 	require.True(t, ok)
 	assert.Equal(t, int64(3), v)
 }
@@ -39,7 +45,7 @@ func TestLookupData_MissingIsNotFound(t *testing.T) {
 	data := parseResult(probeBody)
 
 	for _, path := range []string{"response.9.name", "response.-1.name", "response.first", "nope", "count.0"} {
-		_, ok := lookupData(data, path)
+		_, ok := fields.Lookup(data, path)
 		assert.False(t, ok, "path %q should not resolve", path)
 	}
 }
@@ -49,11 +55,11 @@ func TestLookupData_MissingIsNotFound(t *testing.T) {
 func TestLookupData_NullResolvesButMissingDoesNot(t *testing.T) {
 	data := parseResult(`{"a":null}`)
 
-	v, ok := lookupData(data, "a")
+	v, ok := fields.Lookup(data, "a")
 	assert.True(t, ok)
 	assert.Nil(t, v)
 
-	_, ok = lookupData(data, "b")
+	_, ok = fields.Lookup(data, "b")
 	assert.False(t, ok)
 }
 
