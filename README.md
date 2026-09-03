@@ -132,7 +132,7 @@ requests through your own program instead, see [Transports](#transports).
 | `<query><param name="k">v</param></query>` | Explicit params. Empty values are dropped. An enclosing `<if test=>` gates the params it wraps. |
 | `<header name="H">v</header>` | A header (value is a template). An enclosing `<if test=>` gates the headers it wraps. |
 | `<body>` | Request body (template); omit for no body. |
-| `<response jq="program"/>` | Shape the JSON body with a jq program. See below. Omit `<response>` to return the raw body verbatim (diffs, READMEs, ...). |
+| `<response jq="program"/>` | Shape the JSON body with a jq program. See below. A `<response/>` with no `jq=` pretty-prints the JSON instead; omit `<response>` entirely to return the raw body verbatim (diffs, READMEs, ...). |
 
 `jq=` is a template, like `<url>` and `<body>`. It takes one of three forms,
 decided by what you write:
@@ -271,6 +271,8 @@ destination paths go to stdout, one per line, for whatever reads them next.
 
 - **`<download>` is the leaf's action.** It runs after the steps and stands in
   for the leaf's `<run>`, so an inherited request does not fire on the way.
+- **`when=`** is a Go-template predicate. A falsy render (empty, `false`, `0`,
+  `no`) skips that declaration, so one leaf can carry a conditional set.
 - **`over=`** repeats the declaration per record of a list, with the record's
   keys promoted (`<value name="name"/>`) and the record itself at `.item`. An
   empty list downloads nothing; a path that resolves to nothing is an error.
@@ -283,6 +285,11 @@ destination paths go to stdout, one per line, for whatever reads them next.
   `--download-dir`); an absolute one is taken as-is.
 - **Auth rides along**: `<header>` and `<cookie>` render against the same
   context, take `<if test=>`, and cookies fold into one `Cookie` header.
+- **Mistakes fail before the first byte.** A `<url>` that renders to something
+  other than an `http(s)` URL, and two records whose `<to>` renders the same
+  file path, are both reported at plan time -- so a mistyped path is not a
+  timeout minutes later, and a `<to>` that forgot to vary does not overwrite
+  itself N times.
 - **Failures are loud.** A 4xx is the answer; a 5xx or a network fault retries
   at a fixed one-second cadence. Anything still failing names its URL on stderr
   and exits non-zero, while the other files carry on.
@@ -373,8 +380,13 @@ Automatic representation, by data shape:
 |------|---------|-------------|
 | array of records | `table` | `json`, `markdown`, `csv`, `timeline` |
 | single record | `list` | `json` |
+| map walked by `@key`/`@value` | `table` | `json`, `markdown`, `csv` |
 | array of scalars | `lines` | `json` |
 | scalar / non-JSON | `raw` | -- |
+
+A map is one record unless some field reads `@key`/`@value`, which is the signal
+to walk it entry by entry. An array of scalars is `lines` only when no `<field>`
+is declared; declaring one keeps the table shape.
 
 | `<field>` attribute | Meaning |
 |---------------------|---------|
@@ -384,7 +396,7 @@ Automatic representation, by data shape:
 | `default=` | Substitute for an empty value. |
 | `truncate="N"` | Cap the string to N characters. |
 | `firstline="true"` | Keep only the first line. |
-| `priority="N"` | Lowest priority columns are dropped first when a table is too narrow (default 0; ties keep document order). |
+| `priority="N"` | Lowest priority columns are dropped first when a table is too narrow (default 0; ties drop the rightmost first, and one column always survives). |
 | `show_in=` | Gate per sink: `""`/`*` = all; an allowlist (`json,csv`) shows only there; a negated list (`!json`) shows everywhere except there. |
 
 `<fields over="path"/>` selects where the records live (`data.items`, a map for
@@ -549,12 +561,14 @@ When a leaf sets `passthrough="true"`, the command accepts arbitrary positional
 args (everything after `--` in the wrapper script) and performs its own minimal
 flag extraction:
 
-1. Only declared `<flag>`s are recognized (matched with one or two leading
-   dashes, e.g. both `-o` and `--o`).
+1. Only declared `<flag>`s are recognized, by name or by `short=`, and matched
+   with one or two leading dashes (e.g. both `-o` and `--o`).
 2. Everything else -- unknown flags, their values, bare positionals -- is
    collected into `.rest` (a `[]string`).
 3. Extracted flags do NOT appear in `.rest`, so `{{spread .rest}}` reconstructs
    the original command line minus the captured flags.
+4. A bare `--`, and everything after it, goes into `.rest` verbatim: the wrapped
+   command may mean something by it.
 
 ```xml
 <config name="cicc-cache">
@@ -751,10 +765,10 @@ XSD validator cannot represent the recursive `<command>` grammar.
 
 | Attribute / child | Notes |
 |-------------------|-------|
-| `name=` (required) | Subcommand name. Not `help`, `completion`, `docs`. |
+| `name=` (required) | Subcommand name. No whitespace or slashes, and not `help`, `completion`, `__complete`, or `docs`. |
 | `description=` | Shown in help. |
 | `passthrough="true"` | Leaf-only. See [Passthrough mode](#passthrough-mode). |
-| `confirm=` (or `<confirm>`) | Prompt `<msg> [y/N]` before running; bypass with `--yes`. Inherited. |
+| `confirm=` (or `<confirm>`) | Prompt `<msg> [y/N]` before running; bypass with `--yes`. Off a terminal the run refuses rather than assuming yes. Inherited. |
 | `<arg>` / `<flag>` | Positional args / named flags. |
 | `<vars>` | Merged with ancestor vars (this node wins). |
 | `<run>` / `<cwd>` / `<stdin>` | Override the inherited executable / cwd / stdin. |
@@ -768,12 +782,15 @@ XSD validator cannot represent the recursive `<command>` grammar.
 ### `<arg>` and `<flag>`
 
 `<arg name= type="string|int" required= variadic= description=/>`. A `variadic`
-arg (last only) collects the rest into a typed slice; pair with `spread`.
+arg (last only) collects the rest into a typed slice; pair with `spread`. A
+required arg cannot follow an optional one -- cobra counts positions, so the
+gap would be unfillable.
 
 `<flag name= short= type="string|bool|int|string-slice" default= required=
 conflicts="a,b" description=/>`. A string `default` may itself be a template
 (rendered when the flag isn't set). A `bool` flag defaulting to `true` gets a
-hidden `--no-NAME` companion.
+hidden `--no-NAME` companion, which is why a flag name cannot itself start with
+`no-`. `short=` is one character.
 
 ## Global flags
 
@@ -781,7 +798,7 @@ hidden `--no-NAME` companion.
 |-------------------|-------|---------|-------|
 | `--config <path>` |       |         | Config file (XML). Falls back to `./api.xml`. |
 | `--version`       |       |         | Print the binary's version. Needs no config. |
-| `--mcp <transport>` |     |         | Run the config as an MCP server: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes a tool; HTTP/SSE also expose `GET /health`. Behaves like `--format=always`. |
+| `--mcp <transport>` |     |         | Run the config as an MCP server: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes a tool named for its command path with underscores (`users_get`); HTTP/SSE also expose `GET /health`. Behaves like `--format=always` (`.tty` true, width 80). |
 | `--cors <level>`  |       | `strict`| CORS for the MCP HTTP/SSE server. See [CORS levels](#cors-levels). |
 | `--quiet`         | `-q`  | false   | Suppress the `N executions` line. |
 | `--yes`           | `-y`  | false   | Skip `confirm` prompts. |
@@ -789,7 +806,7 @@ hidden `--no-NAME` companion.
 | `--debug`         |       | false   | Full execution detail (implies `--verbose`). |
 | `--no-format`     |       | false   | Disable output formatting (= `--format=raw`). |
 | `--format <mode>` |       | `auto`  | `raw` / `auto` / `always`. |
-| `--as <sink>`     |       |         | Force a `<fields>` representation: `table|list|lines|json|markdown|csv|timeline`. |
+| `--as <sink>`     |       |         | Force a `<fields>` representation: `table|list|lines|raw|json|markdown|csv|timeline`. |
 | `--view <name>`   |       |         | Pick a named legacy view, bypassing predicate selection. |
 | `--var KEY=VALUE` |       |         | Set an env var before evaluation (so `{{.env.KEY}}` sees it). Repeatable. |
 | `--concurrency <n>` |     | `4`     | Parallel downloads. See [Downloads](#downloads). |

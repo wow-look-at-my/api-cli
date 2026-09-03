@@ -16,7 +16,7 @@ orientation for code changes.
 
 ## Module / dependencies
 
-- Module: `github.com/wow-look-at-my/api-cli`, Go 1.25.0.
+- Module: `github.com/wow-look-at-my/api-cli`, Go 1.26.
 - CLI parsing: `github.com/spf13/cobra`.
 - The spec language: `github.com/wow-look-at-my/api-dsl` — the XML DOM, the `<value>`/`<if>`/`<for>` placeholder compiler, and the renderer. This repo invented that language and api-mirror now shares it, so it lives there and this repo consumes it. `dsl.go` is the local boundary; see the file map.
 - Config parsing: **XML** via api-dsl's `ParseDOM`, over the stdlib `encoding/xml` tokenizer. No third-party config parser. (The Go decoder only supports XML 1.0, so api-dsl strips the leading `<?xml ... ?>` declaration before decoding.)
@@ -75,7 +75,8 @@ interleave text with **placeholders** that compile to Go templates:
   "..."` / a wrapping func; `expr="..."` is a verbatim template.
 - `<if test="path" [eq="lit"]>...<else/>...</if>` → `{{ if truthy .path }}...`
   (or `{{ if eq (printf "%v" .path) "lit" }}...`).
-- `<for each="path" [as="x"]>...</for>` → `{{ range ... }}...{{ end }}`.
+- `<for each="path">...</for>` → `{{ range ... }}...{{ end }}`; `.` rebinds to
+  each element. `each=` is the only attribute api-dsl accepts here.
 
 `<run>` is the executable (inherited): a `<request>`, an `<argv>` list, or shell
 text. `<entry>` (path/query/arbitrary) becomes `.entry`. `<fields>` declares
