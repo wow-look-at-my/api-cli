@@ -23,6 +23,7 @@ func execCmd(t *testing.T, cfg *Config, argv ...string) (int, string) {
 // execCmdFull is like execCmd but also returns what was written to stderr.
 func execCmdFull(t *testing.T, cfg *Config, argv ...string) (int, string, string) {
 	t.Helper()
+	serial(t)
 	require.NoError(t, validate(cfg))
 
 	var out, errBuf bytes.Buffer

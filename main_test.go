@@ -16,6 +16,7 @@ import (
 // control ./api.xml's existence.
 func chdir(t *testing.T, dir string) {
 	t.Helper()
+	serial(t)
 	prev, err := os.Getwd()
 	require.NoError(t, err)
 	require.NoError(t, os.Chdir(dir))

@@ -158,6 +158,7 @@ func TestSteps_RequestSkippedByWhen(t *testing.T) {
 
 // Steps run through a transport too, and the MCP path runs the same loop.
 func TestSteps_RequestThroughTransportInMCP(t *testing.T) {
+	serial(t)
 	cfg := &Config{
 		Name: "t",
 		Transports: map[string]*Transport{

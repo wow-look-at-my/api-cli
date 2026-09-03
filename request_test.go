@@ -13,6 +13,7 @@ import (
 
 func swapHTTPClient(t *testing.T, srv *httptest.Server) {
 	t.Helper()
+	serial(t)
 	prev := httpClient
 	httpClient = srv.Client()
 	t.Cleanup(func() { httpClient = prev })

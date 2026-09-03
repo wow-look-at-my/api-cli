@@ -25,6 +25,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 // caches the client when it is built, so the shared one is dropped too.
 func swapDownloadClient(t *testing.T, srv *httptest.Server) {
 	t.Helper()
+	serial(t)
 	prev := downloadClient
 	downloadClient = srv.Client()
 	resetSharedQueue()
