@@ -10,7 +10,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wow-look-at-my/api-cli/fields"
 )
+
+// fctx builds a minimal format context with the parsed body at .data.
+func fctx(parsed any) map[string]any {
+	return map[string]any{"data": parsed, "tty": false, "width": 0}
+}
 
 // probeBody is the shape that made these bugs visible: a list of records under
 // a top-level key, each with a nested object.

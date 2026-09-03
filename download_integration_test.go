@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -40,8 +41,11 @@ func assetServer(t *testing.T) (*httptest.Server, func() (string, string)) {
 		}
 		switch r.URL.Path {
 		case "/index":
-			fmt.Fprintf(w, `{"assets":[{"name":"one.txt","url":"%s/files/one"},{"name":"two.txt","url":"%s/files/two"}]}`,
-				"http://"+r.Host, "http://"+r.Host)
+			base := "http://" + r.Host
+			_ = json.NewEncoder(w).Encode(map[string]any{"assets": []map[string]string{
+				{"name": "one.txt", "url": base + "/files/one"},
+				{"name": "two.txt", "url": base + "/files/two"},
+			}})
 		case "/files/one":
 			_, _ = w.Write([]byte("first"))
 		case "/files/two":
@@ -129,10 +133,11 @@ func TestIntegration_DownloadVerifiesDigestsFromTheStep(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/index":
-			fmt.Fprintf(w, `{"assets":[
-				{"name":"one.txt","url":"http://%s/files/one","sha256":"%x"},
-				{"name":"two.txt","url":"http://%s/files/two","sha256":"%s"}
-			]}`, r.Host, good, r.Host, strings.Repeat("ff", 32))
+			base := "http://" + r.Host
+			_ = json.NewEncoder(w).Encode(map[string]any{"assets": []map[string]string{
+				{"name": "one.txt", "url": base + "/files/one", "sha256": fmt.Sprintf("%x", good)},
+				{"name": "two.txt", "url": base + "/files/two", "sha256": strings.Repeat("ff", 32)},
+			}})
 		case "/files/one":
 			_, _ = w.Write([]byte("first"))
 		default:

@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/wow-look-at-my/api-cli/fields"
 	"encoding/json"
 	"fmt"
+	"github.com/wow-look-at-my/api-cli/fields"
 	"io"
 	"net/http"
 	"net/url"
