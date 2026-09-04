@@ -342,7 +342,7 @@ The sample's `repo commits` command maps `commit.author.date` to a timeline in t
 
 ## Watch
 
-`--watch <interval>` re-runs the command on an interval and repaints its output in place, the way `watch(1)` does. The value is a duration (`2s`, `500ms`) or a plain number of seconds (`2`). The floor is 100ms.
+`--watch <interval>` re-runs the command on an interval. It repaints the output in place, like `watch(1)`. The value is a duration (`2s`, `500ms`) or a plain number of seconds (`2`). The floor is 100ms.
 
 ```text
 $ ghr repo releases golang/go --watch 30s
@@ -355,9 +355,9 @@ go1.25rc1  Jun 10, 2026   12044
 
 A frame is one whole run of the leaf: the steps, the entry, the request and the formatter. Nothing is cached between frames, so a `<var>`, a step result and the response are all fresh each time. The frame keeps the real terminal size. A `<fields>` table therefore stays a table under a watch, rather than falling back to the piped representation.
 
-The output of the leaf and its diagnostics both land in the frame. A failed run reports the failure in place, and the watch continues. Ctrl-C ends the watch, leaves the last frame on screen and exits 130. A frame taller than the terminal is clipped, and the last row says how many lines it dropped. Redirected output gets no repainting: the frames append, which makes `--watch 5s ... > log` a poll log.
+The output of the leaf and its diagnostics both land in the frame. A failed run reports the failure in place. The watch then continues. Ctrl-C ends the watch, leaves the last frame on screen and exits 130. A frame taller than the terminal is clipped. The last row then says how many lines it dropped. Redirected output gets no repainting: the frames append, which makes `--watch 5s ... > log` a poll log.
 
-Two leaves refuse to repeat. A `<download>` leaf transfers a file one time, and `--watch` on it is an error. A leaf with a `confirm` prompt needs `--yes`, because the prompt draws into the frame where nobody can answer it.
+Two leaves refuse to repeat. A `<download>` leaf transfers a file one time. `--watch` on it is an error. A leaf with a `confirm` prompt needs `--yes`, because the prompt draws into the frame where nobody can answer it.
 
 ## Examples
 
