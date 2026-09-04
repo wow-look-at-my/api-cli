@@ -11,12 +11,17 @@ import (
 	"time"
 )
 
-// The download TUI: a live progress region (one line per in-flight transfer
-// plus a totals line) sitting above a height-capped, self-scrolling log region
-// that carries whatever the steps and the downloader wrote.
+// The download TUI: a block of slots pinned to the bottom of the screen, one
+// per in-flight transfer plus a totals line, each repainted over its own
+// previous line.
 //
-// It repaints in place with a handful of ANSI sequences rather than a terminal
-// library, because the whole display is a fixed-height block of plain lines.
+// Everything else -- a finished transfer, a step's output, a transport's stderr
+// -- is written once, above the block, and scrolls away into the terminal's own
+// scrollback. So a run reads as a growing list of what landed, with the live
+// slots always at the bottom.
+//
+// It repaints with a handful of ANSI sequences rather than a terminal library,
+// because the block is a few plain lines and the cursor never leaves it.
 
 const (
 	ansiUp        = "\x1b[%dA" // move cursor up N lines
@@ -24,47 +29,37 @@ const (
 	ansiHideCur   = "\x1b[?25l"
 	ansiShowCur   = "\x1b[?25h"
 	frameInterval = 100 * time.Millisecond
-	minLogLines   = 3
 )
 
-// tui renders download progress above a scrolling log. It is an io.Writer: the
-// step and downloader output channels are pointed at it, and every line they
-// write lands in the log region instead of scrolling the progress display away.
+// tui renders the download slots. It is an io.Writer: the step and downloader
+// output channels are pointed at it, so a line they write is emitted above the
+// slots instead of scrolling them away.
 type tui struct {
 	out      io.Writer
 	width    int
-	logCap   int
 	snapshot func() []*downloadItem
 
-	mu      sync.Mutex
-	logs    []string
-	partial string
-	painted int
-	stopped bool
+	mu sync.Mutex
+	// pending holds lines not yet emitted. paint writes them out and forgets
+	// them: the terminal owns the scrollback, so nothing is kept to redraw.
+	pending  []string
+	partial  string
+	painted  int
+	stopped  bool
+	finished bool
 
 	stop chan struct{}
 	done chan struct{}
 }
 
-// newTUI builds a renderer sized for the terminal. logLines of 0 auto-sizes the
-// log region to min(15, half the terminal height), never below 3 lines.
-func newTUI(out io.Writer, width, height, logLines int, snapshot func() []*downloadItem) *tui {
+// newTUI builds a renderer for a terminal of the given width.
+func newTUI(out io.Writer, width int, snapshot func() []*downloadItem) *tui {
 	if width <= 0 {
 		width = 80
-	}
-	if height <= 0 {
-		height = 24
-	}
-	if logLines <= 0 {
-		logLines = min(maxLogLines, height/2)
-	}
-	if logLines < minLogLines {
-		logLines = minLogLines
 	}
 	return &tui{
 		out:      out,
 		width:    width,
-		logCap:   logLines,
 		snapshot: snapshot,
 		stop:     make(chan struct{}),
 		done:     make(chan struct{}),
@@ -139,7 +134,9 @@ func (t *tui) isStopped() bool {
 	return t.stopped
 }
 
-// Stop ends repainting, leaving the final frame on screen for the user to read.
+// Stop ends repainting. The last lines go out and the slots come off the
+// screen: an idle block of finished slots says nothing the summary below it
+// does not say better.
 func (t *tui) Stop() {
 	t.mu.Lock()
 	if t.stopped {
@@ -151,6 +148,15 @@ func (t *tui) Stop() {
 
 	close(t.stop)
 	<-t.done
+
+	t.mu.Lock()
+	t.finished = true
+	if t.partial != "" {
+		t.appendLog(t.partial)
+		t.partial = ""
+	}
+	t.mu.Unlock()
+
 	t.paint()
 	fmt.Fprint(t.out, ansiShowCur)
 }
@@ -179,66 +185,60 @@ func (t *tui) logf(format string, args ...any) {
 	t.appendLog(fmt.Sprintf(format, args...))
 }
 
-// appendLog pushes a line into the capped ring. Callers hold t.mu.
+// appendLog queues a line for the next paint. Callers hold t.mu.
 func (t *tui) appendLog(line string) {
-	t.logs = append(t.logs, line)
-	if over := len(t.logs) - t.logCap; over > 0 {
-		t.logs = append(t.logs[:0], t.logs[over:]...)
-	}
+	t.pending = append(t.pending, line)
 }
 
-// paint redraws the frame in place: up to the top of the last frame, then one
-// cleared line per row.
+// paint moves up to the top of the block, emits whatever has queued since the
+// last frame, and redraws the slots underneath it.
+//
+// The queued lines land on rows the old block occupied, so they cost no extra
+// scrolling, and the block that follows pushes them up into the scrollback for
+// good. That is the whole trick: one cursor movement per frame, and a finished
+// transfer is written exactly once.
 func (t *tui) paint() {
 	lines := t.frame(time.Now())
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.finished {
+		lines = nil
+	}
 	var b strings.Builder
 	if t.painted > 0 {
 		fmt.Fprintf(&b, ansiUp, t.painted)
 	}
-	for _, line := range lines {
-		b.WriteString(ansiClearLine)
-		b.WriteString(clipDisplay(line, t.width))
-		b.WriteByte('\n')
+	for _, line := range t.pending {
+		writeRow(&b, line, t.width)
 	}
-	// A shorter frame than last time leaves stale rows below; clear them, then
-	// come back up so the next repaint still starts at the frame's top.
-	if extra := t.painted - len(lines); extra > 0 {
+	for _, line := range lines {
+		writeRow(&b, line, t.width)
+	}
+	// A block shorter than the last one leaves stale rows below; clear them,
+	// then come back up so the next repaint still starts at the block's top.
+	if extra := t.painted - len(t.pending) - len(lines); extra > 0 {
 		for i := 0; i < extra; i++ {
 			b.WriteString(ansiClearLine)
 			b.WriteByte('\n')
 		}
 		fmt.Fprintf(&b, ansiUp, extra)
 	}
+	t.pending = t.pending[:0]
 	t.painted = len(lines)
 	fmt.Fprint(t.out, b.String())
 }
 
-// frame renders one complete display: the progress region, a rule, then the log
-// region padded to its full height so the block never changes size.
-func (t *tui) frame(now time.Time) []string {
-	lines := t.progressRegion(now)
-	lines = append(lines, strings.Repeat("-", min(t.width, 60)))
-
-	t.mu.Lock()
-	logs := make([]string, len(t.logs))
-	copy(logs, t.logs)
-	t.mu.Unlock()
-
-	for _, l := range logs {
-		lines = append(lines, " "+l)
-	}
-	for i := len(logs); i < t.logCap; i++ {
-		lines = append(lines, "")
-	}
-	return lines
+// writeRow emits one line over whatever the row held before.
+func writeRow(b *strings.Builder, line string, width int) {
+	b.WriteString(ansiClearLine)
+	b.WriteString(clipDisplay(line, width))
+	b.WriteByte('\n')
 }
 
-// progressRegion renders the counts header, one line per in-flight download,
+// frame renders the block: the counts header, one slot per in-flight download,
 // and the aggregate line.
-func (t *tui) progressRegion(now time.Time) []string {
+func (t *tui) frame(now time.Time) []string {
 	items := t.snapshot()
 	totals := tallyDownloads(items, now)
 

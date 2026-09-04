@@ -97,14 +97,13 @@
   </xs:complexType>
 
   <!-- Settings for the process-wide download queue. One queue serves the whole
-       run, so these are set once; the concurrency, download-dir, log-lines and
-       no-tui flags override them per invocation. -->
+       run, so these are set once. The concurrency, download-dir and no-tui
+       flags override them per invocation. -->
   <xs:complexType name="downloads">
     <xs:attribute name="concurrency" type="xs:positiveInteger"/>
     <!-- 0 is meaningful: report a failure immediately rather than retrying. -->
     <xs:attribute name="retries" type="xs:nonNegativeInteger"/>
     <xs:attribute name="dir" type="xs:string"/>
-    <xs:attribute name="log_lines" type="xs:nonNegativeInteger"/>
   </xs:complexType>
 
   <!-- A hand-off to the download queue. Leaf-only and repeatable: it runs after
