@@ -236,11 +236,14 @@ func (b *downloadBatch) snapshot() []*downloadItem {
 
 // run performs one download, retrying transient failures at a fixed cadence.
 // Every outcome is recorded on the item: a failure is never a silent skip.
+//
+// A start is not logged. The display gives an in-flight transfer a slot of its
+// own, and a pipe gets the destination path from the summary, so a "downloading
+// X" line only doubles the volume for one bit of news.
 func (q *downloadQueue) run(item *downloadItem) {
 	log := item.batch.log
 	item.state.Store(dlActive)
 	item.start.Store(time.Now().UnixNano())
-	log("downloading %s", item.label())
 
 	var err error
 	for attempt := 0; ; attempt++ {
@@ -255,7 +258,7 @@ func (q *downloadQueue) run(item *downloadItem) {
 			if item.spec.Hash != "" {
 				verified = ", " + item.spec.HashAlgo + " ok"
 			}
-			log("downloaded %s (%s%s)", item.dest(), humanBytes(item.done.Load()), verified)
+			log("downloaded %s (%s%s)", item.label(), humanBytes(item.done.Load()), verified)
 			return
 		}
 		if !retryable || attempt >= q.retries {

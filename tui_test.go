@@ -29,67 +29,57 @@ func mkItem(state int32, dest string, done, total int64, started time.Time) *dow
 	return item
 }
 
-func TestNewTUI_SizesTheLogRegion(t *testing.T) {
-	cases := []struct{ height, logLines, want int }{
-		{height: 50, logLines: 0, want: 15}, // capped at 15
-		{height: 20, logLines: 0, want: 10}, // half the terminal
-		{height: 4, logLines: 0, want: 3},   // never below the floor
-		{height: 50, logLines: 4, want: 4},  // explicit wins
-	}
-	for _, c := range cases {
-		got := newTUI(&bytes.Buffer{}, 100, c.height, c.logLines, staticItems())
-		assert.Equal(t, c.want, got.logCap, "height=%d logLines=%d", c.height, c.logLines)
-	}
-
-	def := newTUI(&bytes.Buffer{}, 0, 0, 0, staticItems())
-	assert.Equal(t, 80, def.width, "a size-less writer falls back to 80 columns")
+func TestNewTUI_FallsBackToEightyColumns(t *testing.T) {
+	assert.Equal(t, 80, newTUI(&bytes.Buffer{}, 0, staticItems()).width)
+	assert.Equal(t, 120, newTUI(&bytes.Buffer{}, 120, staticItems()).width)
 }
 
-func TestTUI_WriteFillsTheLogRing(t *testing.T) {
-	tu := newTUI(&bytes.Buffer{}, 80, 24, 3, staticItems())
+func TestTUI_WriteQueuesWholeLines(t *testing.T) {
+	tu := newTUI(&bytes.Buffer{}, 80, staticItems())
 
 	_, err := tu.Write([]byte("one\ntwo\n"))
 	require.NoError(t, err)
 	_, err = tu.Write([]byte("thr"))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"one", "two"}, tu.logs, "a partial line waits for its newline")
+	assert.Equal(t, []string{"one", "two"}, tu.pending, "a partial line waits for its newline")
 
-	_, err = tu.Write([]byte("ee\r\nfour\nfive\n"))
+	_, err = tu.Write([]byte("ee\r\nfour\n"))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"three", "four", "five"}, tu.logs, "the region scrolls at its cap")
+	assert.Equal(t, []string{"one", "two", "three", "four"}, tu.pending, "nothing is dropped before a paint")
 }
 
-func TestTUI_FrameShowsActiveDownloadsAndTotals(t *testing.T) {
+func TestTUI_FrameIsOnlyTheSlotsAndTotals(t *testing.T) {
 	now := time.Now()
-	tu := newTUI(&bytes.Buffer{}, 100, 24, 4, staticItems(
+	tu := newTUI(&bytes.Buffer{}, 100, staticItems(
 		mkItem(dlActive, "/d/big.iso", 512, 2048, now.Add(-2*time.Second)),
 		mkItem(dlQueued, "/d/later.iso", 0, -1, time.Time{}),
 		mkItem(dlDone, "/d/done.iso", 100, 100, now.Add(-9*time.Second)),
 	))
-	tu.logf("downloading %s", "big.iso")
+	tu.logf("downloaded %s (100 B)", "done.iso")
 
 	lines := tu.frame(now)
 	joined := strings.Join(lines, "\n")
 
 	assert.Contains(t, lines[0], "1 active, 1 queued, 1 done")
-	assert.Contains(t, joined, "big.iso")
+	assert.Contains(t, joined, "big.iso", "an in-flight transfer holds a slot")
 	assert.Contains(t, joined, " 25%", "512 of 2048 bytes")
 	assert.Contains(t, joined, "TOTAL")
-	assert.Contains(t, joined, "downloading big.iso", "the log region carries the downloader's own lines")
+	assert.NotContains(t, joined, "done.iso", "a finished transfer holds no slot")
+	assert.NotContains(t, joined, "downloaded", "a queued line is emitted above the block, never drawn in it")
 
-	// header + 1 active + TOTAL + rule + the full log region, always.
-	assert.Len(t, lines, 4+tu.logCap)
+	// header + the one active slot + TOTAL, and nothing else.
+	assert.Len(t, lines, 3)
 }
 
 func TestTUI_FrameCountsFailures(t *testing.T) {
-	tu := newTUI(&bytes.Buffer{}, 80, 24, 3, staticItems(mkItem(dlFailed, "/d/x", 0, -1, time.Now())))
+	tu := newTUI(&bytes.Buffer{}, 80, staticItems(mkItem(dlFailed, "/d/x", 0, -1, time.Now())))
 	assert.Contains(t, tu.frame(time.Now())[0], "1 failed")
 }
 
 func TestTUI_PaintRewritesInPlace(t *testing.T) {
 	var buf bytes.Buffer
 	now := time.Now()
-	tu := newTUI(&buf, 60, 24, 3, staticItems(mkItem(dlActive, "/d/a", 1, 2, now)))
+	tu := newTUI(&buf, 60, staticItems(mkItem(dlActive, "/d/a", 1, 2, now)))
 
 	tu.paint()
 	first := buf.String()
@@ -102,15 +92,40 @@ func TestTUI_PaintRewritesInPlace(t *testing.T) {
 	assert.Contains(t, buf.String(), "\x1b["+itoa(painted)+"A", "later frames redraw over the last one")
 }
 
+// The point of the whole design: a finished chunk is written once, above the
+// slots, and the block redraws below it. So the line survives into the
+// terminal's scrollback while the slots keep overwriting themselves.
+func TestTUI_PaintEmitsQueuedLinesAboveTheSlots(t *testing.T) {
+	var buf bytes.Buffer
+	tu := newTUI(&buf, 60, staticItems(mkItem(dlActive, "/d/a", 1, 2, time.Now())))
+
+	tu.paint()
+	buf.Reset()
+
+	tu.logf("downloaded %s (66.9 MiB)", "CHUNK_05.data.message")
+	tu.paint()
+
+	out := buf.String()
+	msg := strings.Index(out, "downloaded CHUNK_05.data.message (66.9 MiB)")
+	slot := strings.Index(out, "downloads: 1 active")
+	require.Positive(t, msg, "the finished chunk is emitted")
+	assert.Less(t, msg, slot, "it goes out above the slots")
+	assert.Empty(t, tu.pending, "and is not held for the next frame")
+
+	buf.Reset()
+	tu.paint()
+	assert.NotContains(t, buf.String(), "CHUNK_05", "a line already emitted is never redrawn")
+}
+
 func TestTUI_PaintClearsRowsAShorterFrameLeavesBehind(t *testing.T) {
 	var buf bytes.Buffer
 	item := mkItem(dlActive, "/d/a", 1, 2, time.Now())
-	tu := newTUI(&buf, 60, 24, 3, staticItems(item))
+	tu := newTUI(&buf, 60, staticItems(item))
 
 	tu.paint()
 	tall := tu.painted
 
-	// The transfer finishes, so its progress line goes away.
+	// The transfer finishes, so its slot goes away.
 	item.state.Store(dlDone)
 	buf.Reset()
 	tu.paint()
@@ -119,9 +134,27 @@ func TestTUI_PaintClearsRowsAShorterFrameLeavesBehind(t *testing.T) {
 	assert.Contains(t, buf.String(), "\x1b[1A", "the vacated row is cleared and the cursor comes back up")
 }
 
+// A block of idle slots after the last transfer says nothing the summary does
+// not, so Stop takes it off the screen and leaves the emitted lines behind.
+func TestTUI_StopClearsTheBlockAndFlushesTheLastLine(t *testing.T) {
+	var buf bytes.Buffer
+	tu := newTUI(&buf, 60, staticItems(mkItem(dlActive, "/d/a", 1, 2, time.Now())))
+
+	tu.paint()
+	_, err := tu.Write([]byte("wrote ./ITEM_001.asset"))
+	require.NoError(t, err)
+	buf.Reset()
+
+	tu.Stop()
+
+	assert.Contains(t, buf.String(), "wrote ./ITEM_001.asset", "a line with no newline still goes out")
+	assert.NotContains(t, buf.String(), "downloads: 1 active", "the block is gone")
+	assert.Zero(t, tu.painted)
+}
+
 func TestTUI_StopIsIdempotentAndRestoresTheCursor(t *testing.T) {
 	var buf bytes.Buffer
-	tu := newTUI(&buf, 60, 24, 3, staticItems())
+	tu := newTUI(&buf, 60, staticItems())
 	tu.Start()
 	tu.Stop()
 	tu.Stop()
@@ -135,7 +168,7 @@ func TestTUI_InterruptRestoresTheTerminal(t *testing.T) {
 	// The signal goes to the whole process, and `tuiExit` is a package var.
 	t.Serial()
 	var buf bytes.Buffer
-	tu := newTUI(&buf, 60, 24, 3, staticItems())
+	tu := newTUI(&buf, 60, staticItems())
 
 	exited := make(chan int, 1)
 	prev := tuiExit
@@ -173,7 +206,7 @@ func TestTUI_ARetiredDisplayIgnoresTheSignal(t *testing.T) {
 	t.Cleanup(func() { tuiExit = prev })
 
 	var retired bytes.Buffer
-	old := newTUI(&retired, 60, 24, 3, staticItems())
+	old := newTUI(&retired, 60, staticItems())
 	old.Start()
 	old.Stop()
 	before := retired.String()
@@ -185,7 +218,7 @@ func TestTUI_ARetiredDisplayIgnoresTheSignal(t *testing.T) {
 	assert.Empty(t, exited, "a retired display must not end the run")
 
 	var live bytes.Buffer
-	cur := newTUI(&live, 60, 24, 3, staticItems())
+	cur := newTUI(&live, 60, staticItems())
 	cur.Start()
 	t.Cleanup(cur.Stop)
 

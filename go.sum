@@ -91,8 +91,8 @@ github.com/wow-look-at-my/go-containers v0.0.0-20260826161058-40a3d1ef3d41 h1:mi
 github.com/wow-look-at-my/go-containers v0.0.0-20260826161058-40a3d1ef3d41/go.mod h1:7j8wbDwrqh+uJnlENqD5iwsgYkF4y3kIgremn/ctvVE=
 github.com/wow-look-at-my/testify v0.0.0-20260217010200-5fd2c08e3abb h1:kLSElPimf1wjuunb+noAlkV/xzrE65BzqnQr3Xr31u4=
 github.com/wow-look-at-my/testify v0.0.0-20260217010200-5fd2c08e3abb/go.mod h1:xlD/Hz0iizP83KvPMWiQ8dbEvfjRGQ2A5qsK+GBq9do=
-github.com/wow-look-at-my/tml v0.0.0-20260830024759-9693db3fd7c5 h1:1USmA5WEhftLbt5iuupG/9x427A9pOJKNFBx/6NMcM8=
-github.com/wow-look-at-my/tml v0.0.0-20260830024759-9693db3fd7c5/go.mod h1:Dbhr2rd2sm1+Q0DE9U+7vU79pdtOO/jGbc+7A/DjTts=
+github.com/wow-look-at-my/tml v0.0.0-20260904182653-c1f2da6db68c h1:yECJR/uVJcTFFz/Dl60YouMIZ5VoFpeKiX/H0fqWNZw=
+github.com/wow-look-at-my/tml v0.0.0-20260904182653-c1f2da6db68c/go.mod h1:Dbhr2rd2sm1+Q0DE9U+7vU79pdtOO/jGbc+7A/DjTts=
 github.com/wow-look-at-my/xml-validator/reader v0.0.0-20260823201203-7268eddb2e3f h1:Agjl7o3+QTwaB0x1SOXKvWBa0B92ezVmomq8uSu7Vo0=
 github.com/wow-look-at-my/xml-validator/reader v0.0.0-20260823201203-7268eddb2e3f/go.mod h1:fo8rGd1J/vHnMhYJC8G83y0p0qLPTodt0PQWgPs4Lt8=
 github.com/wow-look-at-my/xml-validator/validator v0.0.0-20260823201203-7268eddb2e3f h1:RlDOfsJjYqgALLw78r911v/O977Z8J5sDjlWG38tjws=

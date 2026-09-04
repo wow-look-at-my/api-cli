@@ -106,7 +106,11 @@ func TestIntegration_DownloadHandsStepURLsToTheQueue(t *testing.T) {
 		[]string{filepath.Join(dir, "one.txt"), filepath.Join(dir, "two.txt")},
 		strings.Fields(strings.TrimSpace(out)))
 	assert.Contains(t, errOut, "downloaded 2/2 files")
-	assert.Contains(t, errOut, "downloading ")
+	// One line per file that landed, named by the file rather than by its full
+	// destination path, and no line at all for a start.
+	assert.Contains(t, errOut, "downloaded one.txt (5 B)")
+	assert.Contains(t, errOut, "downloaded two.txt (11 B)")
+	assert.NotContains(t, errOut, "downloading ")
 
 	auth, cookie := seen()
 	assert.Equal(t, "Bearer s3cret", auth, "the step's auth reaches the downloader")

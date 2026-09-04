@@ -19,7 +19,7 @@ require github.com/wow-look-at-my/go-containers v0.0.0-20260826161058-40a3d1ef3d
 require (
 	charm.land/bubbletea/v2 v2.0.9
 	github.com/spf13/pflag v1.0.9
-	github.com/wow-look-at-my/tml v0.0.0-20260830024759-9693db3fd7c5 // go-toolchain:auto-branch
+	github.com/wow-look-at-my/tml v0.0.0-20260904182653-c1f2da6db68c // go-toolchain:auto-branch
 )
 
 require (
