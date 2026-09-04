@@ -83,31 +83,44 @@ func buildTMLProp(n *xnode) (TMLProp, error) {
 	if err := checkAttrs(n, "name", "from", "over"); err != nil {
 		return TMLProp{}, err
 	}
-	text, err := compileContent(n)
-	if err != nil {
-		return TMLProp{}, err
-	}
 	p := TMLProp{
 		Name: strings.TrimSpace(n.Attr("name")),
 		From: strings.TrimSpace(n.Attr("from")),
 		Over: strings.TrimSpace(n.Attr("over")),
 	}
-	for _, child := range n.Children() {
-		if child.Name() != "field" {
-			return TMLProp{}, fmt.Errorf("<prop %q>: unexpected child element <%s>", p.Name, child.Name())
+	// A prop holds EITHER fields or text. The two cannot be read in one pass:
+	// the placeholder compiler reads content it knows, and <field> is this
+	// element's own child rather than a placeholder, so it rejects one.
+	if repeats(n) {
+		for _, child := range n.Children() {
+			if child.Name() != "field" {
+				return TMLProp{}, fmt.Errorf("<prop %q>: unexpected child element <%s>", p.Name, child.Name())
+			}
+			field, err := buildTMLField(child)
+			if err != nil {
+				return TMLProp{}, err
+			}
+			p.Fields = append(p.Fields, field)
 		}
-		field, err := buildTMLField(child)
-		if err != nil {
-			return TMLProp{}, err
-		}
-		p.Fields = append(p.Fields, field)
+		return p, nil
 	}
-	// A prop that repeats holds its fields as elements, so the element's own
-	// text is theirs rather than a value of its own.
-	if len(p.Fields) == 0 {
-		p.Text = strings.TrimSpace(text)
+	text, err := compileContent(n)
+	if err != nil {
+		return TMLProp{}, err
 	}
+	p.Text = strings.TrimSpace(text)
 	return p, nil
+}
+
+// repeats reports whether a prop names the parts of a list element rather than
+// one value.
+func repeats(n *xnode) bool {
+	for _, child := range n.Children() {
+		if child.Name() == "field" {
+			return true
+		}
+	}
+	return false
 }
 
 func buildTMLField(n *xnode) (TMLField, error) {
