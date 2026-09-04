@@ -45,7 +45,8 @@ jobs:
       # api.schema.xsd is a copy. wow-look-at-my/api-cli-spec owns the schema
       # and proves it against a fixture corpus, and `api-cli docs schema`
       # prints what this repo embeds. The two must not drift apart.
-      - uses: wow-look-at-my/actions@typescript#latest
+      - name: Check api.schema.xsd against the canonical schema in api-cli-spec
+        uses: wow-look-at-my/actions@typescript#latest
         with:
           script: |
             const url = 'https://raw.githubusercontent.com/wow-look-at-my/api-cli-spec/master/api-cli.xsd';
