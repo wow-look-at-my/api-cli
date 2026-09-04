@@ -272,7 +272,7 @@ func TestTMLLeaf_RenderErrorIsReported(t *testing.T) {
 func TestValidateTML_ConfigRejectsBothPresentations(t *testing.T) {
 	cfg := &Config{Name: "t", Request: &Request{URL: "https://example.test"}, Commands: []Command{{
 		Name:   "dash",
-		Fields: &Fields{},
+		Fields: []FieldsBlock{{}},
 		TML:    &TML{Src: "a.tml"},
 	}}}
 	err := validate(cfg)
