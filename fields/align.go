@@ -128,9 +128,24 @@ func decodeRune(s string) (rune, int) {
 	}
 }
 
+// A column past wideColumn earns wideGutter in place of the caller's padding:
+// across a small gap, a long run of prose reads into the column beside it.
+const (
+	wideColumn = 50
+	wideGutter = 3
+)
+
+// gutterAfter returns the spaces that follow a column of width w.
+func gutterAfter(w, padding int) int {
+	if w > wideColumn && padding < wideGutter {
+		return wideGutter
+	}
+	return padding
+}
+
 // alignColumns pads tab-separated rows with spaces so their columns line up by
-// displayWidth, leaving `padding` spaces of gutter. A short row gets empty
-// trailing cells, and escape sequences pass through.
+// displayWidth, with gutterAfter between them. A short row gets empty trailing
+// cells, and escape sequences pass through.
 func alignColumns(rows []string, padding int) string {
 	if padding < 1 {
 		padding = 1
@@ -169,7 +184,7 @@ func alignColumns(rows []string, padding int) string {
 			if ci == maxCols-1 {
 				continue
 			}
-			pad := widths[ci] - displayWidth(cell) + padding
+			pad := widths[ci] - displayWidth(cell) + gutterAfter(widths[ci], padding)
 			for j := 0; j < pad; j++ {
 				b.WriteByte(' ')
 			}

@@ -70,6 +70,49 @@ func TestFields_MarkdownFoldsACell(t *testing.T) {
 	assert.Contains(t, out, `| one two three | p\|q |`)
 }
 
+// A column past the wide threshold gets the wider gutter after it.
+func TestFields_TableWidensTheGutterAfterAWideColumn(t *testing.T) {
+	wide := strings.Repeat("x", 51)
+	parsed := []any{
+		map[string]any{"a": wide, "b": "end"},
+		map[string]any{"a": "short", "b": "end"},
+	}
+	f := &Fields{List: []Field{{Name: "a", Path: "a"}, {Name: "b", Path: "b"}}}
+	out, err := renderFields(testRenderer, f, parsed, fctx(parsed), "table", 0)
+	require.NoError(t, err)
+
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	require.Len(t, lines, 3)
+	assert.Equal(t, "a"+strings.Repeat(" ", 53)+"b", lines[0])
+	assert.Equal(t, wide+"   end", lines[1])
+	assert.Equal(t, "short"+strings.Repeat(" ", 46)+"   end", lines[2])
+}
+
+// A column at the threshold keeps the ordinary gutter.
+func TestFields_TableKeepsTwoSpacesAtTheThreshold(t *testing.T) {
+	wide := strings.Repeat("x", 50)
+	parsed := []any{map[string]any{"a": wide, "b": "end"}}
+	f := &Fields{List: []Field{{Name: "a", Path: "a"}, {Name: "b", Path: "b"}}}
+	out, err := renderFields(testRenderer, f, parsed, fctx(parsed), "table", 0)
+	require.NoError(t, err)
+	assert.Contains(t, out, wide+"  end")
+}
+
+// The drop decision reads the same gutter the aligner writes.
+func TestFields_TableDropCountsTheWideGutter(t *testing.T) {
+	wide := strings.Repeat("x", 51)
+	parsed := []any{map[string]any{"a": wide, "b": "end"}}
+	f := &Fields{List: []Field{{Name: "a", Path: "a"}, {Name: "b", Path: "b"}}}
+	// The wide column, its wide gutter and "end" need one column more than this.
+	out, err := renderFields(testRenderer, f, parsed, fctx(parsed), "table", 56)
+	require.NoError(t, err)
+	assert.NotContains(t, out, "end")
+
+	out, err = renderFields(testRenderer, f, parsed, fctx(parsed), "table", 57)
+	require.NoError(t, err)
+	assert.Contains(t, out, "end")
+}
+
 // The width the drop decision reads is the folded width, not the whole value.
 func TestFields_TableDropsOnTheFoldedWidth(t *testing.T) {
 	parsed := []any{map[string]any{"id": int64(1), "body": "aaaa\nbbbb"}}

@@ -481,13 +481,15 @@ func dropByPriority(cols []column, width, padding int) []column {
 	return cols
 }
 
+// tableWidth is what the table occupies on screen. It reads the gutter rule the
+// aligner writes, so the drop decision sees the real width.
 func tableWidth(cols []column, padding int) int {
 	total := 0
-	for _, c := range cols {
+	for i, c := range cols {
 		total += c.width
-	}
-	if len(cols) > 1 {
-		total += padding * (len(cols) - 1)
+		if i < len(cols)-1 {
+			total += gutterAfter(c.width, padding)
+		}
 	}
 	return total
 }
