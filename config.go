@@ -6,6 +6,7 @@ import (
 	"github.com/wow-look-at-my/api-cli/fields"
 	"github.com/wow-look-at-my/go-containers/set"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -29,6 +30,10 @@ type Config struct {
 	Transports  map[string]*Transport `json:"transports,omitempty"`
 	Downloads   *Downloads            `json:"downloads,omitempty"`
 	Commands    []Command             `json:"commands,omitempty"`
+	// Dir is the directory the config was read from. A <tml src=> resolves
+	// against it, so a path in the config means what the author sees next to
+	// the file rather than wherever the shell happens to sit.
+	Dir string `json:"-"`
 }
 
 // Command is a node in the CLI tree. A node is a leaf iff it has no
@@ -74,6 +79,7 @@ type Command struct {
 	Confirm       string          `json:"confirm,omitempty"`
 	Format        *FormatRef      `json:"format,omitempty"`
 	Fields        *Fields         `json:"fields,omitempty"`
+	TML           *TML            `json:"tml,omitempty"`
 	Downloads     []Download      `json:"downloads,omitempty"`
 	Commands      []Command       `json:"commands,omitempty"`
 }
@@ -383,6 +389,7 @@ func Load(path string) (*Config, error) {
 	if err := validate(cfg); err != nil {
 		return nil, fmt.Errorf("validate config %q: %w", path, err)
 	}
+	cfg.Dir = filepath.Dir(path)
 	return cfg, nil
 }
 
@@ -604,6 +611,18 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 
 	if err := validateDownloads(c, where, transports); err != nil {
 		return err
+	}
+
+	if c.TML != nil {
+		if len(c.Commands) > 0 {
+			return fmt.Errorf("%s: <tml> is only allowed on leaves (nodes with no subcommands)", where)
+		}
+		if c.Fields != nil {
+			return fmt.Errorf("%s: use either <tml> or <fields>, not both", where)
+		}
+		if err := validateTML(c.TML, where); err != nil {
+			return err
+		}
 	}
 
 	haveRun := inheritedRun || c.Command.Defined() || c.Request.Defined()

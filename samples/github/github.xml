@@ -188,6 +188,36 @@
 				<path>/repos/<value name="arg.repo"/></path>
 			</entry>
 		</command>
+		<!-- One screen instead of one table: the counts as cards, the recent
+		     releases under them. The component is in ui/, next to this file. -->
+		<command name="dash" description="A repository on one screen.">
+			<arg name="repo" type="string" required="true" description="owner/name."/>
+			<steps>
+				<step name="releases">
+					<entry>
+						<path>/repos/<value name="arg.repo"/>/releases</path>
+						<query>
+							<param name="per_page">5</param>
+						</query>
+					</entry>
+				</step>
+			</steps>
+			<entry>
+				<path>/repos/<value name="arg.repo"/></path>
+			</entry>
+			<tml src="ui/repo.tml" dark="true">
+				<prop name="name" from="full_name"/>
+				<prop name="description" from="description"/>
+				<prop name="stars" from="stargazers_count"/>
+				<prop name="forks" from="forks_count"/>
+				<prop name="issues" from="open_issues_count"/>
+				<prop name="language" from="language"/>
+				<prop name="releases" over="result.releases">
+					<field name="tag">tag_name</field>
+					<field name="published">published_at</field>
+				</prop>
+			</tml>
+		</command>
 		<command name="issues" description="List issues for a repository.">
 			<arg name="repo" type="string" required="true" description="owner/name."/>
 			<flag name="state" type="string" default="open" description="open|closed|all."/>

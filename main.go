@@ -89,6 +89,7 @@ func newRoot(cfg *Config) *cobra.Command {
 	// transport went missing would otherwise fall back to the built-in client
 	// without saying so.
 	installTransports(cfg)
+	installConfigDir(cfg)
 	installDownloads(cfg)
 
 	root := &cobra.Command{

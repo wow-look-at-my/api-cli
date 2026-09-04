@@ -176,10 +176,16 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		if err := watchable(c, node, confirmTmpl); err != nil {
 			return err
 		}
-		title := strings.TrimSpace(c.CommandPath() + " " + strings.Join(args, " "))
-		return runWatch(title, every, func() error {
+		frame := func() error {
 			return runLeafOnce(c, node, args, vars, cmdTmpl, request, cwdTmpl, stdinTmpl, confirmTmpl, formatRef, formats)
-		})
+		}
+		// A component draws its own screen, so it repeats as a terminal program
+		// rather than as a repainted block of captured output.
+		if node.TML.Defined() {
+			return runTMLProgram(every, frame)
+		}
+		title := strings.TrimSpace(c.CommandPath() + " " + strings.Join(args, " "))
+		return runWatch(title, every, frame)
 	}
 	return runLeafOnce(c, node, args, vars, cmdTmpl, request, cwdTmpl, stdinTmpl, confirmTmpl, formatRef, formats)
 }
@@ -332,7 +338,7 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 	}
 
 	logVerbose("leaf %q: executing", node.Name)
-	exitCode, err = execLeaf(c, cmdTmpl, request, leafCwd, leafStdin, data, node.Fields, formatRef, formats)
+	exitCode, err = execLeaf(c, cmdTmpl, request, leafCwd, leafStdin, data, node.Fields, node.TML, formatRef, formats)
 	if err != nil {
 		return err
 	}

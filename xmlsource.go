@@ -492,6 +492,12 @@ func addCommandChild(c *Command, child *xnode) error {
 			return err
 		}
 		c.Fields = f
+	case "tml":
+		t, err := buildTML(child)
+		if err != nil {
+			return err
+		}
+		c.TML = t
 	case "format":
 		ref, err := buildFormatRef(child)
 		if err != nil {

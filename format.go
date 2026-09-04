@@ -218,7 +218,7 @@ func selectView(views []View, ctx map[string]any, viewFlag string, cache map[pre
 // Formatting is suppressed when the user opts out (--no-format / --format=raw /
 // NO_FORMAT). A <fields> declaration otherwise always formats. A legacy
 // <format> additionally requires its author `when` predicate to be truthy.
-func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, fields *Fields, formatRef *FormatRef, formats map[string]*Format) (int, error) {
+func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, fields *Fields, view *TML, formatRef *FormatRef, formats map[string]*Format) (int, error) {
 	verdict := userVerdictFromFlags(c)
 
 	streamRaw := func() int {
@@ -235,10 +235,28 @@ func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin strin
 
 	// --as forces a representation even when the leaf declared no <fields>:
 	// project nothing and let the data shape (or the chosen sink) decide.
-	if fields == nil {
-		if sink, _ := c.Root().PersistentFlags().GetString("as"); strings.TrimSpace(sink) != "" {
-			fields = &Fields{}
+	sink, _ := c.Root().PersistentFlags().GetString("as")
+	sink = strings.TrimSpace(sink)
+	if fields == nil && sink != "" {
+		fields = &Fields{}
+	}
+
+	// A component draws a screen, so it applies only where there is one. Piped,
+	// the leaf falls through to whatever else it declared, and --as names a
+	// representation the user wants instead of the screen.
+	if view.Defined() && sink == "" {
+		isTTY, width, height := stdoutSize()
+		if verdict == userAlways {
+			isTTY = true
 		}
+		if isTTY {
+			if width <= 0 || height <= 0 {
+				width, height = 80, 24
+			}
+			logVerbose("format: rendering <tml> %s at %dx%d", view.Src, width, height)
+			return runTMLFormatted(cmdTmpl, request, cwd, stdin, data, view, width, height), nil
+		}
+		logVerbose("format: <tml> needs a terminal, falling through")
 	}
 
 	if fields != nil {
@@ -338,6 +356,34 @@ func runFieldsFormatted(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, s
 		return 1
 	}
 	fmt.Fprint(execStdout, rendered)
+	return 0
+}
+
+// runTMLFormatted captures the leaf's JSON output and draws one frame of the
+// component. A watch turns this into a terminal program (tmlrun.go); on its own
+// it is one frame on stdout, which is what makes the same declaration testable
+// without a terminal.
+func runTMLFormatted(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, view *TML, width, height int) int {
+	out, overflowed, code := captureRun(cmdTmpl, request, cwd, stdin, data)
+	if overflowed {
+		logVerbose("format: output overflowed cap, streamed raw")
+		return code
+	}
+	if code != 0 {
+		if out != "" {
+			fmt.Fprint(execStderr, out)
+		}
+		return code
+	}
+
+	parsed := parseInput(out, "json")
+	ctx := formatContext(parsed, data, true, width)
+	frame, err := renderTMLFrame(view, configDir, parsed, ctx, width, height)
+	if err != nil {
+		fmt.Fprintln(execStderr, "error:", err)
+		return 1
+	}
+	fmt.Fprintln(execStdout, frame)
 	return 0
 }
 
