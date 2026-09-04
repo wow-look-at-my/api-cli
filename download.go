@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/wow-look-at-my/api-cli/fields"
-
 	"github.com/spf13/cobra"
 )
 
@@ -42,8 +40,14 @@ type Downloads struct {
 // keys are promoted to the top level (like a <field expr=>) and the record
 // itself is available as `.item`.
 type Download struct {
-	Over      string   `json:"over,omitempty"`
-	When      string   `json:"when,omitempty"`
+	Over string `json:"over,omitempty"`
+	When string `json:"when,omitempty"`
+	// Group and Order describe the bucket a <join> concatenates. Both are
+	// templates over the record, so one declaration produces the parts of
+	// several outputs at once.
+	Group     string   `json:"group,omitempty"`
+	Order     string   `json:"order,omitempty"`
+	Join      *Join    `json:"join,omitempty"`
 	URL       string   `json:"url"`
 	To        string   `json:"to,omitempty"`
 	Headers   []Header `json:"headers,omitempty"`
@@ -154,13 +158,15 @@ func buildDownloads(n *xnode) (*Downloads, error) {
 
 // buildDownload parses one <download> hand-off on a leaf.
 func buildDownload(n *xnode) (Download, error) {
-	if err := checkAttrs(n, "over", "when", "transport"); err != nil {
+	if err := checkAttrs(n, "over", "when", "transport", "group", "order"); err != nil {
 		return Download{}, err
 	}
 	d := Download{
 		Over:      strings.TrimSpace(n.Attr("over")),
 		When:      n.Attr("when"),
 		Transport: strings.TrimSpace(n.Attr("transport")),
+		Group:     n.Attr("group"),
+		Order:     n.Attr("order"),
 	}
 	for _, child := range n.Children() {
 		switch child.Name() {
@@ -191,6 +197,12 @@ func buildDownload(n *xnode) (Download, error) {
 			if d.HashAlgo == "" {
 				d.HashAlgo = defaultHashAlgo
 			}
+		case "join":
+			j, err := buildJoin(child)
+			if err != nil {
+				return Download{}, err
+			}
+			d.Join = j
 		case "header", "cookie":
 			h, err := buildHeader(child, "")
 			if err != nil {
@@ -271,6 +283,9 @@ func validateDownloads(c *Command, where string, transports map[string]*Transpor
 				return fmt.Errorf("%s.downloads[%d]: <hash algo=%q> must be one of %s", where, i, d.HashAlgo, knownHashAlgos())
 			}
 		}
+		if err := validateJoin(d, fmt.Sprintf("%s.downloads[%d]", where, i)); err != nil {
+			return err
+		}
 		name := strings.TrimSpace(d.Transport)
 		if name == "" || name == builtinTransportName {
 			continue
@@ -329,6 +344,11 @@ func planDownloads(dls []Download, data map[string]any, dir string) ([]downloadS
 					}
 					claimed[spec.Dest] = spec.URL
 				}
+				// Without order=, the queue's own order is the order: a config
+				// whose list already reads front to back needs no key.
+				if spec.Join != nil && !spec.Join.HasOrder {
+					spec.Join.Order = float64(len(out))
+				}
 				out = append(out, spec)
 			}
 		}
@@ -344,11 +364,14 @@ func downloadRecords(d *Download, data map[string]any, idx int) ([]map[string]an
 	if d.Over == "" {
 		return []map[string]any{data}, nil
 	}
-	src, ok := fields.Lookup(data, d.Over)
+	src, ok, err := overSource(data, d.Over)
+	if err != nil {
+		return nil, fmt.Errorf("download[%d]: %w", idx, err)
+	}
 	if !ok || src == nil {
 		return nil, fmt.Errorf("download[%d]: over=%q resolved to nothing", idx, d.Over)
 	}
-	list, ok := src.([]any)
+	list, ok := asList(src)
 	if !ok {
 		return []map[string]any{downloadCtx(data, src)}, nil
 	}
@@ -364,17 +387,7 @@ func downloadRecords(d *Download, data map[string]any, idx int) ([]map[string]an
 // record itself as .item, so a list of plain URL strings works as well as a
 // list of objects.
 func downloadCtx(data map[string]any, rec any) map[string]any {
-	ctx := make(map[string]any, len(data)+8)
-	for k, v := range data {
-		ctx[k] = v
-	}
-	if m, ok := rec.(map[string]any); ok {
-		for k, v := range m {
-			ctx[k] = v
-		}
-	}
-	ctx["item"] = rec
-	return ctx
+	return promoteCtx(data, rec, "item")
 }
 
 // planOne renders one declaration against one record. A <url> that renders to
@@ -423,19 +436,34 @@ func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSp
 		headers = append(withoutHeader(headers, "Cookie"), renderedHeader{Name: "Cookie", Value: cookie})
 	}
 
+	join, err := planJoin(d, ctx, dir, idx)
+	if err != nil {
+		return nil, err
+	}
+
 	out := make([]downloadSpec, 0, len(urls))
 	for _, u := range urls {
 		dest, isDir := downloadDest(dir, to, len(urls) > 1)
+		if join != nil && isDir {
+			return nil, fmt.Errorf("download[%d]: a joined part needs a <to> that names a file, and %q names a directory", idx, to)
+		}
 		// Resolved per URL: the program's argv sees .request.url, so each file
 		// gets its own rendered command.
 		transport, err := prepareDownloadTransport(d.Transport, u, headers, ctx)
 		if err != nil {
 			return nil, fmt.Errorf("download[%d]: %w", idx, err)
 		}
-		out = append(out, downloadSpec{
+		spec := downloadSpec{
 			URL: u, Dest: dest, DestIsDir: isDir, Headers: headers,
 			Hash: digest, HashAlgo: d.HashAlgo, Transport: transport,
-		})
+		}
+		if join != nil {
+			// One copy per file: a <url> that rendered several lines shares one
+			// record, and the queue order then separates them.
+			part := *join
+			spec.Join = &part
+		}
+		out = append(out, spec)
 	}
 	return out, nil
 }
@@ -480,16 +508,22 @@ func downloadDest(dir, to string, multi bool) (string, bool) {
 		return dir, true
 	}
 	isDir := multi || strings.HasSuffix(to, "/") || strings.HasSuffix(to, string(os.PathSeparator))
-	full := to
-	if !filepath.IsAbs(to) {
-		full = filepath.Join(dir, to)
-	}
+	full := underDir(dir, to)
 	if !isDir {
 		if info, err := os.Stat(full); err == nil && info.IsDir() {
 			isDir = true
 		}
 	}
-	return filepath.Clean(full), isDir
+	return full, isDir
+}
+
+// underDir places a rendered destination under the download directory. An
+// absolute path stands on its own.
+func underDir(dir, p string) string {
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p)
+	}
+	return filepath.Clean(filepath.Join(dir, p))
 }
 
 // joinCookies folds <cookie> entries (and any Cookie header the author wrote by

@@ -57,6 +57,7 @@ Every leaf renders its templates against a data context:
 | `.result`  | Captured outputs of `<steps>`, keyed by step name. JSON outputs are structured. |
 | `.entry`   | The leaf's `<entry>` (path/query/...), with string leaves templated first.   |
 | `.rest`    | Passthrough leftovers (passthrough mode only).                               |
+| `.run`     | This invocation. `.run.tmpdir` is a scratch directory a `<download>` leaf gets, removed when the run ends. |
 
 A leaf runs what its closest `<run>` ancestor gives it, then presents the output. `<run>` comes in three forms.
 
@@ -235,6 +236,7 @@ In a pipe there is no display. The `downloaded` lines stay on stderr, and the de
 - **`<download>` is the leaf's action.** It runs after the steps, and it stands in for the leaf's `<run>`. An inherited request therefore does not fire on the way.
 - **`when=`** is a Go-template predicate. A falsy render (empty, `false`, `0` or `no`) skips that declaration, so one leaf can carry a conditional set.
 - **`over=`** repeats the declaration per record of a list. It promotes the record's keys (`<value name="name"/>`) and puts the record itself at `.item`. An empty list downloads nothing. A path that resolves to nothing is an error.
+- **`over=` also takes a template**, when the list it wants is not one the context already holds. The template renders and its output is read as JSON, so it ends in `toJson`. `collect` gathers one path out of every element of a fan-out result: `over="{{ toJson (collect &quot;result.parts&quot; .result.listings) }}"`.
 - **`<url>` can render several lines**, which is what a `<for>` loop produces. Each line becomes its own download.
 - **`<to>`** is a file path. It is a directory when it ends in `/`, when it names an existing directory, or when it serves several URLs. Leave it empty for the download directory, named by the URL or by the response's `Content-Disposition`.
 - **A relative `<to>` resolves under the download directory** (`dir=`, or `--download-dir`). An absolute one stands as it is.
@@ -243,6 +245,34 @@ In a pipe there is no display. The `downloaded` lines stay on stderr, and the de
 - **Failures are loud.** A 4xx is the answer. A 5xx or a network fault retries at a fixed one-second cadence. A transfer that still fails names its URL on stderr and exits non-zero, while the other files carry on.
 - Bytes land in a `.part` sibling first, so an interrupted transfer never leaves a truncated file under the real name.
 - **No resume.** Every attempt starts at byte zero. A leftover `.part` is overwritten rather than continued.
+
+### Joining the parts back: `<join>`
+
+An API that hands out a capture in numbered parts wants those parts back as one file. `<join>` says so in the config, so no wrapper script has to know the layout the parts landed in.
+
+```xml
+<download over="{{ toJson (collect &quot;result.listing.parts&quot; .result.listings) }}"
+	group="{{ .item_id }}" order="{{ .sequence }}">
+	<url><value name="url"/></url>
+	<to><value name="run.tmpdir"/>/<value name="item_id"/>/<value name="sequence"/>.part</to>
+	<join to="{{ .item_id }}.mp4" cleanup="true" contiguous="error"/>
+</download>
+```
+
+- **`group=`** buckets the members. Every record that renders the same group becomes one output. Leave it out for a single bucket.
+- **`order=`** is the position inside the bucket, and it is read as a **number**. A capture that numbers its parts 2, 3 and 10 therefore joins in that order, never as 10, 2, 3. A value that is not a number fails the run before the first byte. Without `order=`, the queue order stands in for one.
+- **`to=`** is the output file. It is a template over the same record, so one declaration writes one file per group. A relative path resolves under the download directory, exactly as `<to>` does.
+- **A group joins as soon as its own last part lands.** A run of many items writes its first output while the rest still transfer.
+- **The join streams.** A bucket larger than memory is fine.
+- **A group short a part is not written at all.** The run reports which members failed and exits non-zero. Half a capture wearing the real name is worse than no file.
+- **`cleanup="true"`** removes the parts after the output lands, and it removes the directories they left empty. A failed group keeps its parts.
+- **`contiguous=`** reports a hole in the numbering: `warn` logs it and still writes, `error` fails the group and writes nothing. It needs `order=`, because the numbers are what it checks. It reads the whole numbers between the lowest and the highest, so a listing that stops early looks complete to it.
+- Each member needs its own `<to>`, and that `<to>` must name a file. The parts are separate files until the join makes them one.
+- The output goes through a `.part` sibling too, so an interrupted join leaves no truncated file under the real name.
+
+### A working directory for the parts: `.run.tmpdir`
+
+A leaf that declares `<download>` gets a scratch directory of its own at `.run.tmpdir`. The directory is removed when the run ends, whatever the outcome. Parts that a `<join>` consumes belong there, so nothing outside the config has to make a directory and pass it in. Files you mean to keep go under the download directory instead, which this never touches.
 
 ### Downloading through a transport
 
@@ -650,6 +680,25 @@ A step with `over="result.builds"` runs once per element of that list. The eleme
 
 A failing element fails the whole step, with that element's exit code. A board missing one build reads as a shorter queue rather than as a broken run. The run stops instead.
 
+`over=` walks a list the context holds: a step result, a `<var>`, or a `variadic` arg, whose Go slice needs no JSON detour. It also takes a template that renders a JSON list, for a list the context does not hold in that shape. See [`over=` on a download](#downloads) for the `collect` helper that flattens a fan-out result.
+
+### Waiting for a job: `<step until=>`
+
+An API that answers `status: pending` needs a poll, not a call. A step with `until=` repeats its own run until that predicate holds, so an async listing needs no shell loop around the program.
+
+```xml
+<step name="listing" until="{{ eq .status &quot;done&quot; }}" interval="1s" attempts="120">
+	<run><request><url><value name="var.api"/>/jobs/<value name="result.submit.job"/></url></request></run>
+</step>
+```
+
+- **The predicate sees the last response**, with its keys promoted to the top level. An async job's own `status` field is therefore `.status`, and the whole body stays at `.body`. The rest of the run context is there too.
+- **`.result.<name>` is the body that satisfied the predicate**, never one of the answers before it.
+- **`interval=`** is a duration such as `500ms` or `2s`. It defaults to one second, and it never grows: a slow job is not a reason to wait longer and longer for it.
+- **`attempts=`** caps the poll at 60 by default. A poll that runs out fails the run and prints the last response, so the reason is the body itself rather than a bare timeout.
+- **A non-zero exit ends the poll at once.** A job that reports a failure has answered, and asking again cannot change it.
+- **`over=` and `until=` compose.** A repeated step polls each element in turn, which is how one invocation lists N items whose listings are all jobs.
+
 ## Legacy formats and views
 
 The older explicit `<format>` and `<view>` system stays next to `<fields>`, for a case that needs full control of the rendered template. PowerShell's `.format.ps1xml` is its ancestor. A leaf uses `<fields>` *or* `<format>`, never both.
@@ -702,6 +751,7 @@ Every [sprig v3](https://masterminds.github.io/sprig/) helper is available: `toJ
 | `tabwriter`   | Align rows of tab-separated cells (display-width aware).                                  |
 | `padRight` / `padLeft` / `displayWidth` / `stripANSI` | Width-aware string helpers.                  |
 | `filterSuffix` / `filterPrefix` | Filter a `[]string` (used with `.rest`).                            |
+| `collect`     | Gather one dotted path out of every element of a list, flattening the values that are lists: `collect "result.parts" .result.listings`. A path missing from an element is an error. |
 
 ## Template semantics
 
@@ -750,6 +800,8 @@ Each row is something the grammar does not do, and the shape to write instead. E
 | **`.result` is empty in a `<precondition>`.** Preconditions run before the steps, and the loader rejects one that reads `.result`. | Put the check in a `<step when=>`, which runs in order with the other steps. A step that fails aborts the leaf with its own exit code. |
 | **`allow-status=` needs the built-in client.** A `<transport>` program reports an exit code, and the status it saw is not ours to read. A named transport plus `allow-status` is a load error. | Put `transport="http"` on that one request, which opts it out of a default transport and back onto the built-in client. Otherwise let the program exit non-zero, and branch on `.result` in a later `<step when=>`. |
 | **A leaf takes `<fields>` or `<format>`, never both.** | Keep `<format>` for a leaf that needs full control of the template. Everything else belongs in `<fields>`, which the sinks and `--as` understand. |
+| **A record key named `item` is shadowed.** `over=` promotes a record's keys and then puts the record itself at `.item`, so the record wins that name. | Name the field something else in the response, or reach it as `.item.item`. The `<field expr=>` form has the same rule. |
+| **`<join contiguous=>` cannot see a missing last part.** It reads the whole numbers between the lowest and the highest order in the group. | Check the count yourself in a `<step when=>` against whatever the listing says it holds. A hole in the middle is what this attribute reports. |
 | **Nothing selects a transport at run time.** There is no `--transport` flag, by design: how a request reaches its endpoint is a property of the endpoint. | Name the transport in the config, on the `<request>` or as the registry `default="true"`. `transport="http"` is the per-request way back to the built-in client. |
 
 ## Config schema
@@ -786,7 +838,7 @@ An XSD reference for the grammar lives at [`api.schema.xsd`](./api.schema.xsd), 
 | `<entry>` | Leaf-only. `<path>`, `<query>`, or user-defined keys -> `.entry`. |
 | `<preconditions><precondition>` | Leaf-only. A non-empty render is a fatal error message (exit 1). It runs before `<steps>`, so `.result` holds nothing. A config that reads `.result` there fails to load. |
 | `<fields when=>` / `<format>` | The automatic output shape, or a legacy format. Leaf-only, and never both. `<fields>` repeats: every block whose `when=` holds renders. |
-| `<download over= when= transport=>` | Leaf-only, repeatable. Hands URLs to the download queue. See [Downloads](#downloads). |
+| `<download over= when= transport= group= order=>` | Leaf-only, repeatable. Hands URLs to the download queue. A `<join>` child concatenates a group. See [Downloads](#downloads). |
 | `<command>` | Nested subcommands. A node with children prints help, unless it declares `runnable="true"`. |
 
 ### `<arg>` and `<flag>`
