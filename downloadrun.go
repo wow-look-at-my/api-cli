@@ -34,7 +34,7 @@ func startDownloadSession(c *cobra.Command) *downloadSession {
 	s := &downloadSession{settings: resolveDownloadSettings(c)}
 	q := sharedQueue(s.settings.Concurrency, s.settings.Retries)
 
-	isTTY, width, height := stdoutSize()
+	isTTY, width := stdoutSize()
 	s.tty = isTTY
 	if !isTTY || s.settings.NoTUI {
 		errOut := execStderr
@@ -46,12 +46,11 @@ func startDownloadSession(c *cobra.Command) *downloadSession {
 
 	s.prevOut, s.prevErr = execStdout, execStderr
 	s.batch = q.batch(nil, nil)
-	s.tui = newTUI(s.prevOut, width, height, s.settings.LogLines, s.batch.snapshot)
+	s.tui = newTUI(s.prevOut, width, s.batch.snapshot)
 	s.batch.log = s.tui.logf
-	// A transport program's stderr belongs in the log region too.
+	// A transport program's stderr scrolls above the slots too.
 	s.batch.errOut = s.tui
-	// Steps and the downloader write into the log region rather than over the
-	// progress display.
+	// Steps and the downloader write above the slots rather than over them.
 	execStdout, execStderr = s.tui, s.tui
 	s.tui.Start()
 	return s
@@ -163,21 +162,21 @@ func mcpRunDownloads(dls []Download, data map[string]any) (string, bool) {
 	return strings.TrimRight(log.String()+out.String(), "\n"), failed > 0
 }
 
-// stdoutSize reports whether execStdout is a terminal and how big it is. A
+// stdoutSize reports whether execStdout is a terminal and how wide it is. A
 // non-*os.File writer (a buffer in tests, a pipe in a shell) is never a
 // terminal, which is exactly the "piped to a file" case.
-func stdoutSize() (bool, int, int) {
+func stdoutSize() (bool, int) {
 	f, ok := execStdout.(*os.File)
 	if !ok {
-		return false, 0, 0
+		return false, 0
 	}
 	fd := int(f.Fd())
 	if !term.IsTerminal(fd) {
-		return false, 0, 0
+		return false, 0
 	}
-	w, h, err := term.GetSize(fd)
-	if err != nil || w <= 0 || h <= 0 {
-		return true, 80, 24
+	w, _, err := term.GetSize(fd)
+	if err != nil || w <= 0 {
+		return true, 80
 	}
-	return true, w, h
+	return true, w
 }

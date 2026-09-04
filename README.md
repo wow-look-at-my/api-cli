@@ -212,20 +212,25 @@ A step can work a URL out: parse it from a listing, sign it, or follow a redirec
 </command>
 ```
 
-On a terminal this draws a live display. Each transfer gets a line with its percentage, sizes, rate and ETA. An aggregate `TOTAL` row follows. Below that sits a height-capped log region that scrolls itself. It carries the output of the steps and of the downloader.
+On a terminal this draws a block of slots at the bottom of the screen. An in-flight transfer holds one slot, and repaints over its own previous line with its percentage, sizes, rate and ETA. An aggregate `TOTAL` row closes the block.
+
+A transfer that finishes gives up its slot and emits one `downloaded` line above the block. The output of the steps goes to the same place. Those lines are written one time and scroll away into the terminal's own scrollback. A long run therefore reads as the list of what landed.
 
 ```
-downloads: 3 active, 3 queued, 0 done
-  ubuntu-25.04.iso         59%     3.6 MiB / 6.0 MiB      870.1 KiB/s  ETA 00:02
-  linux-6.18.tar.xz        55%     1.7 MiB / 3.0 MiB      406.0 KiB/s  ETA 00:03
-  dataset-a.parquet        69%     5.5 MiB / 8.0 MiB      1.3 MiB/s    ETA 00:01
+downloaded CHUNK_01.data.message (76.5 MiB)
+downloaded CHUNK_02.data.message (67.3 MiB)
+downloads: 3 active, 9 queued, 2 done
+  CHUNK_03.data.message    59%     3.6 MiB / 6.0 MiB      870.1 KiB/s  ETA 00:02
+  CHUNK_04.data.message    55%     1.7 MiB / 3.0 MiB      406.0 KiB/s  ETA 00:03
+  CHUNK_05.data.message    69%     5.5 MiB / 8.0 MiB      1.3 MiB/s    ETA 00:01
   TOTAL                    63%    10.8 MiB / 17.0 MiB+    2.6 MiB/s
-------------------------------------------------------------
- downloading dataset-a.parquet
- downloaded ubuntu-25.04.iso (6.0 MiB)
 ```
 
-In a pipe there is no display. Progress stays line-based on stderr, and the destination paths go to stdout, one per line, for whatever reads them next.
+The block comes off the screen when the queue drains, and the run's summary follows the emitted lines.
+
+A start is never announced. The slot already says that a transfer runs. A separate `downloading` line only doubles the volume.
+
+In a pipe there is no display. The `downloaded` lines stay on stderr, and the destination paths go to stdout, one per line, for whatever reads them next.
 
 - **`<download>` is the leaf's action.** It runs after the steps, and it stands in for the leaf's `<run>`. An inherited request therefore does not fire on the way.
 - **`when=`** is a Go-template predicate. A falsy render (empty, `false`, `0` or `no`) skips that declaration, so one leaf can carry a conditional set.
@@ -250,7 +255,7 @@ A `<download>` reaches its URL as a `<request>` does. It goes over the built-in 
 - **Selection matches requests**: the `transport=` attribute, then the registry's `default="true"` entry, then the built-in client. A config whose endpoints all need the program therefore needs it for its files too, and says nothing extra. `transport="http"` opts one download back to the built-in client.
 - **The program gets the same `.request` context** -- `method`, `url`, `headers` and `header_lines` -- so one program serves requests and downloads alike. `method` is `GET`, and there is no body.
 - **Its stdout streams into the file** rather than into a buffered response body. That is the one difference between the two paths. It is also why a file larger than memory is fine. The `.part` sibling, the byte count and the digest check are the same code on both.
-- **A non-zero exit fails the download, and the queue retries it.** A program owns its own exit codes. curl says 22 for a 404 and 7 for a refused connection. This path therefore cannot tell an answer from a hiccup, unlike the built-in client, and it lets the attempt limit end the transfer. Its stderr goes to the log region.
+- **A non-zero exit fails the download, and the queue retries it.** A program owns its own exit codes. curl says 22 for a 404 and 7 for a refused connection. This path therefore cannot tell an answer from a hiccup, unlike the built-in client, and it lets the attempt limit end the transfer. Its stderr is emitted above the slots.
 - The size is unknown at the start, because there is no `Content-Length`. The display shows `?%` for that file, and it marks the total as a floor.
 
 ### Checking a download against a digest
@@ -268,7 +273,7 @@ A `<download>` reaches its URL as a `<request>` does. It goes over the built-in 
 - **The digest must look like a digest.** A renamed manifest field renders as the template engine's placeholder. The plan step rejects that before it fetches anything, rather than leave the file unverified in silence. A `sha256sum` line (`<hex>  <name>`) is acceptable, in any capitalization.
 - **To make the check optional per record**, render the body empty for a record that carries no digest: `<hash><if test="sha256"><value name="sha256"/></if></hash>`.
 
-`<downloads>` sets the queue up one time for the config. It takes `concurrency` (default 4), `retries` (default 3, where `0` reports a failure immediately), `dir` (default `.`), and `log_lines` for the height of the log region (default `min(15, half the terminal)`). `--concurrency`, `--download-dir`, `--log-lines` and `--no-tui` override those values per invocation.
+`<downloads>` sets the queue up one time for the config. It takes `concurrency` (default 4), `retries` (default 3, where `0` reports a failure immediately) and `dir` (default `.`). `--concurrency`, `--download-dir` and `--no-tui` override those values per invocation.
 
 ## Output: fields
 
@@ -675,7 +680,7 @@ An XSD reference for the grammar lives at [`api.schema.xsd`](./api.schema.xsd), 
 | `<cwd>` / `<stdin>` | Default working directory / stdin templates. Inherited. |
 | `<formats>` | Named, reusable legacy formats. |
 | `<transports>` | Named programs that perform requests. See [Transports](#transports). |
-| `<downloads concurrency= retries= dir= log_lines=/>` | Settings for the shared download queue. See [Downloads](#downloads). |
+| `<downloads concurrency= retries= dir=/>` | Settings for the shared download queue. See [Downloads](#downloads). |
 | `<command>` | Top-level subcommands. |
 
 ### `<command>`
@@ -739,7 +744,6 @@ One predicate covers both cases. `{{ .arg.id }}` is truthy when the arg is prese
 | `--var KEY=VALUE` |       |         | Set an env var before evaluation (so `{{.env.KEY}}` sees it). Repeatable. |
 | `--concurrency <n>` |     | `4`     | Parallel downloads. See [Downloads](#downloads). |
 | `--download-dir <path>` | | `.`     | Base directory for `<download>` destinations. |
-| `--log-lines <n>`  |      |         | Height of the download display's log region. Default: `min(15, half the terminal)`. |
 | `--no-tui`        |       | false   | Report download progress as plain lines instead of drawing the display. |
 
 Two env vars apply, at a lower precedence than the flags. Any value of `NO_FORMAT` turns formatting off. `API_CLI_FORMAT` takes `raw`, `auto` or `always`.

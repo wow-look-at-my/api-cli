@@ -13,7 +13,7 @@ import (
 
 func TestParseXML_Download(t *testing.T) {
 	cfg := mustParse(t, `<config name="x">
-		<downloads concurrency="8" retries="1" dir="./out" log_lines="6"/>
+		<downloads concurrency="8" retries="1" dir="./out"/>
 		<command name="get">
 			<download over="result.list.assets" when="{{.flag.save}}">
 				<url><value name="browser_download_url"/></url>
@@ -28,7 +28,7 @@ func TestParseXML_Download(t *testing.T) {
 	</config>`)
 
 	require.NotNil(t, cfg.Downloads)
-	assert.Equal(t, &Downloads{Concurrency: 8, Retries: 1, Dir: "./out", LogLines: 6, RetriesSet: true}, cfg.Downloads)
+	assert.Equal(t, &Downloads{Concurrency: 8, Retries: 1, Dir: "./out", RetriesSet: true}, cfg.Downloads)
 
 	bare := mustParse(t, `<config name="x"><downloads/><command name="c"><run>x</run></command></config>`)
 	assert.False(t, bare.Downloads.RetriesSet, "an absent retries= is not a request for zero")
@@ -390,8 +390,8 @@ func TestResolveDownloadSettings(t *testing.T) {
 	installDownloads(nil)
 	assert.Equal(t, downloadSettings{Concurrency: 4, Retries: 3, Dir: "."}, resolveDownloadSettings(nil))
 
-	installDownloads(&Config{Downloads: &Downloads{Concurrency: 8, Retries: 1, Dir: "out", LogLines: 5}})
-	assert.Equal(t, downloadSettings{Concurrency: 8, Retries: 1, Dir: "out", LogLines: 5}, resolveDownloadSettings(nil))
+	installDownloads(&Config{Downloads: &Downloads{Concurrency: 8, Retries: 1, Dir: "out"}})
+	assert.Equal(t, downloadSettings{Concurrency: 8, Retries: 1, Dir: "out"}, resolveDownloadSettings(nil))
 
 	// A config asking for no retries gets none, rather than silently the default.
 	installDownloads(&Config{Downloads: &Downloads{Retries: 0, RetriesSet: true}})
@@ -400,12 +400,11 @@ func TestResolveDownloadSettings(t *testing.T) {
 	root := newRoot(nil)
 	require.NoError(t, root.PersistentFlags().Set("concurrency", "2"))
 	require.NoError(t, root.PersistentFlags().Set("download-dir", "elsewhere"))
-	require.NoError(t, root.PersistentFlags().Set("log-lines", "9"))
 	require.NoError(t, root.PersistentFlags().Set("no-tui", "true"))
 	// newRoot(nil) cleared the registry; put the config settings back so the
 	// test proves the flags win over them rather than over the defaults.
 	installDownloads(&Config{Downloads: &Downloads{Concurrency: 8, Dir: "out"}})
-	assert.Equal(t, downloadSettings{Concurrency: 2, Retries: 3, Dir: "elsewhere", LogLines: 9, NoTUI: true},
+	assert.Equal(t, downloadSettings{Concurrency: 2, Retries: 3, Dir: "elsewhere", NoTUI: true},
 		resolveDownloadSettings(root))
 }
 
@@ -417,7 +416,6 @@ func TestResolveDownloadSettings_UnsetFlagsLeaveConfigAlone(t *testing.T) {
 	root := &cobra.Command{}
 	root.PersistentFlags().Int("concurrency", defaultConcurrency, "")
 	root.PersistentFlags().String("download-dir", ".", "")
-	root.PersistentFlags().Int("log-lines", 0, "")
 	root.PersistentFlags().Bool("no-tui", false, "")
 
 	installDownloads(&Config{Downloads: &Downloads{Concurrency: 8, Dir: "out"}})
