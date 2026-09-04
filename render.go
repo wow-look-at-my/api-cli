@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,6 +38,7 @@ func cliFuncs() template.FuncMap {
 		"stripANSI":    stripANSI,
 		"filterSuffix": filterSuffix,
 		"filterPrefix": filterPrefix,
+		"collect":      collectPath,
 	}
 }
 
@@ -66,6 +68,105 @@ func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width 
 
 // renderString executes a text/template against data with the shared functions
 // plus cliFuncs.
+// asList normalizes a context value to the elements a repetition walks. A step
+// result is a []any and a variadic arg is a []string, so both `over=` sites
+// accept either rather than only the JSON shape.
+//
+// A string is not a list. Iterating one gives a record per byte, which is never
+// what a config meant by over=.
+func asList(v any) ([]any, bool) {
+	switch t := v.(type) {
+	case nil:
+		return nil, false
+	case []any:
+		return t, true
+	case string, []byte:
+		return nil, false
+	}
+	rv := reflect.ValueOf(v)
+	if k := rv.Kind(); k != reflect.Slice && k != reflect.Array {
+		return nil, false
+	}
+	out := make([]any, rv.Len())
+	for i := range out {
+		out[i] = rv.Index(i).Interface()
+	}
+	return out, true
+}
+
+// collectPath gathers one path out of every element of a list and flattens the
+// values that are lists themselves. A step that fanned out over N items holds N
+// responses, each carrying its own parts, and one queue wants every part of
+// every item as one list:
+//
+//	over="{{ toJson (collect &quot;result.parts&quot; .result.listing) }}"
+//
+// A path that is missing from an element is an error rather than a skip. The
+// alternative is a queue quietly short one item's files.
+func collectPath(path string, v any) ([]any, error) {
+	list, ok := asList(v)
+	if !ok {
+		return nil, fmt.Errorf("collect %q: %T is not a list", path, v)
+	}
+	out := []any{}
+	for i, el := range list {
+		m, ok := el.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("collect %q: element %d is %T, not a record", path, i, el)
+		}
+		got, ok := fields.Lookup(m, path)
+		if !ok {
+			return nil, fmt.Errorf("collect %q: element %d has no such path", path, i)
+		}
+		if inner, ok := asList(got); ok {
+			out = append(out, inner...)
+			continue
+		}
+		out = append(out, got)
+	}
+	return out, nil
+}
+
+// overSource resolves an `over=` to the value it repeats across. A plain dotted
+// name is a context path. A template is rendered and its output read as JSON,
+// which is how a config reshapes a fan-out result without leaving the config:
+// `over="{{ toJson (collect "result.parts" .result.listing) }}"`.
+//
+// The second return is false when the path is not there at all. The caller
+// decides what that means, because a missing path and an empty list are
+// different mistakes.
+func overSource(data map[string]any, expr string) (any, bool, error) {
+	if !strings.Contains(expr, "{{") {
+		v, ok := fields.Lookup(data, expr)
+		return v, ok, nil
+	}
+	out, err := renderString(expr, data)
+	if err != nil {
+		return nil, false, fmt.Errorf("render over: %w", err)
+	}
+	if strings.TrimSpace(out) == "" {
+		return nil, false, nil
+	}
+	return parseResult(out), true, nil
+}
+
+// promoteCtx copies data and lays one record over it: a map's keys reach the
+// top level, and the record itself takes the given name. This is how a
+// per-record template reads `.sequence` and `.item` alike.
+func promoteCtx(data map[string]any, rec any, name string) map[string]any {
+	ctx := make(map[string]any, len(data)+8)
+	for k, v := range data {
+		ctx[k] = v
+	}
+	if m, ok := rec.(map[string]any); ok {
+		for k, v := range m {
+			ctx[k] = v
+		}
+	}
+	ctx[name] = rec
+	return ctx
+}
+
 func renderString(tmpl string, data any) (string, error) {
 	return renderer.Render(tmpl, data)
 }

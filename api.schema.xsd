@@ -121,6 +121,9 @@
            renamed if it does not match. Render the body empty to skip the check
            for one record of an over= list. -->
       <xs:element name="hash" type="hash" minOccurs="0"/>
+      <!-- Concatenates every member of a group into one file, in the numeric
+           order of order=, as soon as that group's last part lands. -->
+      <xs:element name="join" type="join" minOccurs="0"/>
       <xs:choice minOccurs="0" maxOccurs="unbounded">
         <xs:element name="header" type="header"/>
         <!-- Folded into one Cookie header. -->
@@ -128,13 +131,37 @@
         <xs:element name="if" type="downloadAuthIf"/>
       </xs:choice>
     </xs:sequence>
+    <!-- A context path, or a template that renders a JSON list. -->
     <xs:attribute name="over" type="xs:string"/>
     <xs:attribute name="when" type="xs:string"/>
+    <!-- Both are templates over the record, and both need a <join>. group=
+         buckets the members; order= is the number they sort by. -->
+    <xs:attribute name="group" type="xs:string"/>
+    <xs:attribute name="order" type="xs:string"/>
     <!-- A <transport> name, as on <request>: the program fetches the file and
          its stdout is streamed to disk. Empty takes the registry default;
          "http" opts back to the built-in client. -->
     <xs:attribute name="transport" type="xs:string"/>
   </xs:complexType>
+
+  <!-- The one file a group of parts becomes. A group short a part is not
+       written at all, and the run exits non-zero. -->
+  <xs:complexType name="join">
+    <!-- The output path, as a template over the record. Relative to the
+         download directory. -->
+    <xs:attribute name="to" type="xs:string" use="required"/>
+    <!-- Remove the parts once the output lands. -->
+    <xs:attribute name="cleanup" type="xs:boolean"/>
+    <!-- Report a hole in the numbering. Needs order=. -->
+    <xs:attribute name="contiguous" type="contiguousMode"/>
+  </xs:complexType>
+
+  <xs:simpleType name="contiguousMode">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="warn"/>
+      <xs:enumeration value="error"/>
+    </xs:restriction>
+  </xs:simpleType>
 
   <xs:complexType name="hash" mixed="true">
     <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
@@ -320,6 +347,17 @@
           </xs:sequence>
           <xs:attribute name="name" type="xs:string" use="required"/>
           <xs:attribute name="when" type="xs:string"/>
+          <!-- Repeat the step per element of a list: a context path, or a
+               template that renders a JSON list. The element is .item and its
+               position .index. -->
+          <xs:attribute name="over" type="xs:string"/>
+          <!-- Poll: repeat the step's own run until this predicate holds. It
+               sees the last body promoted to the top level, and at .body. -->
+          <xs:attribute name="until" type="xs:string"/>
+          <!-- The wait between attempts (default 1s) and the cap on them
+               (default 60). Both need until=. -->
+          <xs:attribute name="interval" type="xs:string"/>
+          <xs:attribute name="attempts" type="xs:positiveInteger"/>
         </xs:complexType>
       </xs:element>
     </xs:sequence>
