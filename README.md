@@ -236,7 +236,7 @@ In a pipe there is no display. The `downloaded` lines stay on stderr, and the de
 - **`<download>` is the leaf's action.** It runs after the steps, and it stands in for the leaf's `<run>`. An inherited request therefore does not fire on the way.
 - **`when=`** is a Go-template predicate. A falsy render (empty, `false`, `0` or `no`) skips that declaration, so one leaf can carry a conditional set.
 - **`over=`** repeats the declaration per record of a list. It promotes the record's keys (`<value name="name"/>`) and puts the record itself at `.item`. An empty list downloads nothing. A path that resolves to nothing is an error.
-- **`over=` also takes a template**, when the list it wants is not one the context already holds. The template renders and its output is read as JSON, so it ends in `toJson`. `collect` gathers one path out of every element of a fan-out result: `over="{{ toJson (collect &quot;result.parts&quot; .result.listings) }}"`.
+- **`over=` also takes a template**, when the list it wants is not one the context already holds. The template renders and its output is read as JSON. It therefore ends in `toJson`. `collect` gathers one path out of every element of a fan-out result: `over="{{ toJson (collect &quot;result.parts&quot; .result.listings) }}"`.
 - **`<url>` can render several lines**, which is what a `<for>` loop produces. Each line becomes its own download.
 - **`<to>`** is a file path. It is a directory when it ends in `/`, when it names an existing directory, or when it serves several URLs. Leave it empty for the download directory, named by the URL or by the response's `Content-Disposition`.
 - **A relative `<to>` resolves under the download directory** (`dir=`, or `--download-dir`). An absolute one stands as it is.
@@ -260,15 +260,15 @@ An API that hands out a capture in numbered parts wants those parts back as one 
 ```
 
 - **`group=`** buckets the members. Every record that renders the same group becomes one output. Leave it out for a single bucket.
-- **`order=`** is the position inside the bucket, and it is read as a **number**. A capture that numbers its parts 2, 3 and 10 therefore joins in that order, never as 10, 2, 3. A value that is not a number fails the run before the first byte. Without `order=`, the queue order stands in for one.
+- **`order=`** is the position inside the bucket. It is read as a **number**. A capture that numbers its parts 2, 3 and 10 therefore joins in that order, never as 10, 2, 3. A value that is not a number fails the run before the first byte. Without `order=`, the queue order stands in for one.
 - **`to=`** is the output file. It is a template over the same record, so one declaration writes one file per group. A relative path resolves under the download directory, exactly as `<to>` does.
 - **A group joins as soon as its own last part lands.** A run of many items writes its first output while the rest still transfer.
 - **The join streams.** A bucket larger than memory is fine.
 - **A group short a part is not written at all.** The run reports which members failed and exits non-zero. Half a capture wearing the real name is worse than no file.
 - **`cleanup="true"`** removes the parts after the output lands, and it removes the directories they left empty. A failed group keeps its parts.
-- **`contiguous=`** reports a hole in the numbering: `warn` logs it and still writes, `error` fails the group and writes nothing. It needs `order=`, because the numbers are what it checks. It reads the whole numbers between the lowest and the highest, so a listing that stops early looks complete to it.
-- Each member needs its own `<to>`, and that `<to>` must name a file. The parts are separate files until the join makes them one.
-- The output goes through a `.part` sibling too, so an interrupted join leaves no truncated file under the real name.
+- **`contiguous=`** reports a hole in the numbering: `warn` logs it and still writes, `error` fails the group and writes nothing. It needs `order=`, because the numbers are what it checks. It reads the whole numbers between the lowest and the highest. A listing that stops early therefore looks complete to it.
+- Each member needs its own `<to>`. That `<to>` must name a file. The parts are separate files until the join makes them one.
+- The output goes through a `.part` sibling too. An interrupted join therefore leaves no truncated file under the real name.
 
 ### A working directory for the parts: `.run.tmpdir`
 
@@ -684,7 +684,7 @@ A failing element fails the whole step, with that element's exit code. A board m
 
 ### Waiting for a job: `<step until=>`
 
-An API that answers `status: pending` needs a poll, not a call. A step with `until=` repeats its own run until that predicate holds, so an async listing needs no shell loop around the program.
+An API that answers `status: pending` needs a poll, not a call. A step with `until=` repeats its own run until that predicate holds. An async listing therefore needs no shell loop around the program.
 
 ```xml
 <step name="listing" until="{{ eq .status &quot;done&quot; }}" interval="1s" attempts="120">
@@ -692,10 +692,10 @@ An API that answers `status: pending` needs a poll, not a call. A step with `unt
 </step>
 ```
 
-- **The predicate sees the last response**, with its keys promoted to the top level. An async job's own `status` field is therefore `.status`, and the whole body stays at `.body`. The rest of the run context is there too.
+- **The predicate sees the last response**, with its keys promoted to the top level. An async job's own `status` field is therefore `.status`. The whole body stays at `.body`, and the rest of the run context is there too.
 - **`.result.<name>` is the body that satisfied the predicate**, never one of the answers before it.
 - **`interval=`** is a duration such as `500ms` or `2s`. It defaults to one second, and it never grows: a slow job is not a reason to wait longer and longer for it.
-- **`attempts=`** caps the poll at 60 by default. A poll that runs out fails the run and prints the last response, so the reason is the body itself rather than a bare timeout.
+- **`attempts=`** caps the poll at 60 by default. A poll that runs out fails the run and prints the last response. The reason is therefore the body itself rather than a bare timeout.
 - **A non-zero exit ends the poll at once.** A job that reports a failure has answered, and asking again cannot change it.
 - **`over=` and `until=` compose.** A repeated step polls each element in turn, which is how one invocation lists N items whose listings are all jobs.
 
