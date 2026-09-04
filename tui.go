@@ -45,6 +45,7 @@ type tui struct {
 	pending  []string
 	partial  string
 	painted  int
+	started  bool
 	stopped  bool
 	finished bool
 
@@ -69,6 +70,10 @@ func newTUI(out io.Writer, width int, snapshot func() []*downloadItem) *tui {
 // Start begins repainting until Stop. Painting from one goroutine keeps the
 // frame consistent while workers mutate progress underneath it.
 func (t *tui) Start() {
+	t.mu.Lock()
+	t.started = true
+	t.mu.Unlock()
+
 	fmt.Fprint(t.out, ansiHideCur)
 	t.watchInterrupt()
 	go func() {
@@ -144,10 +149,15 @@ func (t *tui) Stop() {
 		return
 	}
 	t.stopped = true
+	started := t.started
 	t.mu.Unlock()
 
-	close(t.stop)
-	<-t.done
+	// Only a display that started has a painter to wait for. Waiting anyway
+	// blocks forever, because nothing else ever closes done.
+	if started {
+		close(t.stop)
+		<-t.done
+	}
 
 	t.mu.Lock()
 	t.finished = true
