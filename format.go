@@ -14,6 +14,11 @@ import (
 // to streaming and skips the format step. 32 MiB.
 const defaultFormatCap = 32 << 20
 
+// tmlPageHeight is the viewport a one-shot <tml> frame lays out in. It is a
+// page the terminal scrolls, not a screen, so it is tall enough that a board of
+// cards is never cut off. The blank rows under the content are trimmed.
+const tmlPageHeight = 1000
+
 // userVerdict is the user-side decision about formatting. The author-side is
 // computed separately by rendering format.When; output is formatted iff both
 // sides agree.
@@ -252,6 +257,14 @@ func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin strin
 		if isTTY {
 			if width <= 0 || height <= 0 {
 				width, height = 80, 24
+			}
+			// One frame prints into a scrolling terminal, so it is a page
+			// rather than a screen: laying it out at the terminal's height
+			// would cut the content off at the bottom row and say nothing
+			// about it. Under a watch (ttyOverride) the screen IS the height,
+			// and the program owns it.
+			if ttyOverride == nil {
+				height = tmlPageHeight
 			}
 			logVerbose("format: rendering <tml> %s at %dx%d", view.Src, width, height)
 			return runTMLFormatted(cmdTmpl, request, cwd, stdin, data, view, width, height), nil

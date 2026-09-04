@@ -580,10 +580,10 @@ func buildFlag(n *xnode) (Flag, error) {
 }
 
 func buildStep(n *xnode) (Step, error) {
-	if err := checkAttrs(n, "name", "when"); err != nil {
+	if err := checkAttrs(n, "name", "when", "over"); err != nil {
 		return Step{}, err
 	}
-	s := Step{Name: n.Attr("name"), When: n.Attr("when")}
+	s := Step{Name: n.Attr("name"), When: n.Attr("when"), Over: strings.TrimSpace(n.Attr("over"))}
 	for _, child := range n.Children() {
 		switch child.Name() {
 		case "run":

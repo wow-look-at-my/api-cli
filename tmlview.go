@@ -38,11 +38,26 @@ type TMLProp struct {
 	Fields []TMLField `json:"fields,omitempty"`
 }
 
-// TMLField maps one path inside a list element to one property of the item
+// TMLField maps one part of a list element to one property of the item
 // template.
+//
+// Path reads a value out of the element. Expr computes one instead, against the
+// element promoted to the top level and the whole context through `$`, exactly
+// as a <field expr=> does.
+//
+// Lines turns the value into a list of strings, which is the property type a
+// data template declares as string[] and walks with <For>. A log is the reason
+// it exists: the value is one blob of output, and the card shows the tail of
+// it. Last keeps the final N entries, and Truncate clips each one to a width
+// the card can hold, because TML does no wrapping of its own.
+// Last and Truncate are templates, so a flag sets them: `last="{{ .flag.lines }}"`.
 type TMLField struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
+	Name     string `json:"name"`
+	Path     string `json:"path,omitempty"`
+	Expr     string `json:"expr,omitempty"`
+	Lines    bool   `json:"lines,omitempty"`
+	Last     string `json:"last,omitempty"`
+	Truncate string `json:"truncate,omitempty"`
 }
 
 // Defined reports whether a leaf presents itself through TML.
@@ -124,14 +139,21 @@ func repeats(n *xnode) bool {
 }
 
 func buildTMLField(n *xnode) (TMLField, error) {
-	if err := checkAttrs(n, "name"); err != nil {
+	if err := checkAttrs(n, "name", "expr", "lines", "last", "truncate"); err != nil {
 		return TMLField{}, err
 	}
 	path, err := textOf(n)
 	if err != nil {
 		return TMLField{}, err
 	}
-	return TMLField{Name: strings.TrimSpace(n.Attr("name")), Path: strings.TrimSpace(path)}, nil
+	return TMLField{
+		Name:     strings.TrimSpace(n.Attr("name")),
+		Path:     strings.TrimSpace(path),
+		Expr:     n.Attr("expr"),
+		Lines:    n.Attr("lines") == "true",
+		Last:     strings.TrimSpace(n.Attr("last")),
+		Truncate: strings.TrimSpace(n.Attr("truncate")),
+	}, nil
 }
 
 func validateTML(t *TML, where string) error {
@@ -261,18 +283,133 @@ func tmlListValue(p TMLProp, parsed any, ctx map[string]any) (sema.Value, error)
 		return sema.Value{}, fmt.Errorf("%q is %T, and a repeated property needs a list", p.Over, found)
 	}
 	records := make([]map[string]sema.Value, 0, len(list))
-	for _, element := range list {
+	for i, element := range list {
 		record := make(map[string]sema.Value, len(p.Fields))
 		for _, f := range p.Fields {
-			path := f.Path
-			if strings.TrimSpace(path) == "" {
-				path = f.Name
+			value, err := tmlFieldValue(f, element, i, ctx)
+			if err != nil {
+				return sema.Value{}, fmt.Errorf("field %q: %w", f.Name, err)
 			}
-			record[f.Name] = tmlScalarValue(fields.LookupValue(element, path))
+			record[f.Name] = value
 		}
 		records = append(records, record)
 	}
 	return sema.RecordListValue(records), nil
+}
+
+// tmlFieldValue reads one part of one list element.
+func tmlFieldValue(f TMLField, element any, index int, ctx map[string]any) (sema.Value, error) {
+	raw := ""
+	if f.Expr != "" {
+		out, err := renderString(f.Expr, tmlExprData(element, index, ctx))
+		if err != nil {
+			return sema.Value{}, err
+		}
+		raw = out
+	} else {
+		path := f.Path
+		if strings.TrimSpace(path) == "" {
+			path = f.Name
+		}
+		found := fields.LookupValue(element, path)
+		if !f.Lines {
+			return tmlScalarValue(found), nil
+		}
+		raw = tmlScalar(found)
+	}
+	if !f.Lines {
+		return sema.StringValue(raw), nil
+	}
+	last, err := tmlCount(f.Last, "last", ctx)
+	if err != nil {
+		return sema.Value{}, err
+	}
+	truncate, err := tmlCount(f.Truncate, "truncate", ctx)
+	if err != nil {
+		return sema.Value{}, err
+	}
+	return tmlLines(raw, last, truncate), nil
+}
+
+// tmlCount renders a last= or truncate= template and reads the number out of
+// it. An empty value means no limit.
+func tmlCount(tmpl, attr string, ctx map[string]any) (int, error) {
+	if tmpl == "" {
+		return 0, nil
+	}
+	out, err := renderString(tmpl, ctx)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", attr, err)
+	}
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(out)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("%s wants a number, got %q", attr, out)
+	}
+	return n, nil
+}
+
+// tmlExprData is the data a field expr sees: the whole leaf context, the
+// element's own keys promoted to the top level, and the element's position. So
+// `.stage` is this element and `$.var.x` is still the run.
+func tmlExprData(element any, index int, ctx map[string]any) map[string]any {
+	data := make(map[string]any, len(ctx)+4)
+	for k, v := range ctx {
+		data[k] = v
+	}
+	data["item"] = element
+	data["index"] = index
+	// The element's own keys land last, so an element that already carries an
+	// `item` keeps it. A repeated step builds exactly that shape.
+	if m, ok := element.(map[string]any); ok {
+		for k, v := range m {
+			data[k] = v
+		}
+	}
+	return data
+}
+
+// tmlLines cuts one blob of output into the lines a card shows: the last few,
+// each clipped to the width the card can hold.
+func tmlLines(s string, last, truncate int) sema.Value {
+	split := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	if len(split) == 1 && strings.TrimSpace(split[0]) == "" {
+		split = nil
+	}
+	if last > 0 && len(split) > last {
+		split = split[len(split)-last:]
+	}
+	if truncate > 0 {
+		for i, line := range split {
+			split[i] = truncateCells(line, truncate)
+		}
+	}
+	return sema.ListValue(split)
+}
+
+// truncateCells clips a line to n display cells, ellipsis included. It counts
+// cells rather than bytes, because a wide rune costs two columns of the card.
+func truncateCells(s string, n int) string {
+	if fields.DisplayWidth(s) <= n {
+		return s
+	}
+	if n <= 1 {
+		return "…"
+	}
+	out := make([]rune, 0, n)
+	width := 0
+	for _, r := range s {
+		w := fields.DisplayWidth(string(r))
+		if width+w > n-1 {
+			break
+		}
+		out = append(out, r)
+		width += w
+	}
+	return string(out) + "…"
 }
 
 // tmlScalarValue renders one decoded JSON value as the string a component

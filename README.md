@@ -390,11 +390,24 @@ A `<prop>` fills one declared property, and it takes exactly one source:
 | `<prop name="stars" from="stargazers_count"/>` | One value out of the response body, or out of the leaf context. |
 | `<prop name="rows" over="services"><field name="id">id</field></prop>` | A list. Each `<field>` maps a path inside one element to one property of the item template. |
 
+A `<field>` inside a repeated prop takes more than a path:
+
+| Attribute | Effect |
+| --- | --- |
+| `expr="{{ ... }}"` | Compute the value. The element's own keys are promoted to the top level, `.item` and `.index` name the element and its position, and `$` reaches the whole run. |
+| `lines="true"` | Cut the value into a list of strings, which is the `string[]` property a data template walks with `<For>`. |
+| `last="4"` | Keep the last few of those lines. It is a template, so `last="{{ .flag.lines }}"` follows a flag. |
+| `truncate="88"` | Clip each line to that many display cells, ellipsis included. Also a template. |
+
+`lines` exists for a log. One field holds a blob of output. A card has room for the tail of it. TML does no wrapping of its own. A line wider than the card therefore wraps in Lip Gloss and pushes the card's border down a row. Clip it here, or give the component's `<Text>` an `overflow`.
+
 Every value crosses as text, and the component re-reads it as the type it declared. So an `int` property takes `3` and a `color` property takes `#d97706` without the config naming a type of its own. A component rejects a property it never declared. A data template rejects a field it never declared. So one name on one side and a different name on the other fails the run, rather than drawing a blank cell.
 
 `over=` reads the response body first and the whole context second, exactly as a `<fields>` projection does. That is how a step result reaches the screen: `over="result.releases"` is the list a `<step name="releases">` fetched.
 
 A screen needs a terminal. Piped, the leaf falls through to whatever else it declared, which is the raw body or a `<format>` view. `--as=<sink>` names a representation the user wants instead, so it wins and the leaf goes through `<fields>`. `--format=always` draws the screen anyway, at 80 by 24, which is how a screen is testable without a terminal. A leaf declares `<tml>` or `<fields>`, never both.
+
+A one-shot frame lays out in a tall viewport rather than the terminal's, because it prints into a terminal that scrolls. A board of cards is therefore never cut off at the last row. The blank rows under the content are trimmed. Under a watch the screen IS the height. The program owns it.
 
 On its own the leaf draws one frame and exits. With `--watch` it becomes a terminal program on the alternate screen: `q` or `esc` quits, `ctrl+c` quits with 130, and `r` refreshes now. A tick is one whole run of the leaf, the same as a watch frame. Focus, clicking and scrolling inside the component are NOT wired yet. A screen reads today. It does not answer.
 
@@ -542,6 +555,22 @@ Mix the two freely. A `<step><run>` can be a shell command while the leaf makes 
 - A non-zero step aborts the run with that exit code.
 - A `when` attribute is a Go-template predicate. It skips the step on a falsy render (empty, `false`, `0` or `no`), and `.result.<name>` then stays unset.
 - More than one command in a run prints `N executions` to stderr. Suppress that line with `--quiet` or `-q`.
+
+### One call per element: `<step over=>`
+
+A step with `over="result.builds"` runs once per element of that list. The element rides in the context as `.item`, and its position as `.index`. The step's own `entry` then names the part of it that says what to fetch.
+
+```xml
+<step name="detail" over="result.running.updates">
+	<entry>
+		<path>/updates/<value name="item.id"/></path>
+	</entry>
+</step>
+```
+
+`.result.detail` is then a list of `{"item": element, "result": response}`, in the source order. That pairing is the point: a screen that draws a card per build walks one list, rather than reaching across two of them by position. A repeated step is also how a list endpoint that carries no detail becomes one that does. Most CI and queue APIs take that shape.
+
+A failing element fails the whole step, with that element's exit code. A board missing one build reads as a shorter queue rather than as a broken run. The run stops instead.
 
 ## Legacy formats and views
 

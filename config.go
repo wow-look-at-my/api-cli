@@ -176,8 +176,14 @@ func (r *FormatRef) Defined() bool {
 // parsed as JSON if valid, and stored under `.result.<name>` for use in
 // subsequent steps and the leaf's own entry/command templates.
 type Step struct {
-	Name    string          `json:"name"`
-	When    string          `json:"when,omitempty"`
+	Name string `json:"name"`
+	When string `json:"when,omitempty"`
+	// Over repeats the step once per element of a list an earlier result
+	// holds. The step sees the element as `.item` and its position as
+	// `.index`, and the result is a list of {"item": element, "result":
+	// response} in the source order. So one screen can show a row per build
+	// AND what a second call says about each of them.
+	Over    string          `json:"over,omitempty"`
 	Entry   json.RawMessage `json:"entry,omitempty"`
 	Command *Cmd            `json:"command,omitempty"`
 	Request *Request        `json:"request,omitempty"`

@@ -1,0 +1,14 @@
+<?xml version="1.1" encoding="UTF-8"?>
+<Theme xmlns="urn:tml:v1" name="default">
+	<Token name="accent" light="#2563eb" dark="#60a5fa"/>
+	<Token name="dim" light="#6b7280" dark="#9ca3af"/>
+	<Token name="ok" light="#15803d" dark="#4ade80"/>
+	<Token name="bad" light="#b91c1c" dark="#f87171"/>
+
+	<Style name="card" border="rounded" borderColor="{theme.accent}" padding="0 1"/>
+	<Style name="title" bold="true" fg="{theme.accent}"/>
+	<Style name="muted" faint="true" fg="{theme.dim}"/>
+	<Style name="log" faint="true"/>
+	<Style name="ok" fg="{theme.ok}"/>
+	<Style name="bad" fg="{theme.bad}"/>
+</Theme>
