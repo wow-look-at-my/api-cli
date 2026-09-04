@@ -34,7 +34,7 @@ func startDownloadSession(c *cobra.Command) *downloadSession {
 	s := &downloadSession{settings: resolveDownloadSettings(c)}
 	q := sharedQueue(s.settings.Concurrency, s.settings.Retries)
 
-	isTTY, width := stdoutSize()
+	isTTY, width, _ := stdoutSize()
 	s.tty = isTTY
 	if !isTTY || s.settings.NoTUI {
 		errOut := execStderr
@@ -165,18 +165,21 @@ func mcpRunDownloads(dls []Download, data map[string]any) (string, bool) {
 // stdoutSize reports whether execStdout is a terminal and how wide it is. A
 // non-*os.File writer (a buffer in tests, a pipe in a shell) is never a
 // terminal, which is exactly the "piped to a file" case.
-func stdoutSize() (bool, int) {
+func stdoutSize() (bool, int, int) {
+	if ttyOverride != nil {
+		return true, ttyOverride.width, ttyOverride.height
+	}
 	f, ok := execStdout.(*os.File)
 	if !ok {
-		return false, 0
+		return false, 0, 0
 	}
 	fd := int(f.Fd())
 	if !term.IsTerminal(fd) {
-		return false, 0
+		return false, 0, 0
 	}
-	w, _, err := term.GetSize(fd)
-	if err != nil || w <= 0 {
-		return true, 80
+	w, h, err := term.GetSize(fd)
+	if err != nil || w <= 0 || h <= 0 {
+		return true, 80, 24
 	}
-	return true, w
+	return true, w, h
 }

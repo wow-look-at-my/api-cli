@@ -388,6 +388,77 @@ Feb 8, 2026  →  Sep 2, 2026   (7 months)
 
 The sample's `repo commits` command maps `commit.author.date` to a timeline in the same way. When the upstream JSON already carries keys named `label`, `date`, `start` and `end`, you can leave the `<fields>` block out. `... --as=timeline` then derives them directly.
 
+## Watch
+
+`--watch <interval>` re-runs the command on an interval. It repaints the output in place, like `watch(1)`. The value is a duration (`2s`, `500ms`) or a plain number of seconds (`2`). The floor is 100ms.
+
+```text
+$ ghr repo releases golang/go --watch 30s
+every 30s: ghr repo releases golang/go    13:45:07
+
+TAG        PUBLISHED     DOWNLOADS
+go1.25     Sep 2, 2026   184213
+go1.25rc1  Jun 10, 2026   12044
+```
+
+A frame is one whole run of the leaf: the steps, the entry, the request and the formatter. Nothing is cached between frames, so a `<var>`, a step result and the response are all fresh each time. The frame keeps the real terminal size. A `<fields>` table therefore stays a table under a watch, rather than falling back to the piped representation.
+
+The output of the leaf and its diagnostics both land in the frame. A failed run reports the failure in place. The watch then continues. Ctrl-C ends the watch, leaves the last frame on screen and exits 130. A frame taller than the terminal is clipped. The last row then says how many lines it dropped. Redirected output gets no repainting: the frames append, which makes `--watch 5s ... > log` a poll log.
+
+Two leaves refuse to repeat. A `<download>` leaf transfers a file one time. `--watch` on it is an error. A leaf with a `confirm` prompt needs `--yes`, because the prompt draws into the frame where nobody can answer it.
+
+## Screens: `<tml>`
+
+`<fields>` says what the records are, and the renderer picks a table or a list. A screen is the other shape of an answer: several numbers, a heading and one list, laid out at once. `<tml>` gives a leaf that shape. It names a component written in [TML](https://github.com/wow-look-at-my/tml), a declarative language for terminal layout. It then says which part of the response fills each of the component's properties.
+
+```xml
+<command name="dash" description="A repository on one screen.">
+	<arg name="repo" type="string" required="true"/>
+	<entry>
+		<path>/repos/<value name="arg.repo"/></path>
+	</entry>
+	<tml src="ui/repo.tml" dark="true">
+		<prop name="name" from="full_name"/>
+		<prop name="stars" from="stargazers_count"/>
+		<prop name="releases" over="result.releases">
+			<field name="tag">tag_name</field>
+			<field name="published">published_at</field>
+		</prop>
+	</tml>
+</command>
+```
+
+The component is an ordinary `.tml` file next to the config. `src` resolves against the config's own directory, and an `<Import>` inside it resolves against the component's directory.
+
+A `<prop>` fills one declared property, and it takes exactly one source:
+
+| Form | Value |
+| --- | --- |
+| `<prop name="title">Deployments</prop>` | The element's text, rendered as a template like any other content. |
+| `<prop name="stars" from="stargazers_count"/>` | One value out of the response body, or out of the leaf context. |
+| `<prop name="rows" over="services"><field name="id">id</field></prop>` | A list. Each `<field>` maps a path inside one element to one property of the item template. |
+
+A `<field>` inside a repeated prop takes more than a path:
+
+| Attribute | Effect |
+| --- | --- |
+| `expr="{{ ... }}"` | Compute the value. The element's own keys are promoted to the top level, `.item` and `.index` name the element and its position, and `$` reaches the whole run. |
+| `lines="true"` | Cut the value into a list of strings, which is the `string[]` property a data template walks with `<For>`. |
+| `last="4"` | Keep the last few of those lines. It is a template, so `last="{{ .flag.lines }}"` follows a flag. |
+| `truncate="88"` | Clip each line to that many display cells, ellipsis included. Also a template. |
+
+`lines` exists for a log. One field holds a blob of output. A card has room for the tail of it. TML does no wrapping of its own. A line wider than the card therefore wraps in Lip Gloss and pushes the card's border down a row. Clip it here, or give the component's `<Text>` an `overflow`.
+
+Every value crosses as text, and the component re-reads it as the type it declared. So an `int` property takes `3` and a `color` property takes `#d97706` without the config naming a type of its own. A component rejects a property it never declared. A data template rejects a field it never declared. So one name on one side and a different name on the other fails the run, rather than drawing a blank cell.
+
+`over=` reads the response body first and the whole context second, exactly as a `<fields>` projection does. That is how a step result reaches the screen: `over="result.releases"` is the list a `<step name="releases">` fetched.
+
+A screen needs a terminal. Piped, the leaf falls through to whatever else it declared, which is the raw body or a `<format>` view. `--as=<sink>` names a representation the user wants instead, so it wins and the leaf goes through `<fields>`. `--format=always` draws the screen anyway, at 80 by 24, which is how a screen is testable without a terminal. A leaf declares `<tml>` or `<fields>`, never both.
+
+A one-shot frame lays out in a tall viewport rather than the terminal's, because it prints into a terminal that scrolls. A board of cards is therefore never cut off at the last row. The blank rows under the content are trimmed. Under a watch the screen IS the height. The program owns it.
+
+On its own the leaf draws one frame and exits. With `--watch` it becomes a terminal program on the alternate screen: `q` or `esc` quits, `ctrl+c` quits with 130, and `r` refreshes now. A tick is one whole run of the leaf, the same as a watch frame. Focus, clicking and scrolling inside the component are NOT wired yet. A screen reads today. It does not answer.
+
 ## Examples
 
 ### Wrap a REST API
@@ -562,6 +633,22 @@ Mix the two freely. A `<step><run>` can be a shell command while the leaf makes 
 - More than one command in a run prints `N executions` to stderr. Suppress that line with `--quiet` or `-q`.
 - A step's `when` is evaluated **before** the step renders anything. A step that must not run therefore cannot fail on a value it never had.
 - `<preconditions>` run before the first step, so `.result` is empty there. A precondition that reads it is a load error, not a surprise at run time. Put the check in a `<step when=>` instead.
+
+### One call per element: `<step over=>`
+
+A step with `over="result.builds"` runs once per element of that list. The element rides in the context as `.item`, and its position as `.index`. The step's own `entry` then names the part of it that says what to fetch.
+
+```xml
+<step name="detail" over="result.running.updates">
+	<entry>
+		<path>/updates/<value name="item.id"/></path>
+	</entry>
+</step>
+```
+
+`.result.detail` is then a list of `{"item": element, "result": response}`, in the source order. That pairing is the point: a screen that draws a card per build walks one list, rather than reaching across two of them by position. A repeated step is also how a list endpoint that carries no detail becomes one that does. Most CI and queue APIs take that shape.
+
+A failing element fails the whole step, with that element's exit code. A board missing one build reads as a shorter queue rather than as a broken run. The run stops instead.
 
 ## Legacy formats and views
 
@@ -741,6 +828,7 @@ One predicate covers both cases. `{{ .arg.id }}` is truthy when the arg is prese
 | `--format <mode>` |       | `auto`  | `raw` / `auto` / `always`. |
 | `--as <sink>`     |       |         | Force a `<fields>` representation: `table|list|lines|raw|json|markdown|csv|timeline`. |
 | `--view <name>`   |       |         | Pick a named legacy view, bypassing predicate selection. |
+| `--watch <every>` |       |         | Re-run on an interval and repaint in place: `2s`, `500ms`, or seconds (`2`). See [Watch](#watch). |
 | `--var KEY=VALUE` |       |         | Set an env var before evaluation (so `{{.env.KEY}}` sees it). Repeatable. |
 | `--concurrency <n>` |     | `4`     | Parallel downloads. See [Downloads](#downloads). |
 | `--download-dir <path>` | | `.`     | Base directory for `<download>` destinations. |

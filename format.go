@@ -14,6 +14,11 @@ import (
 // to streaming and skips the format step. 32 MiB.
 const defaultFormatCap = 32 << 20
 
+// tmlPageHeight is the viewport a one-shot <tml> frame lays out in. It is a
+// page the terminal scrolls, not a screen, so it is tall enough that a board of
+// cards is never cut off. The blank rows under the content are trimmed.
+const tmlPageHeight = 1000
+
 // userVerdict is the user-side decision about formatting. The author-side is
 // computed separately by rendering format.When; output is formatted iff both
 // sides agree.
@@ -70,9 +75,20 @@ func userVerdictFromFlags(c *cobra.Command) userVerdict {
 	return userYes
 }
 
+// termSize is a terminal's dimensions.
+type termSize struct{ width, height int }
+
+// ttyOverride answers the terminal probes while a display captures the output
+// on its way to the screen. A watch frame lands in a buffer, and the buffer is
+// not a terminal, but the frame the user reads is on one.
+var ttyOverride *termSize
+
 // stdoutTTY reports whether execStdout is a terminal. Non-*os.File writers
 // (e.g. bytes.Buffer in tests) return false — exactly what tests want.
 func stdoutTTY() (bool, int) {
+	if ttyOverride != nil {
+		return true, ttyOverride.width
+	}
 	f, ok := execStdout.(*os.File)
 	if !ok {
 		return false, 0
@@ -207,7 +223,7 @@ func selectView(views []View, ctx map[string]any, viewFlag string, cache map[pre
 // Formatting is suppressed when the user opts out (--no-format / --format=raw /
 // NO_FORMAT). A <fields> declaration otherwise always formats. A legacy
 // <format> additionally requires its author `when` predicate to be truthy.
-func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, blocks []FieldsBlock, formatRef *FormatRef, formats map[string]*Format) (int, error) {
+func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, blocks []FieldsBlock, view *TML, formatRef *FormatRef, formats map[string]*Format) (int, error) {
 	verdict := userVerdictFromFlags(c)
 
 	streamRaw := func() int {
@@ -224,10 +240,36 @@ func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin strin
 
 	// --as forces a representation even when the leaf declared no <fields>:
 	// project nothing and let the data shape (or the chosen sink) decide.
-	if len(blocks) == 0 {
-		if sink, _ := c.Root().PersistentFlags().GetString("as"); strings.TrimSpace(sink) != "" {
-			blocks = []FieldsBlock{{Fields: &Fields{}}}
+	sink, _ := c.Root().PersistentFlags().GetString("as")
+	sink = strings.TrimSpace(sink)
+	if len(blocks) == 0 && sink != "" {
+		blocks = []FieldsBlock{{Fields: &Fields{}}}
+	}
+
+	// A component draws a screen, so it applies only where there is one. Piped,
+	// the leaf falls through to whatever else it declared, and --as names a
+	// representation the user wants instead of the screen.
+	if view.Defined() && sink == "" {
+		isTTY, width, height := stdoutSize()
+		if verdict == userAlways {
+			isTTY = true
 		}
+		if isTTY {
+			if width <= 0 || height <= 0 {
+				width, height = 80, 24
+			}
+			// One frame prints into a scrolling terminal, so it is a page
+			// rather than a screen: laying it out at the terminal's height
+			// would cut the content off at the bottom row and say nothing
+			// about it. Under a watch (ttyOverride) the screen IS the height,
+			// and the program owns it.
+			if ttyOverride == nil {
+				height = tmlPageHeight
+			}
+			logVerbose("format: rendering <tml> %s at %dx%d", view.Src, width, height)
+			return runTMLFormatted(cmdTmpl, request, cwd, stdin, data, view, width, height), nil
+		}
+		logVerbose("format: <tml> needs a terminal, falling through")
 	}
 
 	if len(blocks) > 0 {
@@ -337,6 +379,37 @@ func runFieldsFormatted(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, s
 	return 0
 }
 
+// runTMLFormatted captures the leaf's JSON output and draws one frame of the
+// component. A watch turns this into a terminal program (tmlrun.go); on its own
+// it is one frame on stdout, which is what makes the same declaration testable
+// without a terminal.
+func runTMLFormatted(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, view *TML, width, height int) int {
+	out, overflowed, code := captureRun(cmdTmpl, request, cwd, stdin, data)
+	if overflowed {
+		logVerbose("format: output overflowed cap, streamed raw")
+		return code
+	}
+	if code != 0 {
+		if out != "" {
+			fmt.Fprint(execStderr, out)
+		}
+		return code
+	}
+
+	parsed := parseInput(out, "json")
+	ctx := formatContext(parsed, data, true, width)
+	frame, err := renderTMLFrame(view, configDir, parsed, ctx, width, height)
+	if err != nil {
+		fmt.Fprintln(execStderr, "error:", err)
+		return 1
+	}
+	// A frame fills the viewport, and the blank rows under the content are the
+	// screen a program owns. Printed once into a scrolling terminal they are
+	// just a gap before the prompt, so this path stops at the last drawn row.
+	fmt.Fprintln(execStdout, strings.TrimRight(frame, " \n"))
+	return 0
+}
+
 // renderFieldsBlocks renders each block whose when= predicate holds, in order,
 // and joins the results. matched is false when no block applies, which leaves
 // the caller to print the body as it arrived.
@@ -375,6 +448,7 @@ func joinBlocks(parts []string) string {
 		}
 	}
 	return strings.Join(parts, "")
+
 }
 
 // runFormatted executes the leaf via captureRun and renders the captured output

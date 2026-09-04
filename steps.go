@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"io"
+
+	"github.com/wow-look-at-my/api-cli/fields"
 )
 
 // stepCapture runs one step's command and returns its stdout and exit code.
@@ -55,42 +57,17 @@ func runSteps(steps []Step, data map[string]any, results map[string]any, cmdTmpl
 			return oc, fmt.Errorf("step %q: no command or request available", step.Name)
 		}
 
-		stepEntry, err := renderEntry(step.Entry, data)
+		if step.Over != "" {
+			done, err := runStepOver(step, data, results, stepCmd, stepReq, cwdTmpl, stdinTmpl, capture, errOut, &oc)
+			if err != nil || !done {
+				return oc, err
+			}
+			continue
+		}
+
+		out, code, err := runStepOnce(step, data, stepCmd, stepReq, cwdTmpl, stdinTmpl, capture, errOut)
 		if err != nil {
-			return oc, fmt.Errorf("step %q: render entry: %w", step.Name, err)
-		}
-		if stepEntry == nil {
-			stepEntry = map[string]any{}
-		}
-		data["entry"] = stepEntry
-		logDebug("step %q: entry: %s", step.Name, jsonCompact(stepEntry))
-
-		var out string
-		var code int
-		if stepReq.Defined() {
-			logVerbose("step %q: requesting", step.Name)
-			out, code = runRequest(stepReq, data, errOut)
-		} else {
-			stepCwdTmpl := cwdTmpl
-			if step.Cwd != "" {
-				stepCwdTmpl = step.Cwd
-			}
-			stepCwd, err := renderCwd(stepCwdTmpl, data)
-			if err != nil {
-				return oc, fmt.Errorf("step %q: render cwd: %w", step.Name, err)
-			}
-
-			stepStdinTmpl := stdinTmpl
-			if step.Stdin != "" {
-				stepStdinTmpl = step.Stdin
-			}
-			stepStdin, err := renderStdin(stepStdinTmpl, data)
-			if err != nil {
-				return oc, fmt.Errorf("step %q: render stdin: %w", step.Name, err)
-			}
-
-			logVerbose("step %q: executing", step.Name)
-			out, code = capture(stepCmd, stepCwd, stepStdin, data)
+			return oc, err
 		}
 
 		oc.executions++
@@ -103,4 +80,101 @@ func runSteps(steps []Step, data map[string]any, results map[string]any, cmdTmpl
 		results[step.Name] = parseResult(out)
 	}
 	return oc, nil
+}
+
+// runStepOnce renders a step's entry and runs it one time.
+func runStepOnce(step Step, data map[string]any, stepCmd *Cmd, stepReq *Request, cwdTmpl, stdinTmpl string, capture stepCapture, errOut io.Writer) (string, int, error) {
+	stepEntry, err := renderEntry(step.Entry, data)
+	if err != nil {
+		return "", 0, fmt.Errorf("step %q: render entry: %w", step.Name, err)
+	}
+	if stepEntry == nil {
+		stepEntry = map[string]any{}
+	}
+	data["entry"] = stepEntry
+	logDebug("step %q: entry: %s", step.Name, jsonCompact(stepEntry))
+
+	if stepReq.Defined() {
+		logVerbose("step %q: requesting", step.Name)
+		out, code := runRequest(stepReq, data, errOut)
+		return out, code, nil
+	}
+
+	stepCwdTmpl := cwdTmpl
+	if step.Cwd != "" {
+		stepCwdTmpl = step.Cwd
+	}
+	stepCwd, err := renderCwd(stepCwdTmpl, data)
+	if err != nil {
+		return "", 0, fmt.Errorf("step %q: render cwd: %w", step.Name, err)
+	}
+
+	stepStdinTmpl := stdinTmpl
+	if step.Stdin != "" {
+		stepStdinTmpl = step.Stdin
+	}
+	stepStdin, err := renderStdin(stepStdinTmpl, data)
+	if err != nil {
+		return "", 0, fmt.Errorf("step %q: render stdin: %w", step.Name, err)
+	}
+
+	logVerbose("step %q: executing", step.Name)
+	out, code := capture(stepCmd, stepCwd, stepStdin, data)
+	return out, code, nil
+}
+
+// runStepOver repeats a step once per element of the list at step.Over. The
+// element rides in the data context as `.item`, so the step's own entry names
+// the part of it that says what to fetch.
+//
+// The result pairs each element with its own response. A screen that draws one
+// card per build then walks ONE list, rather than reaching across two by
+// position, which is the shape a data template can actually take.
+//
+// A failing element fails the whole step: half a screen of builds, with the
+// rest silently missing, reads as a shorter queue rather than as a broken run.
+func runStepOver(step Step, data map[string]any, results map[string]any, stepCmd *Cmd, stepReq *Request, cwdTmpl, stdinTmpl string, capture stepCapture, errOut io.Writer, oc *stepOutcome) (bool, error) {
+	found, ok := fields.Lookup(data, step.Over)
+	if !ok {
+		return false, fmt.Errorf("step %q: over %q is not in the context", step.Name, step.Over)
+	}
+	list, ok := found.([]any)
+	if !ok {
+		return false, fmt.Errorf("step %q: over %q is %T, and a repeated step needs a list", step.Name, step.Over, found)
+	}
+	logVerbose("step %q: repeating over %d element(s) of %q", step.Name, len(list), step.Over)
+
+	prevItem, hadItem := data["item"]
+	prevIndex, hadIndex := data["index"]
+	defer func() {
+		restore(data, "item", prevItem, hadItem)
+		restore(data, "index", prevIndex, hadIndex)
+	}()
+
+	collected := make([]any, 0, len(list))
+	for i, element := range list {
+		data["item"], data["index"] = element, i
+		out, code, err := runStepOnce(step, data, stepCmd, stepReq, cwdTmpl, stdinTmpl, capture, errOut)
+		if err != nil {
+			return false, err
+		}
+		oc.executions++
+		logDebugBlock(fmt.Sprintf("step %q[%d]: stdout", step.Name, i), out)
+		if code != 0 {
+			oc.output, oc.code = out, code
+			return false, nil
+		}
+		collected = append(collected, map[string]any{"item": element, "result": parseResult(out)})
+	}
+	results[step.Name] = collected
+	return true, nil
+}
+
+// restore puts a context key back the way the step found it.
+func restore(data map[string]any, key string, value any, had bool) {
+	if had {
+		data[key] = value
+		return
+	}
+	delete(data, key)
 }

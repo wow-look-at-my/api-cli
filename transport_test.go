@@ -183,9 +183,11 @@ func TestTransport_RequestOptsOutToBuiltinClient(t *testing.T) {
 // Nothing can select a transport at runtime: how a request reaches its
 // endpoint is fixed by the config.
 func TestTransport_NoRuntimeOverrideFlag(t *testing.T) {
-	// newRoot publishes the registry into package state, so this test owns that
-	// state while it runs and puts it back after. Without this a default
-	// transport leaks into every later request test.
+	// newRoot PUBLISHES this config's registry process-wide, and this one holds
+	// a default transport. Left installed, it takes over every request the rest
+	// of the suite makes, which lands as a body of "x" in a test that never
+	// asked for a transport at all. This test owns that registry state while it
+	// runs and puts it back after.
 	t.Serial()
 	prevTransports, prevDefault := transports, defaultTransport
 	t.Cleanup(func() { transports, defaultTransport = prevTransports, prevDefault })

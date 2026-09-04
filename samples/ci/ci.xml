@@ -1,0 +1,77 @@
+<?xml version="1.1" encoding="UTF-8"?>
+<!-- A board of the builds running right now, over Komodo's read API
+     (https://github.com/PazerOP/komodo). Komodo posts to /read/<Type> with the
+     request's params as the body, and it takes an API key pair in headers.
+
+     KOMODO_URL, KOMODO_API_KEY and KOMODO_API_SECRET configure it.
+
+         ci builds              one frame
+         ci builds (watch 5s)   a board that keeps itself current -->
+<config name="ci">
+	<description>A board of the builds running right now.</description>
+
+	<vars>
+		<var name="url"><value name="env.KOMODO_URL" default="http://localhost:9120"/></var>
+	</vars>
+
+	<run>
+		<request method="POST">
+			<url><value name="var.url"/>/read/<value name="entry.type"/></url>
+			<header name="content-type">application/json</header>
+			<header name="x-api-key"><value name="env.KOMODO_API_KEY"/></header>
+			<header name="x-api-secret"><value name="env.KOMODO_API_SECRET"/></header>
+			<body><value name="entry.params"/></body>
+		</request>
+	</run>
+
+	<command name="builds" description="The builds running right now, with the tail of each log.">
+		<flag name="lines" short="l" type="int" default="4" description="Log lines to show per build."/>
+		<flag name="width" short="w" type="int" default="96" description="Clip a log line to this many cells."/>
+
+		<steps>
+			<!-- Every RunBuild update that has not finished. -->
+			<step name="running">
+				<entry>
+					<type>ListUpdates</type>
+					<params>{"query":{"operation":"RunBuild","status":"InProgress"}}</params>
+				</entry>
+			</step>
+			<!-- One call per build, for the log it has produced so far. The
+			     result pairs each update with its own response, so the screen
+			     walks one list rather than two by position. -->
+			<step name="detail" over="result.running.updates">
+				<entry>
+					<type>GetUpdate</type>
+					<params>{"id":<value name="item.id" as="toJson"/>}</params>
+				</entry>
+			</step>
+		</steps>
+
+		<!-- The board reads the steps, so the leaf's own call asks for the
+		     configured builds. It is what a card falls back to when an update
+		     carries no name of its own. -->
+		<entry>
+			<type>ListBuilds</type>
+			<params>{}</params>
+		</entry>
+
+		<tml src="ui/builds.tml" dark="true">
+			<prop name="heading">{{ len .result.detail }} building</prop>
+			<prop name="empty">no build is running</prop>
+			<prop name="builds" over="result.detail">
+				<field name="name">item.target.id</field>
+				<field name="status">item.status</field>
+				<field name="operator">item.username</field>
+				<field name="mark" expr='{{ if eq .item.status "InProgress" }}*{{ else }}.{{ end }}'/>
+				<field name="tone" expr="{{ if .item.success }}ok{{ else }}bad{{ end }}"/>
+				<field name="started" expr='{{ div .item.start_ts 1000 | int64 | date "15:04:05" }}'/>
+				<!-- Komodo's log is one entry per stage, and each entry holds a
+				     blob of output. Joined, tailed and clipped, it is the few
+				     lines a card has room for. -->
+				<field name="stage" expr="{{ with .result.logs }}{{ (index . (sub (len .) 1)).stage }}{{ end }}"/>
+				<field name="log" lines="true" last="{{ .flag.lines }}" truncate="{{ .flag.width }}"
+					expr="{{ range .result.logs }}{{ .stdout }}{{ end }}"/>
+			</prop>
+		</tml>
+	</command>
+</config>

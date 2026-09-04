@@ -89,6 +89,7 @@ func newRoot(cfg *Config) *cobra.Command {
 	// transport went missing would otherwise fall back to the built-in client
 	// without saying so.
 	installTransports(cfg)
+	installConfigDir(cfg)
 	installDownloads(cfg)
 
 	root := &cobra.Command{
@@ -112,6 +113,7 @@ func newRoot(cfg *Config) *cobra.Command {
 	root.PersistentFlags().String("format", "auto", "Output formatting mode: raw|auto|always.")
 	root.PersistentFlags().String("view", "", "Select a named view from the active format (overrides selectors).")
 	root.PersistentFlags().String("as", "", "Force a <fields> representation: table|list|lines|raw|json|markdown|csv|timeline (default: auto).")
+	root.PersistentFlags().String("watch", "", "Re-run the command on an interval and repaint in place: a duration (2s) or seconds (2).")
 	root.PersistentFlags().Int("concurrency", defaultConcurrency, "Parallel downloads for <download> hand-offs.")
 	root.PersistentFlags().String("download-dir", ".", "Base directory for <download> destinations.")
 	root.PersistentFlags().Bool("no-tui", false, "Disable the download TUI; report progress as plain lines.")

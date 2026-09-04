@@ -374,6 +374,12 @@ func addCommandChild(c *Command, child *xnode) error {
 			return err
 		}
 		c.Fields = append(c.Fields, f)
+	case "tml":
+		t, err := buildTML(child)
+		if err != nil {
+			return err
+		}
+		c.TML = t
 	case "format":
 		ref, err := buildFormatRef(child)
 		if err != nil {
@@ -457,10 +463,10 @@ func buildFlag(n *xnode) (Flag, error) {
 }
 
 func buildStep(n *xnode) (Step, error) {
-	if err := checkAttrs(n, "name", "when"); err != nil {
+	if err := checkAttrs(n, "name", "when", "over"); err != nil {
 		return Step{}, err
 	}
-	s := Step{Name: n.Attr("name"), When: n.Attr("when")}
+	s := Step{Name: n.Attr("name"), When: n.Attr("when"), Over: strings.TrimSpace(n.Attr("over"))}
 	for _, child := range n.Children() {
 		switch child.Name() {
 		case "run":
