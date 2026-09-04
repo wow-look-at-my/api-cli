@@ -299,4 +299,44 @@
 		</download>
 	</command>
 
+	<!--
+		The whole pipeline in one invocation: fan out over the arguments, poll
+		each listing until it is ready, queue every part of every album into the
+		one queue, and join each album's parts back into one file.
+
+		jsonplaceholder has no job endpoint, so the poll here settles on the
+		first answer. Against a real async API, until= is what repeats the call
+		while the job reports "pending".
+	-->
+	<command name="pull-albums" description="Fetch each album's photo records and join them into one file per album.">
+		<arg name="albums" type="int" variadic="true" required="true" description="Album ids."/>
+		<steps>
+			<!-- One call per argument. .result.listings pairs each album with
+			     its own response. -->
+			<step name="listings" over="arg.albums" until="{{ gt (len .body) 0 }}" interval="500ms" attempts="20">
+				<run>
+					<request>
+						<url><value name="var.base_url"/>/photos</url>
+						<query>
+							<param name="albumId"><value name="item"/></param>
+							<param name="_limit">3</param>
+						</query>
+					</request>
+				</run>
+			</step>
+		</steps>
+		<!--
+			collect flattens the fan-out: every photo of every album as one
+			list. The parts land in the run's own scratch directory, and
+			cleanup= removes them once the album's file is written.
+		-->
+		<download over="{{ toJson (collect &quot;result&quot; .result.listings) }}"
+			group="{{ .albumId }}" order="{{ .id }}">
+			<url><value name="var.base_url"/>/photos/<value name="id"/></url>
+			<to><value name="run.tmpdir"/>/<value name="albumId"/>/<value name="id"/>.part</to>
+			<join to="album-{{ .albumId }}.json" cleanup="true"/>
+			<header name="Accept">application/json</header>
+		</download>
+	</command>
+
 </config>

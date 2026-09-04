@@ -463,10 +463,23 @@ func buildFlag(n *xnode) (Flag, error) {
 }
 
 func buildStep(n *xnode) (Step, error) {
-	if err := checkAttrs(n, "name", "when", "over"); err != nil {
+	if err := checkAttrs(n, "name", "when", "over", "until", "interval", "attempts"); err != nil {
 		return Step{}, err
 	}
-	s := Step{Name: n.Attr("name"), When: n.Attr("when"), Over: strings.TrimSpace(n.Attr("over"))}
+	s := Step{
+		Name:     n.Attr("name"),
+		When:     n.Attr("when"),
+		Over:     strings.TrimSpace(n.Attr("over")),
+		Until:    n.Attr("until"),
+		Interval: strings.TrimSpace(n.Attr("interval")),
+	}
+	if raw := strings.TrimSpace(n.Attr("attempts")); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil {
+			return Step{}, fmt.Errorf("<step %q>: attempts=%q must be an integer", s.Name, raw)
+		}
+		s.Attempts = v
+	}
 	for _, child := range n.Children() {
 		switch child.Name() {
 		case "run":

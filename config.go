@@ -190,12 +190,18 @@ type Step struct {
 	// `.index`, and the result is a list of {"item": element, "result":
 	// response} in the source order. So one screen can show a row per build
 	// AND what a second call says about each of them.
-	Over    string          `json:"over,omitempty"`
-	Entry   json.RawMessage `json:"entry,omitempty"`
-	Command *Cmd            `json:"command,omitempty"`
-	Request *Request        `json:"request,omitempty"`
-	Cwd     string          `json:"cwd,omitempty"`
-	Stdin   string          `json:"stdin,omitempty"`
+	Over string `json:"over,omitempty"`
+	// Until makes the step poll: it repeats its own run until this predicate
+	// renders truthy. The predicate sees the last body promoted to the top
+	// level, so an async job's `status` field is `.status`.
+	Until    string          `json:"until,omitempty"`
+	Interval string          `json:"interval,omitempty"`
+	Attempts int             `json:"attempts,omitempty"`
+	Entry    json.RawMessage `json:"entry,omitempty"`
+	Command  *Cmd            `json:"command,omitempty"`
+	Request  *Request        `json:"request,omitempty"`
+	Cwd      string          `json:"cwd,omitempty"`
+	Stdin    string          `json:"stdin,omitempty"`
 }
 
 // Arg is a positional argument. Type is "string" or "int" (default string).
@@ -708,6 +714,9 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 			return fmt.Errorf("%s: a <run> is either a command or a request, not both", sw)
 		}
 		if err := validateRequest(s.Request, sw+".request", transports); err != nil {
+			return err
+		}
+		if err := validatePoll(s, sw); err != nil {
 			return err
 		}
 	}
