@@ -754,7 +754,7 @@ Each row is something the grammar does not do, and the shape to write instead. E
 
 ## Config schema
 
-An XSD reference for the grammar lives at [`api.schema.xsd`](./api.schema.xsd), and `api-cli docs schema` prints it. It documents each element and attribute, for editor tooling. It is a guide, and not the enforcement point. The loader is authoritative, because api-cli validates a config by loading it. A strict XSD validator also cannot express the recursive `<command>` grammar.
+The grammar is an XSD at [`api.schema.xsd`](./api.schema.xsd), and `api-cli docs schema` prints it. Check a config against it with [xml-validator](https://github.com/wow-look-at-my/xml-validator): `xml-validator --schema api.schema.xsd ./api.xml`. CI checks every config this repo ships that way. The schema lives in [api-cli-spec](https://github.com/wow-look-at-my/api-cli-spec), which proves it against documents that must validate and documents that must be rejected. The file here is a copy, and CI fails when the two drift apart. The loader stays authoritative at run time. It enforces the rules a schema cannot state, such as the requirement that a leaf has a run somewhere up its ancestor chain. api-cli-spec lists all of those rules.
 
 ### Top-level elements
 
