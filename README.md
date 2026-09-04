@@ -214,7 +214,7 @@ A step can work a URL out: parse it from a listing, sign it, or follow a redirec
 
 On a terminal this draws a block of slots at the bottom of the screen. An in-flight transfer holds one slot, and repaints over its own previous line with its percentage, sizes, rate and ETA. An aggregate `TOTAL` row closes the block.
 
-A transfer that finishes gives up its slot and emits one `downloaded` line above the block. The output of the steps goes to the same place. Those lines are written one time and scroll away into the terminal's own scrollback, so a long run reads as the list of what landed.
+A transfer that finishes gives up its slot and emits one `downloaded` line above the block. The output of the steps goes to the same place. Those lines are written one time and scroll away into the terminal's own scrollback. A long run therefore reads as the list of what landed.
 
 ```
 downloaded CHUNK_01.data.message (76.5 MiB)
@@ -228,7 +228,7 @@ downloads: 3 active, 9 queued, 2 done
 
 The block comes off the screen when the queue drains, and the run's summary follows the emitted lines.
 
-A start is never announced. The slot is what says a transfer is running, so a separate `downloading` line only doubles the volume.
+A start is never announced. The slot already says that a transfer runs. A separate `downloading` line only doubles the volume.
 
 In a pipe there is no display. The `downloaded` lines stay on stderr, and the destination paths go to stdout, one per line, for whatever reads them next.
 
