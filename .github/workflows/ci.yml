@@ -35,16 +35,13 @@ jobs:
         with:
           files: '**/*.xml **/*.xsd **/*.tml'
 
-      # Every shipped config is checked against the grammar it claims to speak.
-      # A .tml file speaks a different language, so it stays out of this list.
+      # Each shipped config, against the grammar it claims to speak. A .tml file speaks another, so it is not here.
       - uses: wow-look-at-my/xml-validator@master
         with:
           schema: api.schema.xsd
           files: 'api.example.xml samples/github/github.xml samples/ci/ci.xml'
 
-      # api.schema.xsd is a copy. wow-look-at-my/api-cli-spec owns the schema
-      # and proves it against a fixture corpus, and `api-cli docs schema`
-      # prints what this repo embeds. The two must not drift apart.
+      # api.schema.xsd is a copy of the schema wow-look-at-my/api-cli-spec owns and proves against a fixture corpus.
       - name: Check api.schema.xsd against the canonical schema in api-cli-spec
         uses: wow-look-at-my/actions@typescript#latest
         with:
