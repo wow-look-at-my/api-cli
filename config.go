@@ -57,6 +57,12 @@ type Config struct {
 // The rendered string is fed to the child process's stdin. When empty/unset,
 // the child inherits the parent process's stdin.
 //
+// `runnable` makes a node with subcommands execute in its own right, which is
+// how one name is both `tool [id]` and `tool sub`. Cobra reads the first
+// positional as a subcommand name, so every arg of a runnable node needs a
+// `pattern` that matches none of its subcommand names. `--` ends the subcommand
+// lookup, for a value that starts with a dash.
+//
 // `steps` run sequentially before the leaf's own run. A step runs a command or
 // a request — the same fork as `<run>` — and defaults to the leaf's effective
 // run when it declares neither. Each step's output is captured and parsed as
@@ -66,6 +72,7 @@ type Command struct {
 	Name          string          `json:"name"`
 	Description   string          `json:"description,omitempty"`
 	Passthrough   bool            `json:"passthrough,omitempty"`
+	Runnable      bool            `json:"runnable,omitempty"`
 	Args          []Arg           `json:"args,omitempty"`
 	Flags         []Flag          `json:"flags,omitempty"`
 	Vars          map[string]any  `json:"vars,omitempty"`
@@ -78,7 +85,7 @@ type Command struct {
 	Preconditions []string        `json:"preconditions,omitempty"`
 	Confirm       string          `json:"confirm,omitempty"`
 	Format        *FormatRef      `json:"format,omitempty"`
-	Fields        *Fields         `json:"fields,omitempty"`
+	Fields        []FieldsBlock   `json:"fields,omitempty"`
 	TML           *TML            `json:"tml,omitempty"`
 	Downloads     []Download      `json:"downloads,omitempty"`
 	Commands      []Command       `json:"commands,omitempty"`
@@ -197,11 +204,16 @@ type Step struct {
 // []string (or []int) and must be the last entry in the args list. A required
 // variadic arg requires at least one value; an optional variadic arg accepts
 // zero or more.
+// Pattern is a regular expression every supplied value must match. It is
+// validation on a leaf, and it is what makes a runnable parent unambiguous: the
+// loader rejects a pattern that matches one of the node's own subcommand names,
+// so a value cobra reads as an argument can never be a subcommand.
 type Arg struct {
 	Name        string `json:"name"`
 	Type        string `json:"type,omitempty"`
 	Required    bool   `json:"required,omitempty"`
 	Variadic    bool   `json:"variadic,omitempty"`
+	Pattern     string `json:"pattern,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
@@ -301,6 +313,12 @@ type Request struct {
 	Body      string    `json:"body,omitempty"`      // template; empty means no body
 	Response  *Response `json:"response,omitempty"`  // nil means stream the raw body
 	Transport string    `json:"transport,omitempty"` // registry name; empty means the config default
+
+	// AllowStatus lists the 4xx/5xx statuses that are an answer rather than a
+	// failure ("404" on a lookup that may miss). The body of one of these
+	// reaches the caller with exit code 0, so a step stores it on
+	// .result.<name> and a later step branches on what it holds.
+	AllowStatus []int `json:"allowStatus,omitempty"`
 }
 
 // Transport is a user-supplied program that performs requests in place of the
@@ -362,6 +380,17 @@ type (
 	Fields = fields.Fields
 	Field  = fields.Field
 )
+
+// FieldsBlock is one <fields> declaration on a leaf. When is a template
+// predicate over the format context (.data, .tty, .width, .arg, .flag, .result,
+// ...); an empty When always renders. A leaf may declare several blocks, and
+// every block whose predicate holds renders, in document order. That is how one
+// leaf presents a list for a no-id call and a detail view for an id, and how a
+// dashboard puts a second table over .result.<step> under the first one.
+type FieldsBlock struct {
+	When   string  `json:"when,omitempty"`
+	Fields *Fields `json:"fields"`
+}
 
 // reservedCommandNames are the names cobra owns. A config cannot declare one.
 var reservedCommandNames = set.Of("help", "completion", "__complete", "docs")
@@ -483,6 +512,9 @@ func validateRequest(r *Request, where string, transports map[string]*Transport)
 	if _, ok := transports[name]; !ok {
 		return fmt.Errorf("%s: references unknown transport %q", where, name)
 	}
+	if len(r.AllowStatus) > 0 {
+		return fmt.Errorf("%s: allow-status needs the built-in client, and transport %q reports an exit code rather than a status; write transport=%q on this request, or let the program fail and branch in a <step when=>", where, name, builtinTransportName)
+	}
 	return nil
 }
 
@@ -537,6 +569,9 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	}
 	if c.Passthrough && len(c.Commands) > 0 {
 		return fmt.Errorf("%s: passthrough is only allowed on leaves", where)
+	}
+	if err := validateRunnable(c, where); err != nil {
+		return err
 	}
 
 	argNames := set.New[string]()
@@ -602,17 +637,26 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		}
 	}
 
+	// A precondition gates the leaf before any step runs, so .result holds
+	// nothing there. A config that reads it is asking for data that does not
+	// exist yet, and the template error it gets says nothing about why.
+	for i, p := range c.Preconditions {
+		if strings.Contains(p, ".result") {
+			return fmt.Errorf("%s.preconditions[%d]: a precondition runs before <steps>, so .result is empty; move the check into a <step when=> or into the leaf", where, i)
+		}
+	}
+
 	if c.Command.Defined() && c.Request.Defined() {
 		return fmt.Errorf("%s: a <run> is either a command or a request, not both", where)
 	}
 	if err := validateRequest(c.Request, where+".request", transports); err != nil {
 		return err
 	}
-	if c.Fields != nil && c.Format.Defined() {
+	if len(c.Fields) > 0 && c.Format.Defined() {
 		return fmt.Errorf("%s: use either <fields> or <format>, not both", where)
 	}
-	if c.Fields != nil && len(c.Commands) > 0 {
-		return fmt.Errorf("%s: <fields> is only allowed on leaves (nodes with no subcommands)", where)
+	if len(c.Fields) > 0 && !c.executes() {
+		return fmt.Errorf("%s: <fields> needs a node that runs (a leaf, or a parent with runnable=)", where)
 	}
 
 	if err := validateDownloads(c, where, transports); err != nil {
@@ -633,23 +677,22 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 
 	haveRun := inheritedRun || c.Command.Defined() || c.Request.Defined()
 
-	// Leaf: must have something to do. A <download> leaf is that something —
+	// A node that runs must have something to do. A <download> is that something —
 	// the hand-off is the action, so it needs no run of its own.
-	if len(c.Commands) == 0 {
-		if !haveRun && len(c.Downloads) == 0 {
-			return fmt.Errorf("%s: leaf has no command/request/download and no ancestor defines one", where)
-		}
+	if c.executes() && !haveRun && len(c.Downloads) == 0 {
+		return fmt.Errorf("%s: %s has no command/request/download and no ancestor defines one", where, nodeKind(c))
 	}
 
-	// `entry` and `steps` only make sense on leaves.
-	if len(c.Entry) > 0 && len(c.Commands) > 0 {
-		return fmt.Errorf("%s: `entry` is only allowed on leaves (nodes with no subcommands)", where)
+	// `entry`, `steps` and `preconditions` belong to the run, so they need a
+	// node that has one.
+	if len(c.Entry) > 0 && !c.executes() {
+		return fmt.Errorf("%s: `entry` needs a node that runs (a leaf, or a parent with runnable=)", where)
 	}
-	if len(c.Steps) > 0 && len(c.Commands) > 0 {
-		return fmt.Errorf("%s: `steps` is only allowed on leaves (nodes with no subcommands)", where)
+	if len(c.Steps) > 0 && !c.executes() {
+		return fmt.Errorf("%s: `steps` needs a node that runs (a leaf, or a parent with runnable=)", where)
 	}
-	if len(c.Preconditions) > 0 && len(c.Commands) > 0 {
-		return fmt.Errorf("%s: `preconditions` is only allowed on leaves (nodes with no subcommands)", where)
+	if len(c.Preconditions) > 0 && !c.executes() {
+		return fmt.Errorf("%s: `preconditions` needs a node that runs (a leaf, or a parent with runnable=)", where)
 	}
 	stepNames := set.New[string]()
 	for i, s := range c.Steps {

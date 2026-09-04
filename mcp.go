@@ -187,7 +187,9 @@ func collectMCPLeaves(cmds []Command, inh mcpInherit) []mcpLeaf {
 		if c.Format.Defined() {
 			child.format = c.Format
 		}
-		if len(c.Commands) == 0 {
+		// A runnable parent is a tool of its own, next to the tools its children
+		// become. Its name is its own path, so the two never collide.
+		if c.executes() {
 			out = append(out, mcpLeaf{
 				name:      name,
 				node:      c,
@@ -199,9 +201,8 @@ func collectMCPLeaves(cmds []Command, inh mcpInherit) []mcpLeaf {
 				formatRef: child.format,
 				formats:   child.formats,
 			})
-		} else {
-			out = append(out, collectMCPLeaves(c.Commands, child)...)
 		}
+		out = append(out, collectMCPLeaves(c.Commands, child)...)
 	}
 	return out
 }

@@ -22,7 +22,7 @@ func TestIntegration_RequestFieldsTable(t *testing.T) {
 		Request: &Request{Method: "GET", URL: srv.URL + "/repos"},
 		Commands: []Command{{
 			Name:   "list",
-			Fields: &Fields{List: []Field{{Name: "login", Path: "login"}, {Name: "stars", Path: "stars"}}},
+			Fields: fieldsBlocks(&Fields{List: []Field{{Name: "login", Path: "login"}, {Name: "stars", Path: "stars"}}}),
 		}},
 	}
 	code, out := execCmd(t, cfg, "list")
@@ -49,11 +49,11 @@ func TestIntegration_RequestJQAndFooter(t *testing.T) {
 		},
 		Commands: []Command{{
 			Name: "search",
-			Fields: &Fields{
+			Fields: fieldsBlocks(&Fields{
 				Over:   "data.items",
 				Footer: "{{.data.total_count}} total",
 				List:   []Field{{Name: "name", Path: "name"}},
-			},
+			}),
 		}},
 	}
 	code, out := execCmd(t, cfg, "search")
@@ -91,7 +91,7 @@ func TestIntegration_RequestNoFormatGivesRaw(t *testing.T) {
 		Request: &Request{Method: "GET", URL: srv.URL + "/x"},
 		Commands: []Command{{
 			Name:   "list",
-			Fields: &Fields{List: []Field{{Name: "login", Path: "login"}}},
+			Fields: fieldsBlocks(&Fields{List: []Field{{Name: "login", Path: "login"}}}),
 		}},
 	}
 	code, out := execCmd(t, cfg, "list", "--no-format")
@@ -111,7 +111,7 @@ func TestIntegration_RequestAsJSON(t *testing.T) {
 		Request: &Request{Method: "GET", URL: srv.URL + "/x"},
 		Commands: []Command{{
 			Name:   "list",
-			Fields: &Fields{List: []Field{{Name: "login", Path: "login"}}},
+			Fields: fieldsBlocks(&Fields{List: []Field{{Name: "login", Path: "login"}}}),
 		}},
 	}
 	code, out := execCmd(t, cfg, "list", "--as", "json")
@@ -164,7 +164,7 @@ func TestMCP_RequestLeafWithFields(t *testing.T) {
 		name: "get",
 		node: Command{
 			Name:   "get",
-			Fields: &Fields{List: []Field{{Name: "login", Path: "login"}, {Name: "id", Path: "id"}}},
+			Fields: fieldsBlocks(&Fields{List: []Field{{Name: "login", Path: "login"}, {Name: "id", Path: "id"}}}),
 		},
 		request: &Request{Method: "GET", URL: srv.URL + "/user"},
 		vars:    map[string]any{},

@@ -26,6 +26,18 @@ type preparedRequest struct {
 	URL     string // includes the query string
 	Body    string
 	Headers []renderedHeader
+	// AllowStatus holds the error statuses this request treats as an answer.
+	AllowStatus []int
+}
+
+// allows reports whether status is one the request asked to keep.
+func (p *preparedRequest) allows(status int) bool {
+	for _, s := range p.AllowStatus {
+		if s == status {
+			return true
+		}
+	}
+	return false
 }
 
 type renderedHeader struct{ Name, Value string }
@@ -57,6 +69,13 @@ func runRequest(req *Request, data map[string]any, errOut io.Writer) (string, in
 	var raw []byte
 	var code int
 	if transport != nil {
+		// A transport program reports an exit code, and the status it saw is not
+		// ours to read. Saying so beats an attribute that quietly does nothing.
+		if len(prepared.AllowStatus) > 0 {
+			fmt.Fprintf(errOut, "error: allow-status needs the built-in client, and transport %q reports an exit code rather than a status. Write transport=%q on this request to opt it out of the default transport, or let the program fail and branch in a <step when=>.\n",
+				transport.Name, builtinTransportName)
+			return "", 1
+		}
 		out, c := runViaTransport(transport, prepared, data, errOut)
 		raw, code = []byte(out), c
 	} else {
@@ -79,7 +98,7 @@ func runRequest(req *Request, data map[string]any, errOut io.Writer) (string, in
 
 // prepareRequest renders every part of a request against the data context.
 func prepareRequest(req *Request, data map[string]any) (*preparedRequest, error) {
-	p := &preparedRequest{Method: strings.TrimSpace(req.Method)}
+	p := &preparedRequest{Method: strings.TrimSpace(req.Method), AllowStatus: req.AllowStatus}
 	if p.Method == "" {
 		p.Method = "GET"
 	}
@@ -115,7 +134,8 @@ func prepareRequest(req *Request, data map[string]any) (*preparedRequest, error)
 }
 
 // doHTTP performs a prepared request with the built-in client and returns the
-// response body. A 4xx/5xx status is a failure, like `curl -f`.
+// response body. A 4xx/5xx status is a failure, like `curl -f`, unless the
+// request named that status in allow-status.
 func doHTTP(p *preparedRequest, errOut io.Writer) ([]byte, int) {
 	var body io.Reader
 	if p.Body != "" {
@@ -146,6 +166,10 @@ func doHTTP(p *preparedRequest, errOut io.Writer) ([]byte, int) {
 	logVerbose("request: status %d (%d bytes)", resp.StatusCode, len(raw))
 
 	if resp.StatusCode >= 400 {
+		if p.allows(resp.StatusCode) {
+			logVerbose("request: status %d allowed by allow-status", resp.StatusCode)
+			return raw, 0
+		}
 		fmt.Fprintf(errOut, "error: HTTP %d %s\n", resp.StatusCode, strings.TrimSpace(resp.Status))
 		if len(raw) > 0 {
 			fmt.Fprintln(errOut, strings.TrimSpace(string(raw)))

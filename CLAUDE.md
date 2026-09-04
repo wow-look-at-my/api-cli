@@ -30,7 +30,9 @@ Do not add a new third-party dependency without a clear cause.
 | `main.go`                       | Entrypoint, root cobra command, persistent flags, config loading. `preparseGlobalFlags` extracts `--config` / `--mcp` / `--cors` before the cobra tree is built. Config discovery: `./api.xml`. |
 | `config.go`                     | Schema structs (`Config`, `Command`, `Step`, `Arg`, `Flag`, `Cmd`, `Request`, `Param`, `Header`, `Response`, `Fields`, `Field`, `Format`, `View`, `FormatRef`); `Load` (bytes → `parseConfigXML` → `validate`); `validate`/`validateCommand`/`validateRequest`. |
 | `dsl.go`                        | The api-dsl boundary: `xnode` = `apidsl.Node`, plus `parseDOM`/`checkAttrs`/`compileContent`/`compileTextElem`/`textOf`/`isPlaceholder`/`envMap`/`lookupPath`/`mergeVars`/`isTruthy`/`templateTruthy`. An element's name is the method `Name()`, never a field. |
-| `xmlsource.go`                  | `parseConfigXML` + config builders (`buildConfig`, `buildCommandNode`/`addCommandChild`, `buildRun`, `buildRequest`, `buildFields`, `buildEntry`, ...). `<entry>` is converted to a `json.RawMessage`. |
+| `xmlsource.go`                  | `parseConfigXML` + config builders (`buildConfig`, `buildCommandNode`/`addCommandChild`, `buildRun`, `buildFields`, `buildEntry`, ...). `<entry>` is converted to a `json.RawMessage`. |
+| `xmlrequest.go`                 | The `<request>` half of the source: `buildRequest`, `buildQuery`/`buildParam`, `buildHeader`, and `parseAllowStatus` for `allow-status=`. |
+| `runnable.go`                   | A parent that also runs: `Command.executes`, `validateRunnable` (a pattern may not match a subcommand name), and the cobra arg validators (`matchArgPatterns`, `chainArgs`). |
 | `build.go`                      | Builds the `cobra.Command` tree. Threads inheritance for run (`*Cmd`/`*Request`), `cwd`/`stdin`/`confirm`/`format`. `runLeaf`, `resolveContext` (the leaf's data context: two var passes around the flag gather), `renderVars` (fixpoint — vars may reference other vars). |
 | `flags.go`                      | Declared `<arg>`/`<flag>` on both sides of a run: `registerFlag`/`registerConflicts` on the cobra command, `gatherArgs`/`gatherFlags`/`passthroughParse` back out into `.arg`/`.flag`. |
 | `exec.go`                       | Shell/argv execution: `doExec` (streaming), `captureExec` (steps), `captureExecCapped` (format path, 32 MiB cap), `parseResult`, `cappedTee`. `resolveArgv` renders a `*Cmd` to its final argv, for the caller that cannot execute where it renders (a download's transport). |
@@ -86,6 +88,11 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 18. **`--watch` on a `<tml>` leaf is a Bubble Tea program, not the repaint loop.** `tml.DriveGrace` panics a process that paints for 5s with nothing able to drive it, and only `tml.NewProgram` builds a program the library can reach. `runTMLProgram` (`tmlrun.go`) owns that loop and reuses `captureInto`. A tick is still one whole `runLeafOnce`. Interaction inside the component (focus, click, scroll) is not routed yet.
 19. **A repeated step is one call per element** (`<step over=>`, `runStepOver`). The element is `.item` and its position `.index`, both restored afterwards, and the result is a list of `{item, result}` pairs. A failing element fails the step, because a board short one card reads as a shorter queue. A `<prop over=>` then walks that one list, and a `<field expr=>` sees the element's keys promoted plus `$` for the run.
 20. **A one-shot `<tml>` frame is a page. A watch frame is a screen.** `execLeaf` lays a single frame out at `tmlPageHeight` and trims the blank rows, so a board is never cut off at the terminal's last row. Under `--watch`, `ttyOverride` is set and the real terminal height applies.
+21. **A leaf carries a list of `<fields>` blocks** (`[]FieldsBlock`, each with an optional `when=`). `renderFieldsBlocks` (`format.go`) renders every block whose predicate holds, in order, and the CLI and MCP paths share it. No block matching prints the raw body, exactly as no `<fields>` does.
+22. **Every declared arg is in `.arg`.** `zeroArg` (`flags.go`) fills an omitted optional arg with the zero value of its type, on the CLI side and the MCP side. A helper that takes a string, such as `urlpath`, therefore gets one instead of nil.
+23. **`allow-status=` keeps an error status.** `preparedRequest.allows` (`request.go`) makes `doHTTP` return that body with code 0. A `<transport>` request that declares it fails, because a program reports an exit code rather than a status.
+24. **A precondition runs before the steps**, so `validate` rejects one that reads `.result` (`config.go`). Move the check into a `<step when=>`.
+25. **A node runs when `executes()` says so** (`runnable.go`): a leaf, or a parent with `runnable="true"`. That predicate gates `RunE` (`build.go`), the MCP tool list (`mcp.go`) and every "leaf-only" validation. `validateRunnable` keeps dispatch decidable. Each arg of a runnable node needs a `pattern=`. A pattern that matches a subcommand name, its own or one cobra owns, is a load error.
 
 ## Adding a new field to the config
 
@@ -94,7 +101,8 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 3. If it inherits, thread it in `buildCommand` (`build.go`) and in `collectMCPLeaves` (`mcp.go`).
 4. If it needs validation, extend `validate` or `validateCommand`.
 5. Document it in `api.schema.xsd` and in `README.md`. Exercise it in `api.example.xml` when an integration test needs it.
-6. Add tests: a unit test that parses and validates it in `xmlsource_test.go`, plus an integration test.
+6. A grammar limit goes in the README's "Limits and workarounds" table, with the shape to write instead. A limit the loader can catch also gets a `validate` error that names that alternative.
+7. Add tests: a unit test that parses and validates it in `xmlsource_test.go`, plus an integration test.
 
 ## Common gotchas
 

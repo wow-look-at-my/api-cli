@@ -186,7 +186,8 @@ func TestTransport_NoRuntimeOverrideFlag(t *testing.T) {
 	// newRoot PUBLISHES this config's registry process-wide, and this one holds
 	// a default transport. Left installed, it takes over every request the rest
 	// of the suite makes, which lands as a body of "x" in a test that never
-	// asked for a transport at all.
+	// asked for a transport at all. This test owns that registry state while it
+	// runs and puts it back after.
 	t.Serial()
 	prevTransports, prevDefault := transports, defaultTransport
 	t.Cleanup(func() { transports, defaultTransport = prevTransports, prevDefault })

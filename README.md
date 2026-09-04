@@ -40,7 +40,8 @@ cp api.example.xml api.xml          # or pass --config <path>
 ./api-cli --help
 ./api-cli users get 1
 ./api-cli users list --limit 3
-./api-cli posts get 1
+./api-cli posts 1                   # a runnable parent: `posts` lists, `posts 1` shows one
+./api-cli posts search --contains sunt
 ```
 
 ## How it works
@@ -133,6 +134,21 @@ One property keeps the forms apart. A jq program almost always opens with `.`, `
 The shaped body is what the leaf prints, `--format=raw` included. jq runs before every presentation layer, and never as part of one.
 
 A status of 400 or more prints the body to stderr and exits non-zero, like `curl -f`. The root `<run>` usually holds the shared request. A leaf's own `<run>` overrides it, for example with a `POST` or a raw-body download.
+
+`allow-status=` names the error statuses that are an answer instead of a failure. The body then reaches the caller with exit code 0, and a step stores it at `.result.<name>` as any other step output.
+
+```xml
+<steps>
+	<step name="primary">
+		<run><request allow-status="404"><url><value name="var.api"/>/a/<value name="arg.id" as="urlpath"/></url></request></run>
+	</step>
+	<step name="fallback" when="{{ not .result.primary.id }}">
+		<run><request><url><value name="var.api"/>/b/<value name="arg.id" as="urlpath"/></url></request></run>
+	</step>
+</steps>
+```
+
+Take one lookup that may miss, followed by a second lookup on the same id. The list accepts `404` or `404,410`, and every entry must be in the 400 to 599 range. It needs the built-in client, because a `<transport>` program reports an exit code rather than a status. A request that asks for both fails and says so.
 
 ## Transports
 
@@ -278,6 +294,10 @@ Automatic representation, by data shape:
 | array of scalars | `lines` | `json` |
 | scalar / non-JSON | `raw` | -- |
 
+A table column carries two spaces of gutter. A column wider than 50 columns carries three, because the eye loses a long run of prose against a two-space gap. The width that decides a column drop counts the same gutter.
+
+**A `table` or `markdown` cell is one line.** A row is a line. A column is a position on that line. So a run of whitespace that holds a newline or a tab becomes one space. A value with neither is untouched. The `list` sink keeps the whole value and indents its later lines under the first. `raw`, `json` and `csv` carry it exactly. Use `firstline="true"` or `truncate="N"` to show less.
+
 A map is one record unless some field reads `@key` or `@value`. That is the signal to walk it entry by entry. An array of scalars is `lines` only when the leaf declares no `<field>`. One declared field keeps the table shape.
 
 | `<field>` attribute | Meaning |
@@ -296,6 +316,29 @@ A map is one record unless some field reads `@key` or `@value`. That is the sign
 **A path that names nothing is an error**, and so is one that names a scalar. The run exits non-zero and names the path. An empty table over exit 0 reads as an API that returned nothing, which is how a renamed field costs an afternoon. An empty **list** is a real answer. It stays quiet.
 
 A request leaf with **no** `<fields>` at all prints its JSON body, as jq shaped it. Add `--as=table` to project nothing and to table the raw keys.
+
+### More than one shape on one leaf
+
+A leaf can declare several `<fields>` blocks. Each block whose `when=` predicate holds renders, in document order, and a block with no `when=` always renders. That covers the two cases one static block cannot.
+
+```xml
+<command name="thing" description="List things, or show one.">
+	<arg name="id"/>
+	<run><request><url><value name="var.api"/>/things/<value name="arg.id" as="urlpath"/></url></request></run>
+	<fields when="{{ not .arg.id }}" over="items">   <!-- the no-id call: a table -->
+		<field name="id">id</field>
+		<field name="name">name</field>
+	</fields>
+	<fields when="{{ .arg.id }}">                    <!-- the with-id call: a detail view -->
+		<field name="name">name</field>
+		<field name="body">body</field>
+	</fields>
+</command>
+```
+
+The first case is an optional arg that changes the response shape. The second is a dashboard. One block reads the leaf body. A second block reads `.result.<step>`. Two tables then share the screen, with a blank line between them.
+
+`when=` is a Go-template predicate over the format context. It reads `.data`, `.tty` and `.width`, plus the leaf context (`.arg`, `.flag`, `.var`, `.entry`, `.result`). A leaf whose blocks all sit out prints the raw body, exactly as a leaf with no `<fields>` does. `--as=<sink>` applies to every block that renders.
 
 ### Forcing a representation
 
@@ -496,6 +539,34 @@ The engine does not care whether a command is HTTP. Here is a small git wrapper.
 ./tar-safe extract out.tar.gz                 # --to defaults to "out"
 ```
 
+## A parent that also runs
+
+A node with `<command>` children prints help and nothing else. `runnable="true"` makes it execute as well, so one name is the group **and** the command. `tool thing` and `tool thing 42` run the parent, and `tool thing create` runs the child.
+
+```xml
+<command name="thing" runnable="true" description="List things, or show one.">
+	<arg name="id" pattern="^[0-9]+$" description="Numeric thing ID. Omit it for the list."/>
+	<run>
+		<request><url><value name="var.api"/>/things<if test="arg.id">/<value name="arg.id" as="urlpath"/></if></url></request>
+	</run>
+	<fields when="{{ not .arg.id }}" over="items"><field name="id">id</field></fields>
+	<fields when="{{ .arg.id }}"><field name="name">name</field></fields>
+	<command name="create" description="Create a thing."><run><request method="POST">...</request></run></command>
+</command>
+```
+
+Cobra reads the first positional as a subcommand name, so the two stay apart only when no argument value can spell one. `pattern=` is how a config states that, and the loader enforces it.
+
+- **Every `<arg>` on a runnable node needs a `pattern=`.** It is a Go regular expression, and anchoring it with `^` and `$` is what makes it narrow.
+- **A pattern that matches one of the node's own subcommand names is a load error.** It may not match a name cobra owns either: `help`, `completion`, `__complete` or `docs`.
+- **A value that matches nothing is neither.** The error names both halves: the pattern the value missed, and the subcommands it is not.
+- **`--` ends the subcommand lookup.** That is how a value that starts with a dash reaches the parent: `tool thing -- -5`.
+- **`runnable="true"` and `passthrough="true"` cannot both hold.** Passthrough takes every argument, which leaves nothing to name a subcommand.
+
+A runnable parent is a full node. `<arg>`, `<flag>`, `<steps>`, `<entry>`, `<fields>`, `<download>` and `<run>` all work as they do on a leaf. Its `<run>` still inherits to the children, as an ancestor's always did. It also becomes an MCP tool of its own, named for its path, next to the tools its children become.
+
+`pattern=` works on a leaf too, where it is plain validation with no dispatch to disambiguate. `<arg name="sha" pattern="^[0-9a-f]{7,40}$"/>` rejects a bad value before the request goes out.
+
 ## Passthrough mode
 
 A leaf that sets `passthrough="true"` accepts arbitrary positional args, which is everything after `--` in the wrapper script. It then does its own minimal flag extraction.
@@ -555,6 +626,8 @@ Mix the two freely. A `<step><run>` can be a shell command while the leaf makes 
 - A non-zero step aborts the run with that exit code.
 - A `when` attribute is a Go-template predicate. It skips the step on a falsy render (empty, `false`, `0` or `no`), and `.result.<name>` then stays unset.
 - More than one command in a run prints `N executions` to stderr. Suppress that line with `--quiet` or `-q`.
+- A step's `when` is evaluated **before** the step renders anything. A step that must not run therefore cannot fail on a value it never had.
+- `<preconditions>` run before the first step, so `.result` is empty there. A precondition that reads it is a load error, not a surprise at run time. Put the check in a `<step when=>` instead.
 
 ### One call per element: `<step over=>`
 
@@ -593,6 +666,20 @@ Name: {{.data.name}}
 ```
 
 `input=` is `json` (the default), `lines` or `raw`. Formatting applies only when the author `when` predicate AND the user verdict agree. `--view=<name>` forces a view. An inline `<format>`, with `<view>` children and no `ref=`, overrides an inherited one. See [Global flags](#global-flags) for `--format` and `--no-format`.
+
+**An omitted `when=` means `{{.tty}}`.** A redirect, a pipe and the MCP server are not a terminal. Such a format prints the raw body, and everything the view added is gone. An agent that reads the output sees the unshaped response. Write `when="true"` for a view that must render everywhere, or use `<fields>`, which renders with no terminal and carries `--as` for the sink. `--format=always` forces the terminal answer for one call.
+
+`.data` differs between the two systems, and the difference bites on a body with a `data` key. In a `<view>`, `.data` is the whole parsed body, so a JSON:API response reads `.data.data` for the resource and `.data.included` for the sideloaded records. In a `<field expr=>`, the record is `.` and its keys are promoted. The same resource therefore reads `{{.id}}`. The rest of the context stays on `$` (`$.data.included`, `$.var`, `$.arg`). A body with no `data` key follows the same rule. A view reads `.data.errors`. A field reads `errors` or `{{.errors}}`.
+
+```xml
+<!-- JSON:API: {"data":{"id":"1","attributes":{"title":"a"}},"included":[{"type":"tag","id":"9"}]} -->
+<fields over="data">                                   <!-- the resource, not the body -->
+	<field name="id">id</field>
+	<field name="title">attributes.title</field>
+	<field name="tags" expr="{{ len $.data.included }}"/>  <!-- $ is the whole context -->
+</fields>
+<fields over="data.included"><field name="tag">id</field></fields>
+```
 
 ## Template helpers
 
@@ -646,6 +733,20 @@ A config is **XML 1.1**: `<?xml version="1.1" encoding="UTF-8"?>`. Structural in
 
 An attribute value is always raw, a template or a context path. A Go template needs double quotes for `eq .x "y"`, so put `'single quotes'` around such an attribute, or escape the inner quotes. The `schema=` attribute is an editor hint that points at the XSD. The loader ignores it.
 
+## Limits and workarounds
+
+Each row is something the grammar does not do, and the shape to write instead. Every one of them is a real report from somebody who got stuck.
+
+| Limit | Write this instead |
+|-------|--------------------|
+| **A subcommand name always wins over an argument.** Cobra reads the first positional as a subcommand name, so a [runnable parent](#a-parent-that-also-runs) needs values that cannot spell one. | Give every arg of a runnable node a `pattern=` that matches no subcommand name. The loader enforces that. Use `--` for a value that starts with a dash. |
+| **`urlpath` takes a string.** An `<arg type="int">` reaches it as a number, and the render fails with `expected string`. | Drop `as="urlpath"` for an int, because a number has nothing to escape. Declare the arg as a string when the value itself needs escaping. |
+| **A legacy `<format>` prints raw output off a terminal.** An omitted `when=` means `{{.tty}}`, so a redirect, a pipe and the MCP server all skip the view. | Write `when="true"` on the format, or move the leaf to [`<fields>`](#output-fields), which renders anywhere and takes `--as`. `--format=always` forces the terminal answer for one call. |
+| **`.result` is empty in a `<precondition>`.** Preconditions run before the steps, and the loader rejects one that reads `.result`. | Put the check in a `<step when=>`, which runs in order with the other steps. A step that fails aborts the leaf with its own exit code. |
+| **`allow-status=` needs the built-in client.** A `<transport>` program reports an exit code, and the status it saw is not ours to read. A named transport plus `allow-status` is a load error. | Put `transport="http"` on that one request, which opts it out of a default transport and back onto the built-in client. Otherwise let the program exit non-zero, and branch on `.result` in a later `<step when=>`. |
+| **A leaf takes `<fields>` or `<format>`, never both.** | Keep `<format>` for a leaf that needs full control of the template. Everything else belongs in `<fields>`, which the sinks and `--as` understand. |
+| **Nothing selects a transport at run time.** There is no `--transport` flag, by design: how a request reaches its endpoint is a property of the endpoint. | Name the transport in the config, on the `<request>` or as the registry `default="true"`. `transport="http"` is the per-request way back to the built-in client. |
+
 ## Config schema
 
 An XSD reference for the grammar lives at [`api.schema.xsd`](./api.schema.xsd), and `api-cli docs schema` prints it. It documents each element and attribute, for editor tooling. It is a guide, and not the enforcement point. The loader is authoritative, because api-cli validates a config by loading it. A strict XSD validator also cannot express the recursive `<command>` grammar.
@@ -671,20 +772,38 @@ An XSD reference for the grammar lives at [`api.schema.xsd`](./api.schema.xsd), 
 | `name=` (required) | Subcommand name. No whitespace or slashes, and not `help`, `completion`, `__complete`, or `docs`. |
 | `description=` | Shown in help. |
 | `passthrough="true"` | Leaf-only. See [Passthrough mode](#passthrough-mode). |
+| `runnable="true"` | A node with subcommands runs in its own right. Every `<arg>` then needs a `pattern=`. See [A parent that also runs](#a-parent-that-also-runs). |
 | `confirm=` (or `<confirm>`) | Prompt `<msg> [y/N]` before the run. `--yes` bypasses it. Off a terminal the run refuses rather than assume a yes. Inherited. |
 | `<arg>` / `<flag>` | Positional args / named flags. |
 | `<vars>` | Merged with ancestor vars (this node wins). |
 | `<run>` / `<cwd>` / `<stdin>` | Override the inherited executable / cwd / stdin. |
 | `<steps>` | Leaf-only. Pre-execution stages, each a command or a request. |
 | `<entry>` | Leaf-only. `<path>`, `<query>`, or user-defined keys -> `.entry`. |
-| `<preconditions><precondition>` | Leaf-only. A non-empty render is a fatal error message (exit 1). |
-| `<fields>` / `<format>` | The automatic output shape, or a legacy format. Leaf-only, and never both. |
+| `<preconditions><precondition>` | Leaf-only. A non-empty render is a fatal error message (exit 1). It runs before `<steps>`, so `.result` holds nothing. A config that reads `.result` there fails to load. |
+| `<fields when=>` / `<format>` | The automatic output shape, or a legacy format. Leaf-only, and never both. `<fields>` repeats: every block whose `when=` holds renders. |
 | `<download over= when= transport=>` | Leaf-only, repeatable. Hands URLs to the download queue. See [Downloads](#downloads). |
-| `<command>` | Nested subcommands. |
+| `<command>` | Nested subcommands. A node with children prints help, unless it declares `runnable="true"`. |
 
 ### `<arg>` and `<flag>`
 
-`<arg name= type="string|int" required= variadic= description=/>`. A `variadic` arg comes last, and it collects the rest into a typed slice. Pair it with `spread`. A required arg cannot follow an optional one, because cobra counts positions and nothing can fill the gap.
+`<arg name= type="string|int" required= variadic= pattern= description=/>`. A `variadic` arg comes last, and it collects the rest into a typed slice. Pair it with `spread`. A required arg cannot follow an optional one, because cobra counts positions and nothing can fill the gap. `pattern=` is a Go regular expression every supplied value must match, and a [runnable parent](#a-parent-that-also-runs) requires one on each arg.
+
+**Every declared arg is present.** An omitted optional arg holds the zero value of its type. That is `""` for a string, `0` for an int, and an empty slice for a variadic. A string reaches `urlpath .arg.id`, and every other helper that takes a string, with no guard around it. The same holds on the MCP side for a tool argument the caller leaves out.
+
+One predicate covers both cases. `{{ .arg.id }}` is truthy when the arg is present, and `{{ not .arg.id }}` is truthy when it is omitted. That is the same truthiness `<if test=>` uses, so `<if test="arg.id">` and `when="{{ .arg.id }}"` always agree.
+
+```xml
+<command name="thing" description="List things, or show one.">
+	<arg name="id"/>
+	<steps>
+		<!-- The when runs first, so the omitted id never reaches urlpath. -->
+		<step name="detail" when="{{ .arg.id }}">
+			<run><request><url><value name="var.api"/>/things/<value name="arg.id" as="urlpath"/></url></request></run>
+		</step>
+	</steps>
+	<run><request><url><value name="var.api"/>/things<if test="arg.id">/<value name="arg.id" as="urlpath"/></if></url></request></run>
+</command>
+```
 
 `<flag name= short= type="string|bool|int|string-slice" default= required= conflicts="a,b" description=/>`. A string `default` can be a template itself. It renders when the user does not set the flag. A `bool` flag with a `true` default gets a hidden `--no-NAME` companion. A flag name therefore cannot start with `no-`. `short=` is one character.
 

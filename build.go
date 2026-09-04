@@ -64,15 +64,23 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 	if node.Passthrough {
 		cmd.Args = cobra.ArbitraryArgs
 	} else {
-		if total := len(node.Args); total > 0 {
-			switch {
-			case hasVariadic:
-				cmd.Args = cobra.MinimumNArgs(requiredArgs)
-			case requiredArgs == total:
-				cmd.Args = cobra.ExactArgs(total)
-			default:
-				cmd.Args = cobra.RangeArgs(requiredArgs, total)
-			}
+		var count cobra.PositionalArgs
+		switch total := len(node.Args); {
+		case total == 0 && node.Runnable:
+			// A runnable node with no args takes none: an unmatched positional is
+			// a mistyped subcommand, and cobra says so.
+			count = cobra.NoArgs
+		case total == 0:
+			count = nil
+		case hasVariadic:
+			count = cobra.MinimumNArgs(requiredArgs)
+		case requiredArgs == total:
+			count = cobra.ExactArgs(total)
+		default:
+			count = cobra.RangeArgs(requiredArgs, total)
+		}
+		if count != nil {
+			cmd.Args = chainArgs(count, matchArgPatterns(node, argPatterns(node)))
 		}
 
 		for _, f := range node.Flags {
@@ -112,8 +120,9 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 		effectiveFormat = node.Format
 	}
 
-	// Leaves (no subcommands) execute.
-	if len(node.Commands) == 0 {
+	// A leaf executes, and so does a parent that declares runnable=. Cobra hands
+	// this node the invocation only when no subcommand name matched.
+	if node.executes() {
 		nodeCopy := node
 		leafVars := effectiveVars
 		leafCmd := effectiveCmd
