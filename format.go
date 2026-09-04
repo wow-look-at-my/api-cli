@@ -383,7 +383,10 @@ func runTMLFormatted(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map
 		fmt.Fprintln(execStderr, "error:", err)
 		return 1
 	}
-	fmt.Fprintln(execStdout, frame)
+	// A frame fills the viewport, and the blank rows under the content are the
+	// screen a program owns. Printed once into a scrolling terminal they are
+	// just a gap before the prompt, so this path stops at the last drawn row.
+	fmt.Fprintln(execStdout, strings.TrimRight(frame, " \n"))
 	return 0
 }
 

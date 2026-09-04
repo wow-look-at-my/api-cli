@@ -34,4 +34,4 @@ jobs:
       - uses: wow-look-at-my/xml-validator@master
         # No schema= here: --schema overflows the stack on the recursive <command> grammar.
         with:
-          files: '**/*.xml **/*.xsd'
+          files: '**/*.xml **/*.xsd **/*.tml'

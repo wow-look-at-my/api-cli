@@ -359,6 +359,45 @@ The output of the leaf and its diagnostics both land in the frame. A failed run 
 
 Two leaves refuse to repeat. A `<download>` leaf transfers a file one time. `--watch` on it is an error. A leaf with a `confirm` prompt needs `--yes`, because the prompt draws into the frame where nobody can answer it.
 
+## Screens: `<tml>`
+
+`<fields>` says what the records are, and the renderer picks a table or a list. A screen is the other shape of an answer: several numbers, a heading and one list, laid out at once. `<tml>` gives a leaf that shape. It names a component written in [TML](https://github.com/wow-look-at-my/tml), a declarative language for terminal layout. It then says which part of the response fills each of the component's properties.
+
+```xml
+<command name="dash" description="A repository on one screen.">
+	<arg name="repo" type="string" required="true"/>
+	<entry>
+		<path>/repos/<value name="arg.repo"/></path>
+	</entry>
+	<tml src="ui/repo.tml" dark="true">
+		<prop name="name" from="full_name"/>
+		<prop name="stars" from="stargazers_count"/>
+		<prop name="releases" over="result.releases">
+			<field name="tag">tag_name</field>
+			<field name="published">published_at</field>
+		</prop>
+	</tml>
+</command>
+```
+
+The component is an ordinary `.tml` file next to the config. `src` resolves against the config's own directory, and an `<Import>` inside it resolves against the component's directory.
+
+A `<prop>` fills one declared property, and it takes exactly one source:
+
+| Form | Value |
+| --- | --- |
+| `<prop name="title">Deployments</prop>` | The element's text, rendered as a template like any other content. |
+| `<prop name="stars" from="stargazers_count"/>` | One value out of the response body, or out of the leaf context. |
+| `<prop name="rows" over="services"><field name="id">id</field></prop>` | A list. Each `<field>` maps a path inside one element to one property of the item template. |
+
+Every value crosses as text, and the component re-reads it as the type it declared. So an `int` property takes `3` and a `color` property takes `#d97706` without the config naming a type of its own. A component rejects a property it never declared. A data template rejects a field it never declared. So one name on one side and a different name on the other fails the run, rather than drawing a blank cell.
+
+`over=` reads the response body first and the whole context second, exactly as a `<fields>` projection does. That is how a step result reaches the screen: `over="result.releases"` is the list a `<step name="releases">` fetched.
+
+A screen needs a terminal. Piped, the leaf falls through to whatever else it declared, which is the raw body or a `<format>` view. `--as=<sink>` names a representation the user wants instead, so it wins and the leaf goes through `<fields>`. `--format=always` draws the screen anyway, at 80 by 24, which is how a screen is testable without a terminal. A leaf declares `<tml>` or `<fields>`, never both.
+
+On its own the leaf draws one frame and exits. With `--watch` it becomes a terminal program on the alternate screen: `q` or `esc` quits, `ctrl+c` quits with 130, and `r` refreshes now. A tick is one whole run of the leaf, the same as a watch frame. Focus, clicking and scrolling inside the component are NOT wired yet. A screen reads today. It does not answer.
+
 ## Examples
 
 ### Wrap a REST API

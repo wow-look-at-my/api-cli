@@ -208,6 +208,30 @@
     <xs:attribute name="expr" type="xs:string"/>
   </xs:complexType>
 
+  <!-- ===== <tml> screen presentation ===== -->
+  <xs:complexType name="tml">
+    <xs:sequence>
+      <xs:element name="prop" type="tmlProp" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="src" type="xs:string" use="required"/>
+    <xs:attribute name="dark" type="xs:boolean"/>
+  </xs:complexType>
+
+  <!-- A prop takes its value from its own text, from="path", or over="path"
+       with one <field> per part of a list element. -->
+  <xs:complexType name="tmlProp" mixed="true">
+    <xs:sequence>
+      <xs:element name="field" type="tmlField" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="from" type="xs:string"/>
+    <xs:attribute name="over" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="tmlField" mixed="true">
+    <xs:attribute name="name" type="xs:string" use="required"/>
+  </xs:complexType>
+
   <!-- ===== Legacy <format>/<view> presentation ===== -->
   <xs:complexType name="formats">
     <xs:sequence>
@@ -320,6 +344,7 @@
       <xs:element name="steps" type="steps" minOccurs="0"/>
       <xs:element name="entry" type="entry" minOccurs="0"/>
       <xs:element name="fields" type="fields" minOccurs="0"/>
+      <xs:element name="tml" type="tml" minOccurs="0"/>
       <xs:element name="format" type="formatRef" minOccurs="0"/>
       <xs:element name="download" type="download" minOccurs="0" maxOccurs="unbounded"/>
       <xs:element name="command" type="command" minOccurs="0" maxOccurs="unbounded"/>
