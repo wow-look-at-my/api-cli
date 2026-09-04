@@ -87,14 +87,17 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 
 	// The <fields> auto-formatter takes precedence. MCP behaves like
 	// --format=always: .tty is true, .width is 80, no width-based dropping.
-	if leaf.node.Fields != nil {
+	if len(leaf.node.Fields) > 0 {
 		parsed := parseInput(out, "json")
 		ctx := formatContext(parsed, data, true, 80)
-		rendered, ferr := renderFields(leaf.node.Fields, parsed, ctx, "", 0)
+		rendered, matched, ferr := renderFieldsBlocks(leaf.node.Fields, parsed, ctx, "", 0)
 		if ferr != nil {
 			return "error: " + ferr.Error(), true
 		}
-		return rendered, false
+		if matched {
+			return rendered, false
+		}
+		return out, false
 	}
 
 	if formatted, ok := mcpFormat(leaf, out, data); ok {
@@ -117,17 +120,14 @@ func mcpCombine(stdout, stderr string) string {
 }
 
 // mcpGatherArgs converts the JSON-decoded arguments map to a typed arg map.
+// An omitted arg holds the zero value of its type, exactly as on the CLI side.
 func mcpGatherArgs(node Command, arguments map[string]any) (map[string]any, error) {
 	out := make(map[string]any, len(node.Args))
 	for _, a := range node.Args {
 		val, provided := arguments[a.Name]
 		if a.Variadic {
 			if !provided {
-				if a.Type == "int" {
-					out[a.Name] = []int{}
-				} else {
-					out[a.Name] = []string{}
-				}
+				out[a.Name] = zeroArg(a)
 				continue
 			}
 			arr, ok := val.([]any)
@@ -162,6 +162,7 @@ func mcpGatherArgs(node Command, arguments map[string]any) (map[string]any, erro
 			continue
 		}
 		if !provided {
+			out[a.Name] = zeroArg(a)
 			continue
 		}
 		if a.Type == "int" {

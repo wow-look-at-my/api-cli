@@ -162,135 +162,16 @@ func buildRun(n *xnode) (*Cmd, *Request, error) {
 	return &Cmd{Shell: true, Template: strings.TrimSpace(tmpl)}, nil, nil
 }
 
-func buildRequest(n *xnode) (*Request, error) {
-	if err := checkAttrs(n, "method", "transport"); err != nil {
-		return nil, err
-	}
-	req := &Request{
-		Method:    strings.TrimSpace(n.Attr("method")),
-		Transport: strings.TrimSpace(n.Attr("transport")),
-	}
-	if req.Method == "" {
-		req.Method = "GET"
-	}
-	for _, child := range n.Children() {
-		switch child.Name() {
-		case "url":
-			s, err := compileTextElem(child)
-			if err != nil {
-				return nil, err
-			}
-			req.URL = strings.TrimSpace(s)
-		case "query":
-			if err := buildQuery(child, req); err != nil {
-				return nil, err
-			}
-		case "header":
-			h, err := buildHeader(child, "")
-			if err != nil {
-				return nil, err
-			}
-			req.Headers = append(req.Headers, h)
-		case "if":
-			if err := checkAttrs(child, "test"); err != nil {
-				return nil, err
-			}
-			test := child.Attr("test")
-			for _, inner := range child.Children() {
-				if inner.Name() != "header" {
-					return nil, fmt.Errorf("<request><if>: only <header> children are supported, got <%s>", inner.Name())
-				}
-				h, err := buildHeader(inner, test)
-				if err != nil {
-					return nil, err
-				}
-				req.Headers = append(req.Headers, h)
-			}
-		case "body":
-			s, err := compileTextElem(child)
-			if err != nil {
-				return nil, err
-			}
-			req.Body = s
-		case "response":
-			if err := checkAttrs(child, "jq"); err != nil {
-				return nil, err
-			}
-			req.Response = &Response{JQ: strings.TrimSpace(child.Attr("jq"))}
-		default:
-			return nil, fmt.Errorf("<request>: unexpected child element <%s>", child.Name())
-		}
-	}
-	return req, nil
-}
-
-func buildHeader(n *xnode, when string) (Header, error) {
-	if err := checkAttrs(n, "name"); err != nil {
-		return Header{}, err
-	}
-	name := n.Attr("name")
-	if name == "" {
-		return Header{}, fmt.Errorf("<header>: name= is required")
-	}
-	val, err := compileContent(n)
+func buildFields(n *xnode) (FieldsBlock, error) {
+	f, err := buildFieldsBody(n)
 	if err != nil {
-		return Header{}, err
+		return FieldsBlock{}, err
 	}
-	return Header{Name: name, Value: val, When: when}, nil
+	return FieldsBlock{When: strings.TrimSpace(n.Attr("when")), Fields: f}, nil
 }
 
-func buildQuery(n *xnode, req *Request) error {
-	if err := checkAttrs(n, "from"); err != nil {
-		return err
-	}
-	req.QueryFrom = strings.TrimSpace(n.Attr("from"))
-	for _, child := range n.Children() {
-		switch child.Name() {
-		case "param":
-			p, err := buildParam(child, "")
-			if err != nil {
-				return err
-			}
-			req.Query = append(req.Query, p)
-		case "if":
-			if err := checkAttrs(child, "test"); err != nil {
-				return err
-			}
-			test := child.Attr("test")
-			for _, inner := range child.Children() {
-				if inner.Name() != "param" {
-					return fmt.Errorf("<query><if>: only <param> children are supported, got <%s>", inner.Name())
-				}
-				p, err := buildParam(inner, test)
-				if err != nil {
-					return err
-				}
-				req.Query = append(req.Query, p)
-			}
-		default:
-			return fmt.Errorf("<query>: unexpected child element <%s>", child.Name())
-		}
-	}
-	return nil
-}
-
-func buildParam(n *xnode, when string) (Param, error) {
-	if err := checkAttrs(n, "name"); err != nil {
-		return Param{}, err
-	}
-	name := n.Attr("name")
-	if name == "" {
-		return Param{}, fmt.Errorf("<param>: name= is required")
-	}
-	val, err := compileContent(n)
-	if err != nil {
-		return Param{}, err
-	}
-	return Param{Name: name, Value: val, When: when}, nil
-}
-
-func buildFields(n *xnode) (*Fields, error) {
-	if err := checkAttrs(n, "over", "footer"); err != nil {
+func buildFieldsBody(n *xnode) (*Fields, error) {
+	if err := checkAttrs(n, "over", "footer", "when"); err != nil {
 		return nil, err
 	}
 	f := &Fields{Over: strings.TrimSpace(n.Attr("over")), Footer: n.Attr("footer")}
@@ -491,7 +372,7 @@ func addCommandChild(c *Command, child *xnode) error {
 		if err != nil {
 			return err
 		}
-		c.Fields = f
+		c.Fields = append(c.Fields, f)
 	case "format":
 		ref, err := buildFormatRef(child)
 		if err != nil {

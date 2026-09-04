@@ -99,6 +99,46 @@
 				<field name="name">name</field>
 			</fields>
 		</command>
+		<command name="show" description="List users, or show one. One leaf, two output shapes.">
+			<arg name="id" description="Numeric user ID. Omit it for the list."/>
+			<!-- The omitted arg is "", so the path stays /users and the list renders. -->
+			<entry>
+				<path>/users<if test="arg.id">/<value name="arg.id" as="urlpath"/></if></path>
+			</entry>
+			<fields when="{{ not .arg.id }}" footer="{{ len .data }} users">
+				<field name="id">id</field>
+				<field name="name">name</field>
+				<field name="username">username</field>
+			</fields>
+			<fields when="{{ .arg.id }}">
+				<field name="id">id</field>
+				<field name="name">name</field>
+				<field name="email">email</field>
+				<field name="website">website</field>
+			</fields>
+		</command>
+		<command name="lookup" description="Read a user, and fall back to the list when the ID is unknown.">
+			<arg name="id" required="true" description="Numeric user ID."/>
+			<steps>
+				<!-- 404 is an answer here: the fallback step reads what it stored. -->
+				<step name="primary">
+					<run>
+						<request allow-status="404">
+							<url><value name="var.base_url"/>/users/<value name="arg.id" as="urlpath"/></url>
+						</request>
+					</run>
+				</step>
+			</steps>
+			<run>
+				<request>
+					<url><value name="var.base_url"/>/users<if test="result.primary.id">/<value name="arg.id" as="urlpath"/></if></url>
+				</request>
+			</run>
+			<fields>
+				<field name="id">id</field>
+				<field name="name">name</field>
+			</fields>
+		</command>
 		<command name="create" description="Create a user. Overrides the inherited GET with a POST + JSON body.">
 			<flag name="name" type="string" required="true" description="Full name."/>
 			<flag name="email" type="string" required="true" description="Email address."/>

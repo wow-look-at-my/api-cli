@@ -170,11 +170,11 @@ func TestIntegration_RequestOverListOfRecords(t *testing.T) {
 		Request: &Request{Method: "GET", URL: srv.URL + "/data.json"},
 		Commands: []Command{{
 			Name: "over",
-			Fields: &Fields{Over: "response", List: []Field{
+			Fields: fieldsBlocks(&Fields{Over: "response", List: []Field{
 				{Name: "id", Path: "id"},
 				{Name: "name", Path: "name"},
 				{Name: "status", Path: "detail.status"},
-			}},
+			}}),
 		}},
 	}
 
@@ -192,7 +192,7 @@ func TestIntegration_RequestOverMissingPathFailsLoudly(t *testing.T) {
 		Request: &Request{Method: "GET", URL: srv.URL + "/data.json"},
 		Commands: []Command{{
 			Name:   "over",
-			Fields: &Fields{Over: "responses", List: []Field{{Name: "name", Path: "name"}}},
+			Fields: fieldsBlocks(&Fields{Over: "responses", List: []Field{{Name: "name", Path: "name"}}}),
 		}},
 	}
 
@@ -216,10 +216,10 @@ func TestIntegration_RequestJQShapesBodyForFields(t *testing.T) {
 		},
 		Commands: []Command{{
 			Name: "jq",
-			Fields: &Fields{Over: "items", Footer: "{{.data.count}} total", List: []Field{
+			Fields: fieldsBlocks(&Fields{Over: "items", Footer: "{{.data.count}} total", List: []Field{
 				{Name: "id", Path: "id"},
 				{Name: "name", Path: "name"},
-			}},
+			}}),
 		}},
 	}
 
@@ -242,10 +242,10 @@ func TestIntegration_RequestJQShapesBodyViaTransport(t *testing.T) {
 		},
 		Commands: []Command{{
 			Name: "jq",
-			Fields: &Fields{Over: "items", List: []Field{
+			Fields: fieldsBlocks(&Fields{Over: "items", List: []Field{
 				{Name: "id", Path: "id"},
 				{Name: "name", Path: "name"},
-			}},
+			}}),
 		}},
 	}
 

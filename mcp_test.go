@@ -163,11 +163,13 @@ func TestMcpGatherArgs_StringAndInt(t *testing.T) {
 	assert.Equal(t, "alice", got["name"])
 }
 
+// An omitted arg is present and empty, so a template helper that takes a string
+// gets one.
 func TestMcpGatherArgs_Missing(t *testing.T) {
 	node := Command{Args: []Arg{{Name: "name"}}}
 	got, err := mcpGatherArgs(node, map[string]any{})
 	require.NoError(t, err)
-	assert.Empty(t, got)
+	assert.Equal(t, map[string]any{"name": ""}, got)
 }
 
 func TestMcpGatherArgs_VariadicString(t *testing.T) {

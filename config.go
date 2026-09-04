@@ -73,7 +73,7 @@ type Command struct {
 	Preconditions []string        `json:"preconditions,omitempty"`
 	Confirm       string          `json:"confirm,omitempty"`
 	Format        *FormatRef      `json:"format,omitempty"`
-	Fields        *Fields         `json:"fields,omitempty"`
+	Fields        []FieldsBlock   `json:"fields,omitempty"`
 	Downloads     []Download      `json:"downloads,omitempty"`
 	Commands      []Command       `json:"commands,omitempty"`
 }
@@ -289,6 +289,12 @@ type Request struct {
 	Body      string    `json:"body,omitempty"`      // template; empty means no body
 	Response  *Response `json:"response,omitempty"`  // nil means stream the raw body
 	Transport string    `json:"transport,omitempty"` // registry name; empty means the config default
+
+	// AllowStatus lists the 4xx/5xx statuses that are an answer rather than a
+	// failure ("404" on a lookup that may miss). The body of one of these
+	// reaches the caller with exit code 0, so a step stores it on
+	// .result.<name> and a later step branches on what it holds.
+	AllowStatus []int `json:"allowStatus,omitempty"`
 }
 
 // Transport is a user-supplied program that performs requests in place of the
@@ -350,6 +356,17 @@ type (
 	Fields = fields.Fields
 	Field  = fields.Field
 )
+
+// FieldsBlock is one <fields> declaration on a leaf. When is a template
+// predicate over the format context (.data, .tty, .width, .arg, .flag, .result,
+// ...); an empty When always renders. A leaf may declare several blocks, and
+// every block whose predicate holds renders, in document order. That is how one
+// leaf presents a list for a no-id call and a detail view for an id, and how a
+// dashboard puts a second table over .result.<step> under the first one.
+type FieldsBlock struct {
+	When   string  `json:"when,omitempty"`
+	Fields *Fields `json:"fields"`
+}
 
 // reservedCommandNames are the names cobra owns. A config cannot declare one.
 var reservedCommandNames = set.Of("help", "completion", "__complete", "docs")
@@ -589,16 +606,25 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		}
 	}
 
+	// A precondition gates the leaf before any step runs, so .result holds
+	// nothing there. A config that reads it is asking for data that does not
+	// exist yet, and the template error it gets says nothing about why.
+	for i, p := range c.Preconditions {
+		if strings.Contains(p, ".result") {
+			return fmt.Errorf("%s.preconditions[%d]: a precondition runs before <steps>, so .result is empty; move the check into a <step when=> or into the leaf", where, i)
+		}
+	}
+
 	if c.Command.Defined() && c.Request.Defined() {
 		return fmt.Errorf("%s: a <run> is either a command or a request, not both", where)
 	}
 	if err := validateRequest(c.Request, where+".request", transports); err != nil {
 		return err
 	}
-	if c.Fields != nil && c.Format.Defined() {
+	if len(c.Fields) > 0 && c.Format.Defined() {
 		return fmt.Errorf("%s: use either <fields> or <format>, not both", where)
 	}
-	if c.Fields != nil && len(c.Commands) > 0 {
+	if len(c.Fields) > 0 && len(c.Commands) > 0 {
 		return fmt.Errorf("%s: <fields> is only allowed on leaves (nodes with no subcommands)", where)
 	}
 

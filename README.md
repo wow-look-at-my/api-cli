@@ -134,6 +134,21 @@ The shaped body is what the leaf prints, `--format=raw` included. jq runs before
 
 A status of 400 or more prints the body to stderr and exits non-zero, like `curl -f`. The root `<run>` usually holds the shared request. A leaf's own `<run>` overrides it, for example with a `POST` or a raw-body download.
 
+`allow-status=` names the error statuses that are an answer instead of a failure. The body then reaches the caller with exit code 0, and a step stores it at `.result.<name>` as any other step output.
+
+```xml
+<steps>
+	<step name="primary">
+		<run><request allow-status="404"><url><value name="var.api"/>/a/<value name="arg.id" as="urlpath"/></url></request></run>
+	</step>
+	<step name="fallback" when="{{ not .result.primary.id }}">
+		<run><request><url><value name="var.api"/>/b/<value name="arg.id" as="urlpath"/></url></request></run>
+	</step>
+</steps>
+```
+
+Take one lookup that may miss, followed by a second lookup on the same id. The list accepts `404` or `404,410`, and every entry must be in the 400 to 599 range. It needs the built-in client, because a `<transport>` program reports an exit code rather than a status. A request that asks for both fails and says so.
+
 ## Transports
 
 Some APIs authenticate in a way that is painful to reproduce: a signing scheme, a session dance, an mTLS setup. You usually have a program that already does it. A `<transport>` is that program, wired in as the thing that *performs* requests. Everything else stays the same: the `<request>` syntax, `<response jq=>`, `<fields>`, steps and MCP.
@@ -296,6 +311,29 @@ A map is one record unless some field reads `@key` or `@value`. That is the sign
 **A path that names nothing is an error**, and so is one that names a scalar. The run exits non-zero and names the path. An empty table over exit 0 reads as an API that returned nothing, which is how a renamed field costs an afternoon. An empty **list** is a real answer. It stays quiet.
 
 A request leaf with **no** `<fields>` at all prints its JSON body, as jq shaped it. Add `--as=table` to project nothing and to table the raw keys.
+
+### More than one shape on one leaf
+
+A leaf can declare several `<fields>` blocks. Each block whose `when=` predicate holds renders, in document order, and a block with no `when=` always renders. That covers the two cases one static block cannot.
+
+```xml
+<command name="thing" description="List things, or show one.">
+	<arg name="id"/>
+	<run><request><url><value name="var.api"/>/things/<value name="arg.id" as="urlpath"/></url></request></run>
+	<fields when="{{ not .arg.id }}" over="items">   <!-- the no-id call: a table -->
+		<field name="id">id</field>
+		<field name="name">name</field>
+	</fields>
+	<fields when="{{ .arg.id }}">                    <!-- the with-id call: a detail view -->
+		<field name="name">name</field>
+		<field name="body">body</field>
+	</fields>
+</command>
+```
+
+The first case is an optional arg that changes the response shape. The second is a dashboard. One block reads the leaf body. A second block reads `.result.<step>`. Two tables then share the screen, with a blank line between them.
+
+`when=` is a Go-template predicate over the format context. It reads `.data`, `.tty` and `.width`, plus the leaf context (`.arg`, `.flag`, `.var`, `.entry`, `.result`). A leaf whose blocks all sit out prints the raw body, exactly as a leaf with no `<fields>` does. `--as=<sink>` applies to every block that renders.
 
 ### Forcing a representation
 
@@ -484,6 +522,8 @@ Mix the two freely. A `<step><run>` can be a shell command while the leaf makes 
 - A non-zero step aborts the run with that exit code.
 - A `when` attribute is a Go-template predicate. It skips the step on a falsy render (empty, `false`, `0` or `no`), and `.result.<name>` then stays unset.
 - More than one command in a run prints `N executions` to stderr. Suppress that line with `--quiet` or `-q`.
+- A step's `when` is evaluated **before** the step renders anything. A step that must not run therefore cannot fail on a value it never had.
+- `<preconditions>` run before the first step, so `.result` is empty there. A precondition that reads it is a load error, not a surprise at run time. Put the check in a `<step when=>` instead.
 
 ## Legacy formats and views
 
@@ -506,6 +546,20 @@ Name: {{.data.name}}
 ```
 
 `input=` is `json` (the default), `lines` or `raw`. Formatting applies only when the author `when` predicate AND the user verdict agree. `--view=<name>` forces a view. An inline `<format>`, with `<view>` children and no `ref=`, overrides an inherited one. See [Global flags](#global-flags) for `--format` and `--no-format`.
+
+**An omitted `when=` means `{{.tty}}`.** A redirect, a pipe and the MCP server are not a terminal. Such a format prints the raw body, and everything the view added is gone. An agent that reads the output sees the unshaped response. Write `when="true"` for a view that must render everywhere, or use `<fields>`, which renders with no terminal and carries `--as` for the sink. `--format=always` forces the terminal answer for one call.
+
+`.data` differs between the two systems, and the difference bites on a body with a `data` key. In a `<view>`, `.data` is the whole parsed body, so a JSON:API response reads `.data.data` for the resource and `.data.included` for the sideloaded records. In a `<field expr=>`, the record is `.` and its keys are promoted. The same resource therefore reads `{{.id}}`. The rest of the context stays on `$` (`$.data.included`, `$.var`, `$.arg`). A body with no `data` key follows the same rule. A view reads `.data.errors`. A field reads `errors` or `{{.errors}}`.
+
+```xml
+<!-- JSON:API: {"data":{"id":"1","attributes":{"title":"a"}},"included":[{"type":"tag","id":"9"}]} -->
+<fields over="data">                                   <!-- the resource, not the body -->
+	<field name="id">id</field>
+	<field name="title">attributes.title</field>
+	<field name="tags" expr="{{ len $.data.included }}"/>  <!-- $ is the whole context -->
+</fields>
+<fields over="data.included"><field name="tag">id</field></fields>
+```
 
 ## Template helpers
 
@@ -590,14 +644,31 @@ An XSD reference for the grammar lives at [`api.schema.xsd`](./api.schema.xsd), 
 | `<run>` / `<cwd>` / `<stdin>` | Override the inherited executable / cwd / stdin. |
 | `<steps>` | Leaf-only. Pre-execution stages, each a command or a request. |
 | `<entry>` | Leaf-only. `<path>`, `<query>`, or user-defined keys -> `.entry`. |
-| `<preconditions><precondition>` | Leaf-only. A non-empty render is a fatal error message (exit 1). |
-| `<fields>` / `<format>` | The automatic output shape, or a legacy format. Leaf-only, and never both. |
+| `<preconditions><precondition>` | Leaf-only. A non-empty render is a fatal error message (exit 1). It runs before `<steps>`, so `.result` holds nothing. A config that reads `.result` there fails to load. |
+| `<fields when=>` / `<format>` | The automatic output shape, or a legacy format. Leaf-only, and never both. `<fields>` repeats: every block whose `when=` holds renders. |
 | `<download over= when= transport=>` | Leaf-only, repeatable. Hands URLs to the download queue. See [Downloads](#downloads). |
 | `<command>` | Nested subcommands. |
 
 ### `<arg>` and `<flag>`
 
 `<arg name= type="string|int" required= variadic= description=/>`. A `variadic` arg comes last, and it collects the rest into a typed slice. Pair it with `spread`. A required arg cannot follow an optional one, because cobra counts positions and nothing can fill the gap.
+
+**Every declared arg is present.** An omitted optional arg holds the zero value of its type. That is `""` for a string, `0` for an int, and an empty slice for a variadic. A string reaches `urlpath .arg.id`, and every other helper that takes a string, with no guard around it. The same holds on the MCP side for a tool argument the caller leaves out.
+
+One predicate covers both cases. `{{ .arg.id }}` is truthy when the arg is present, and `{{ not .arg.id }}` is truthy when it is omitted. That is the same truthiness `<if test=>` uses, so `<if test="arg.id">` and `when="{{ .arg.id }}"` always agree.
+
+```xml
+<command name="thing" description="List things, or show one.">
+	<arg name="id"/>
+	<steps>
+		<!-- The when runs first, so the omitted id never reaches urlpath. -->
+		<step name="detail" when="{{ .arg.id }}">
+			<run><request><url><value name="var.api"/>/things/<value name="arg.id" as="urlpath"/></url></request></run>
+		</step>
+	</steps>
+	<run><request><url><value name="var.api"/>/things<if test="arg.id">/<value name="arg.id" as="urlpath"/></if></url></request></run>
+</command>
+```
 
 `<flag name= short= type="string|bool|int|string-slice" default= required= conflicts="a,b" description=/>`. A string `default` can be a template itself. It renders when the user does not set the flag. A `bool` flag with a `true` default gets a hidden `--no-NAME` companion. A flag name therefore cannot start with `no-`. `short=` is one character.
 

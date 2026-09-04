@@ -169,10 +169,10 @@ func TestSteps_RequestThroughTransportInMCP(t *testing.T) {
 			Name:  "chain",
 			Steps: []Step{{Name: "first", Entry: json.RawMessage(`{"path":"/one"}`)}},
 			Entry: json.RawMessage(`{"path":"/two"}`),
-			Fields: &Fields{List: []Field{
+			Fields: fieldsBlocks(&Fields{List: []Field{
 				{Name: "step", Expr: "{{$.result.first.url}}"},
 				{Name: "leaf", Path: "url"},
-			}},
+			}}),
 		}},
 	}
 	require.NoError(t, validate(cfg))
