@@ -179,6 +179,30 @@ func alignColumns(rows []string, padding int) string {
 	return b.String()
 }
 
+// oneLine folds a value into a single line, so a table row stays a row. A cell
+// that keeps its newlines puts every later column at the left margin, and a tab
+// opens a column nothing declared. A whitespace run becomes a space.
+func oneLine(s string) string {
+	if !strings.ContainsAny(s, "\n\r\t\v\f") {
+		return s
+	}
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// indentBlock aligns the continuation lines of a value under its label, so a
+// paragraph reads as a value rather than as more records.
+func indentBlock(s string, indent int) string {
+	if !strings.Contains(s, "\n") {
+		return s
+	}
+	pad := strings.Repeat(" ", indent)
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	for i := range lines[1:] {
+		lines[i+1] = pad + lines[i+1]
+	}
+	return strings.Join(lines, "\n")
+}
+
 // padRight returns s padded with spaces on the right to reach displayWidth n.
 // If s is already wider, it is returned unchanged.
 func padRight(n int, s string) string {

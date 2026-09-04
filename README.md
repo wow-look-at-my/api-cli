@@ -294,6 +294,8 @@ Automatic representation, by data shape:
 | array of scalars | `lines` | `json` |
 | scalar / non-JSON | `raw` | -- |
 
+**A `table` or `markdown` cell is one line.** A row is a line. A column is a position on that line. So a run of whitespace that holds a newline or a tab becomes one space. A value with neither is untouched. The `list` sink keeps the whole value and indents its later lines under the first. `raw`, `json` and `csv` carry it exactly. Use `firstline="true"` or `truncate="N"` to show less.
+
 A map is one record unless some field reads `@key` or `@value`. That is the signal to walk it entry by entry. An array of scalars is `lines` only when the leaf declares no `<field>`. One declared field keeps the table shape.
 
 | `<field>` attribute | Meaning |

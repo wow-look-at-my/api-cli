@@ -295,7 +295,7 @@ func renderListSink(rnd Renderer, recs []record, fields []Field, ctx map[string]
 				return "", err
 			}
 			b.WriteString(padRight(maxLabel+1, fld.Name+":"))
-			b.WriteString(v)
+			b.WriteString(indentBlock(v, maxLabel+1))
 			b.WriteByte('\n')
 		}
 	}
@@ -344,7 +344,7 @@ func renderMarkdownSink(rnd Renderer, recs []record, fields []Field, ctx map[str
 			if err != nil {
 				return "", err
 			}
-			cells[i] = strings.ReplaceAll(strings.ReplaceAll(v, "|", "\\|"), "\n", " ")
+			cells[i] = strings.ReplaceAll(oneLine(v), "|", "\\|")
 		}
 		b.WriteString("| " + strings.Join(cells, " | ") + " |\n")
 	}
@@ -451,6 +451,7 @@ func buildColumns(rnd Renderer, inc []Field, recs []record, ctx map[string]any) 
 			if err != nil {
 				return nil, err
 			}
+			v = oneLine(v)
 			c.cells[ri+1] = v
 			if w := displayWidth(v); w > c.width {
 				c.width = w
