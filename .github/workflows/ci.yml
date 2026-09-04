@@ -32,6 +32,23 @@ jobs:
       - uses: actions/checkout@v4
       # The schema is an XML 1.1 document too, and a pattern covers a file added later.
       - uses: wow-look-at-my/xml-validator@master
-        # No schema= here: --schema overflows the stack on the recursive <command> grammar.
         with:
           files: '**/*.xml **/*.xsd **/*.tml'
+
+      # Each shipped config, against the grammar it claims to speak. A .tml file speaks another, so it is not here.
+      - uses: wow-look-at-my/xml-validator@master
+        with:
+          schema: api.schema.xsd
+          files: 'api.example.xml samples/github/github.xml samples/ci/ci.xml'
+
+      # api.schema.xsd is a copy of the schema wow-look-at-my/api-cli-spec owns and proves against a fixture corpus.
+      - name: Check api.schema.xsd against the canonical schema in api-cli-spec
+        uses: wow-look-at-my/actions@typescript#latest
+        with:
+          script: |
+            const url = 'https://raw.githubusercontent.com/wow-look-at-my/api-cli-spec/master/api-cli.xsd';
+            const res = await fetch(url);
+            if (!res.ok) core.setFailed(`cannot read the canonical schema: ${url} answered ${res.status}`);
+            const want = await res.text();
+            const got = fs.readFileSync('api.schema.xsd', 'utf-8');
+            if (want !== got) core.setFailed('api.schema.xsd has drifted from api-cli-spec; copy the canonical file over it');

@@ -1,429 +1,795 @@
 <?xml version="1.1" encoding="UTF-8"?>
 <!--
-  XSD reference for api-cli XML configs. This documents the grammar for editor
-  tooling and `api-cli docs schema`. The authoritative parser is xmlsource.go;
-  this schema is a guide, not the enforcement point (api-cli validates configs
-  by loading them).
+	The api-cli configuration language.
 
-  Element content may interleave text with the placeholders <value>, <if> and
-  <for>, which compile to Go text/template source.
+	This schema is the specification of the document api-cli loads. It is
+	checked with wow-look-at-my/xml-validator, and every rule it states is
+	proved by a fixture under examples/. README.md lists the rules the loader
+	enforces that a schema cannot express.
+
+	A document mixes text with the placeholders <value>, <if> and <for>. Those
+	come from the api-dsl module, which owns that layer for every consumer.
+	Section 1 states their grammar; the rest of the file is api-cli's own
+	vocabulary.
+
+	Child elements are order-free. The loader dispatches on an element's name,
+	so it accepts <fields> before <run> as readily as after it. Every
+	structural element therefore uses xs:all rather than xs:sequence.
 -->
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 
-  <!-- ===== Placeholders (mixed content) ===== -->
-  <xs:complexType name="value">
-    <xs:attribute name="name" type="xs:string"/>
-    <xs:attribute name="expr" type="xs:string"/>
-    <xs:attribute name="default" type="xs:string"/>
-    <xs:attribute name="as" type="xs:string"/>
-  </xs:complexType>
+	<!-- ===== 0. Shared lexical types ===== -->
 
-  <xs:complexType name="ifType" mixed="true">
-    <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
-    <xs:attribute name="test" type="xs:string" use="required"/>
-    <xs:attribute name="eq" type="xs:string"/>
-  </xs:complexType>
+	<!--
+		The loader reads a boolean as `attr == "true"`. Every other spelling is
+		false, silently. This schema permits only the two words, so required="1"
+		fails the check instead of turning the flag off without a word.
+	-->
+	<xs:simpleType name="bool">
+		<xs:restriction base="xs:token">
+			<xs:enumeration value="true"/>
+			<xs:enumeration value="false"/>
+		</xs:restriction>
+	</xs:simpleType>
 
-  <xs:complexType name="forType" mixed="true">
-    <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
-    <xs:attribute name="each" type="xs:string" use="required"/>
-  </xs:complexType>
+	<xs:simpleType name="nonEmpty">
+		<xs:restriction base="xs:string">
+			<xs:minLength value="1"/>
+		</xs:restriction>
+	</xs:simpleType>
 
-  <xs:group name="placeholders">
-    <xs:choice>
-      <xs:element name="value" type="value"/>
-      <xs:element name="if" type="ifType"/>
-      <xs:element name="else"><xs:complexType/></xs:element>
-      <xs:element name="for" type="forType"/>
-    </xs:choice>
-  </xs:group>
+	<!-- A context path, such as "var.base_url" or "flag.dry-run". -->
+	<xs:simpleType name="path">
+		<xs:restriction base="xs:token">
+			<xs:minLength value="1"/>
+			<xs:pattern value="[^\s]+"/>
+		</xs:restriction>
+	</xs:simpleType>
 
-  <!-- A run-of-the-mill text+placeholder content model (url, header, var, ...). -->
-  <xs:complexType name="content" mixed="true">
-    <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
-  </xs:complexType>
+	<!--
+		A step's or a download's over=: a context path, or a template whose
+		output is read as JSON. The second form is how a config reshapes a
+		fan-out result without leaving the config. A <fields over=> and a
+		<prop over=> are paths only, so they keep the narrower type.
+	-->
+	<xs:simpleType name="overExpr">
+		<xs:restriction base="xs:token">
+			<xs:minLength value="1"/>
+		</xs:restriction>
+	</xs:simpleType>
 
-  <!-- ===== Executables: <run> is a request, argv, or a shell string ===== -->
-  <xs:complexType name="run" mixed="true">
-    <xs:choice minOccurs="0" maxOccurs="unbounded">
-      <xs:element name="request" type="request"/>
-      <xs:element name="argv" type="content"/>
-      <xs:group ref="placeholders"/>
-    </xs:choice>
-  </xs:complexType>
+	<!-- A Go text/template fragment. It is rendered, never parsed here. -->
+	<xs:simpleType name="template">
+		<xs:restriction base="nonEmpty"/>
+	</xs:simpleType>
 
-  <xs:complexType name="request">
-    <xs:sequence>
-      <xs:element name="url" type="content"/>
-      <xs:element name="query" type="query" minOccurs="0"/>
-      <xs:choice minOccurs="0" maxOccurs="unbounded">
-        <xs:element name="header" type="header"/>
-        <xs:element name="if" type="headerIf"/>
-      </xs:choice>
-      <xs:element name="body" type="content" minOccurs="0"/>
-      <xs:element name="response" type="response" minOccurs="0"/>
-    </xs:sequence>
-    <xs:attribute name="method" type="xs:string"/>
-    <!-- Name of a <transport>; "http" selects the built-in client, opting this
-         request out of a default transport. Omit to use the registry's
-         default, if any. -->
-    <xs:attribute name="transport" type="xs:string"/>
-    <!-- Comma-separated error statuses that are an answer rather than a
-         failure ("404" or "404,410"). The body reaches the caller with exit
-         code 0. It needs the built-in client. -->
-    <xs:attribute name="allow-status" type="xs:string"/>
-  </xs:complexType>
+	<!-- ===== 1. The api-dsl placeholder layer ===== -->
 
-  <!-- ===== Transports: programs that perform requests ===== -->
-  <xs:complexType name="transports">
-    <xs:sequence>
-      <xs:element name="transport" maxOccurs="unbounded">
-        <xs:complexType>
-          <xs:sequence>
-            <!-- Must be a command (argv or shell), never a <request>. Sees the
-                 rendered request at .request.{method,url,body,headers,
-                 header_lines}; its stdout is the response body. -->
-            <xs:element name="run" type="run"/>
-            <xs:element name="cwd" type="content" minOccurs="0"/>
-            <!-- Omit to send the request body on stdin; declare it (even
-                 empty) to send something else. -->
-            <xs:element name="stdin" type="content" minOccurs="0"/>
-          </xs:sequence>
-          <xs:attribute name="name" type="xs:string" use="required"/>
-          <xs:attribute name="default" type="xs:boolean"/>
-        </xs:complexType>
-      </xs:element>
-    </xs:sequence>
-  </xs:complexType>
+	<!--
+		<value name="p"/> reads a context path. <value expr="{{ . }}"/> is a
+		verbatim template. Exactly one applies, and default= and as= decorate
+		the path form only. The two xs:alternative branches say so: an instance
+		carrying expr= takes valueExpr, which prohibits the other three.
+	-->
+	<xs:complexType name="valueByName">
+		<xs:attribute name="name" type="path" use="required"/>
+		<xs:attribute name="default" type="xs:string"/>
+		<xs:attribute name="as" type="path"/>
+		<xs:attribute name="expr" use="prohibited"/>
+	</xs:complexType>
 
-  <!-- Settings for the process-wide download queue. One queue serves the whole
-       run, so these are set once. The concurrency, download-dir and no-tui
-       flags override them per invocation. -->
-  <xs:complexType name="downloads">
-    <xs:attribute name="concurrency" type="xs:positiveInteger"/>
-    <!-- 0 is meaningful: report a failure immediately rather than retrying. -->
-    <xs:attribute name="retries" type="xs:nonNegativeInteger"/>
-    <xs:attribute name="dir" type="xs:string"/>
-  </xs:complexType>
+	<xs:complexType name="valueByExpr">
+		<xs:attribute name="expr" type="nonEmpty" use="required"/>
+		<xs:attribute name="name" use="prohibited"/>
+		<xs:attribute name="default" use="prohibited"/>
+		<xs:attribute name="as" use="prohibited"/>
+	</xs:complexType>
 
-  <!-- A hand-off to the download queue. Leaf-only and repeatable: it runs after
-       the steps and stands in for the leaf's <run>. With over=, it repeats per
-       record of that list, with the record's keys promoted and the record at
-       .item. A <url> rendering several lines yields one download per line. -->
-  <xs:complexType name="download">
-    <xs:sequence>
-      <xs:element name="url" type="content"/>
-      <!-- A file path; a directory when it ends in "/", names an existing one,
-           or serves several URLs. Omit for the download directory, named by the
-           URL or the response's Content-Disposition. -->
-      <xs:element name="to" type="content" minOccurs="0"/>
-      <!-- Optional. The file is verified as it streams and deleted rather than
-           renamed if it does not match. Render the body empty to skip the check
-           for one record of an over= list. -->
-      <xs:element name="hash" type="hash" minOccurs="0"/>
-      <!-- Concatenates every member of a group into one file, in the numeric
-           order of order=, as soon as that group's last part lands. -->
-      <xs:element name="join" type="join" minOccurs="0"/>
-      <xs:choice minOccurs="0" maxOccurs="unbounded">
-        <xs:element name="header" type="header"/>
-        <!-- Folded into one Cookie header. -->
-        <xs:element name="cookie" type="header"/>
-        <xs:element name="if" type="downloadAuthIf"/>
-      </xs:choice>
-    </xs:sequence>
-    <!-- A context path, or a template that renders a JSON list. -->
-    <xs:attribute name="over" type="xs:string"/>
-    <xs:attribute name="when" type="xs:string"/>
-    <!-- Both are templates over the record, and both need a <join>. group=
-         buckets the members; order= is the number they sort by. -->
-    <xs:attribute name="group" type="xs:string"/>
-    <xs:attribute name="order" type="xs:string"/>
-    <!-- A <transport> name, as on <request>: the program fetches the file and
-         its stdout is streamed to disk. Empty takes the registry default;
-         "http" opts back to the built-in client. -->
-    <xs:attribute name="transport" type="xs:string"/>
-  </xs:complexType>
+	<xs:element name="value">
+		<xs:alternative test="@expr" type="valueByExpr"/>
+		<xs:alternative type="valueByName"/>
+	</xs:element>
 
-  <!-- The one file a group of parts becomes. A group short a part is not
-       written at all, and the run exits non-zero. -->
-  <xs:complexType name="join">
-    <!-- The output path, as a template over the record. Relative to the
-         download directory. -->
-    <xs:attribute name="to" type="xs:string" use="required"/>
-    <!-- Remove the parts once the output lands. -->
-    <xs:attribute name="cleanup" type="xs:boolean"/>
-    <!-- Report a hole in the numbering. Needs order=. -->
-    <xs:attribute name="contiguous" type="contiguousMode"/>
-  </xs:complexType>
+	<!--
+		<if test= [eq=]> holds content, then at most one <else/>, then more
+		content. The sequence is what caps <else/> at one and keeps it inside an
+		<if>: the placeholder group below does not carry it, so an <else/>
+		anywhere else is the load error the compiler already reports.
+	-->
+	<xs:complexType name="ifType" mixed="true">
+		<xs:sequence>
+			<xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:sequence minOccurs="0">
+				<xs:element name="else">
+					<xs:complexType/>
+				</xs:element>
+				<xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+			</xs:sequence>
+		</xs:sequence>
+		<xs:attribute name="test" type="path" use="required"/>
+		<xs:attribute name="eq" type="xs:string"/>
+	</xs:complexType>
 
-  <xs:simpleType name="contiguousMode">
-    <xs:restriction base="xs:string">
-      <xs:enumeration value="warn"/>
-      <xs:enumeration value="error"/>
-    </xs:restriction>
-  </xs:simpleType>
+	<xs:complexType name="forType" mixed="true">
+		<xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+		<xs:attribute name="each" type="path" use="required"/>
+	</xs:complexType>
 
-  <xs:complexType name="hash" mixed="true">
-    <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
-    <xs:attribute name="algo" type="hashAlgo"/>
-  </xs:complexType>
+	<xs:group name="placeholders">
+		<xs:choice>
+			<xs:element ref="value"/>
+			<xs:element name="if" type="ifType"/>
+			<xs:element name="for" type="forType"/>
+		</xs:choice>
+	</xs:group>
 
-  <xs:simpleType name="hashAlgo">
-    <xs:restriction base="xs:string">
-      <xs:enumeration value="md5"/>
-      <xs:enumeration value="sha1"/>
-      <xs:enumeration value="sha256"/>
-      <xs:enumeration value="sha512"/>
-    </xs:restriction>
-  </xs:simpleType>
+	<!-- Text plus placeholders, and no attributes: <url>, <cwd>, <body>, ... -->
+	<xs:complexType name="content" mixed="true">
+		<xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+	</xs:complexType>
 
-  <xs:complexType name="downloadAuthIf">
-    <xs:choice maxOccurs="unbounded">
-      <xs:element name="header" type="header"/>
-      <xs:element name="cookie" type="header"/>
-    </xs:choice>
-    <xs:attribute name="test" type="xs:string" use="required"/>
-  </xs:complexType>
+	<!-- Literal text, no placeholders and no attributes: <description>. -->
+	<xs:simpleType name="literal">
+		<xs:restriction base="xs:string"/>
+	</xs:simpleType>
 
-  <xs:complexType name="header" mixed="true">
-    <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
-    <xs:attribute name="name" type="xs:string" use="required"/>
-  </xs:complexType>
+	<!-- ===== 2. Executables ===== -->
 
-  <xs:complexType name="headerIf">
-    <xs:sequence>
-      <xs:element name="header" type="header" maxOccurs="unbounded"/>
-    </xs:sequence>
-    <xs:attribute name="test" type="xs:string" use="required"/>
-  </xs:complexType>
+	<!--
+		<run> is one of three things: a request, an argv list, or shell text.
+		The choice is what keeps them apart, which the loader also does with
+		"cannot mix <argv> with <...>" and "<request> must be the only child".
+	-->
+	<xs:complexType name="run" mixed="true">
+		<xs:choice minOccurs="0">
+			<xs:element name="request" type="request"/>
+			<xs:element name="argv" type="content" maxOccurs="unbounded"/>
+			<xs:group ref="placeholders" maxOccurs="unbounded"/>
+		</xs:choice>
+	</xs:complexType>
 
-  <xs:complexType name="query">
-    <xs:choice minOccurs="0" maxOccurs="unbounded">
-      <xs:element name="param" type="header"/>
-      <xs:element name="if" type="paramIf"/>
-    </xs:choice>
-    <xs:attribute name="from" type="xs:string"/>
-  </xs:complexType>
+	<!--
+		A comma-separated list of error statuses that answer rather than fail.
+		The pattern rejects a status below 400, which never fails, and anything
+		that is not a status a server sends.
+	-->
+	<xs:simpleType name="allowStatus">
+		<xs:restriction base="xs:token">
+			<xs:pattern value="\s*[45][0-9][0-9]\s*(,\s*[45][0-9][0-9]\s*)*"/>
+		</xs:restriction>
+	</xs:simpleType>
 
-  <xs:complexType name="paramIf">
-    <xs:sequence>
-      <xs:element name="param" type="header" maxOccurs="unbounded"/>
-    </xs:sequence>
-    <xs:attribute name="test" type="xs:string" use="required"/>
-  </xs:complexType>
+	<xs:complexType name="request">
+		<xs:all>
+			<xs:element name="url" type="content"/>
+			<xs:element name="query" type="query" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="header" type="header" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="if" type="headerIf" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="body" type="content" minOccurs="0"/>
+			<xs:element name="response" type="response" minOccurs="0"/>
+		</xs:all>
+		<xs:attribute name="method" type="xs:token"/>
+		<!--
+			A <transport> name. "http" selects the built-in client, opting this
+			request out of a registry default. Omit it to take that default.
+		-->
+		<xs:attribute name="transport" type="xs:token"/>
+		<xs:attribute name="allow-status" type="allowStatus"/>
+	</xs:complexType>
 
-  <!-- jq= is the jq program, a template that renders against the leaf context
-       (.arg/.flag/.var/.entry/.env). A bare dotted name is a context path to a
-       string holding the program instead. -->
-  <xs:complexType name="response">
-    <xs:attribute name="jq" type="xs:string"/>
-  </xs:complexType>
+	<!--
+		jq= is the jq program, itself a template rendered against the leaf
+		context. A bare dotted name reads the program out of that context.
+	-->
+	<xs:complexType name="response">
+		<xs:attribute name="jq" type="nonEmpty"/>
+	</xs:complexType>
 
-  <!-- ===== Output shape ===== -->
-  <xs:complexType name="fields">
-    <xs:sequence>
-      <xs:element name="field" type="field" minOccurs="0" maxOccurs="unbounded"/>
-    </xs:sequence>
-    <xs:attribute name="over" type="xs:string"/>
-    <xs:attribute name="footer" type="xs:string"/>
-    <!-- Template predicate over the format context (.data, .tty, .arg, .flag,
-         .result, ...). A leaf may declare several <fields>, and each one whose
-         predicate holds renders, in document order. -->
-    <xs:attribute name="when" type="xs:string"/>
-  </xs:complexType>
+	<xs:complexType name="header" mixed="true">
+		<xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+		<xs:attribute name="name" type="nonEmpty" use="required"/>
+	</xs:complexType>
 
-  <xs:complexType name="field" mixed="true">
-    <xs:attribute name="name" type="xs:string" use="required"/>
-    <xs:attribute name="default" type="xs:string"/>
-    <xs:attribute name="truncate" type="xs:integer"/>
-    <xs:attribute name="firstline" type="xs:boolean"/>
-    <xs:attribute name="priority" type="xs:integer"/>
-    <xs:attribute name="show_in" type="xs:string"/>
-    <xs:attribute name="expr" type="xs:string"/>
-  </xs:complexType>
+	<xs:complexType name="headerIf">
+		<xs:sequence>
+			<xs:element name="header" type="header" minOccurs="0" maxOccurs="unbounded"/>
+		</xs:sequence>
+		<xs:attribute name="test" type="path" use="required"/>
+	</xs:complexType>
 
-  <!-- ===== <tml> screen presentation ===== -->
-  <xs:complexType name="tml">
-    <xs:sequence>
-      <xs:element name="prop" type="tmlProp" minOccurs="0" maxOccurs="unbounded"/>
-    </xs:sequence>
-    <xs:attribute name="src" type="xs:string" use="required"/>
-    <xs:attribute name="dark" type="xs:boolean"/>
-  </xs:complexType>
+	<xs:complexType name="query">
+		<xs:choice minOccurs="0" maxOccurs="unbounded">
+			<xs:element name="param" type="header"/>
+			<xs:element name="if" type="paramIf"/>
+		</xs:choice>
+		<xs:attribute name="from" type="path"/>
+	</xs:complexType>
 
-  <!-- A prop takes its value from its own text, from="path", or over="path"
-       with one <field> per part of a list element. -->
-  <xs:complexType name="tmlProp" mixed="true">
-    <xs:sequence>
-      <xs:element name="field" type="tmlField" minOccurs="0" maxOccurs="unbounded"/>
-    </xs:sequence>
-    <xs:attribute name="name" type="xs:string" use="required"/>
-    <xs:attribute name="from" type="xs:string"/>
-    <xs:attribute name="over" type="xs:string"/>
-  </xs:complexType>
+	<xs:complexType name="paramIf">
+		<xs:sequence>
+			<xs:element name="param" type="header" minOccurs="0" maxOccurs="unbounded"/>
+		</xs:sequence>
+		<xs:attribute name="test" type="path" use="required"/>
+	</xs:complexType>
 
-  <xs:complexType name="tmlField" mixed="true">
-    <xs:attribute name="name" type="xs:string" use="required"/>
-  </xs:complexType>
+	<!-- ===== 3. Transports ===== -->
 
-  <!-- ===== Legacy <format>/<view> presentation ===== -->
-  <xs:complexType name="formats">
-    <xs:sequence>
-      <xs:element name="format" maxOccurs="unbounded">
-        <xs:complexType>
-          <xs:sequence>
-            <xs:element name="view" type="view" maxOccurs="unbounded"/>
-          </xs:sequence>
-          <xs:attribute name="name" type="xs:string" use="required"/>
-          <xs:attribute name="input" type="xs:string"/>
-          <xs:attribute name="when" type="xs:string"/>
-        </xs:complexType>
-      </xs:element>
-    </xs:sequence>
-  </xs:complexType>
+	<!--
+		A transport is the program that performs a request in place of the
+		built-in client. Its <run> must be a command: a transport is what
+		carries a request, so it cannot be one. Omit <stdin> to send the request
+		body; declare it, even empty, to send something else.
+	-->
+	<xs:complexType name="transport">
+		<xs:all>
+			<xs:element name="run" type="runCommand"/>
+			<xs:element name="cwd" type="content" minOccurs="0"/>
+			<xs:element name="stdin" type="content" minOccurs="0"/>
+		</xs:all>
+		<xs:attribute name="name" type="transportName" use="required"/>
+		<xs:attribute name="default" type="bool"/>
+	</xs:complexType>
 
-  <xs:complexType name="view" mixed="true">
-    <xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
-    <xs:attribute name="name" type="xs:string" use="required"/>
-    <xs:attribute name="when" type="xs:string"/>
-    <xs:attribute name="default" type="xs:boolean"/>
-  </xs:complexType>
+	<!-- "http" names the built-in client, so a program may not take the name. -->
+	<xs:simpleType name="transportName">
+		<xs:restriction base="nonEmpty">
+			<xs:pattern value="[^h].*|h|h[^t].*|ht|ht[^t].*|htt|htt[^p].*|http.+"/>
+		</xs:restriction>
+	</xs:simpleType>
 
-  <xs:complexType name="formatRef" mixed="true">
-    <xs:sequence>
-      <xs:element name="view" type="view" minOccurs="0" maxOccurs="unbounded"/>
-    </xs:sequence>
-    <xs:attribute name="ref" type="xs:string"/>
-    <xs:attribute name="input" type="xs:string"/>
-    <xs:attribute name="when" type="xs:string"/>
-  </xs:complexType>
+	<xs:complexType name="runCommand" mixed="true">
+		<xs:choice minOccurs="0">
+			<xs:element name="argv" type="content" maxOccurs="unbounded"/>
+			<xs:group ref="placeholders" maxOccurs="unbounded"/>
+		</xs:choice>
+	</xs:complexType>
 
-  <!-- ===== Args / flags / vars / steps ===== -->
-  <xs:complexType name="arg">
-    <xs:attribute name="name" type="xs:string" use="required"/>
-    <xs:attribute name="type" type="xs:string"/>
-    <xs:attribute name="required" type="xs:boolean"/>
-    <xs:attribute name="variadic" type="xs:boolean"/>
-    <!-- A Go regular expression every supplied value must match. Required on
-         each arg of a runnable= node, where it is what keeps an argument and a
-         subcommand name apart. -->
-    <xs:attribute name="pattern" type="xs:string"/>
-    <xs:attribute name="description" type="xs:string"/>
-  </xs:complexType>
+	<xs:element name="transports">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element name="transport" type="transport" minOccurs="0" maxOccurs="unbounded"/>
+			</xs:sequence>
+		</xs:complexType>
+		<xs:unique name="transportName">
+			<xs:selector xpath="transport"/>
+			<xs:field xpath="@name"/>
+		</xs:unique>
+	</xs:element>
 
-  <xs:complexType name="flag">
-    <xs:attribute name="name" type="xs:string" use="required"/>
-    <xs:attribute name="short" type="xs:string"/>
-    <xs:attribute name="type" type="xs:string"/>
-    <xs:attribute name="default" type="xs:string"/>
-    <xs:attribute name="required" type="xs:boolean"/>
-    <xs:attribute name="conflicts" type="xs:string"/>
-    <xs:attribute name="description" type="xs:string"/>
-  </xs:complexType>
+	<!-- ===== 4. Downloads ===== -->
 
-  <xs:complexType name="vars">
-    <xs:sequence>
-      <xs:element name="var" type="content" maxOccurs="unbounded"/>
-    </xs:sequence>
-  </xs:complexType>
+	<!--
+		Settings for the process-wide queue. One queue serves the whole run, so
+		these are stated once. It takes no children: a per-leaf hand-off is
+		<download>, and the empty content model here says which is which.
+	-->
+	<xs:complexType name="downloads">
+		<xs:attribute name="concurrency" type="xs:integer"/>
+		<!-- 0 is meaningful: report a failure at once rather than retry it. -->
+		<xs:attribute name="retries" type="xs:integer"/>
+		<xs:attribute name="dir" type="nonEmpty"/>
+	</xs:complexType>
 
-  <xs:complexType name="preconditions">
-    <xs:sequence>
-      <xs:element name="precondition" type="content" maxOccurs="unbounded"/>
-    </xs:sequence>
-  </xs:complexType>
+	<!-- The loader lowercases algo=, so every casing of the four names loads. -->
+	<xs:simpleType name="hashAlgo">
+		<xs:restriction base="xs:token">
+			<xs:pattern value="[Mm][Dd]5|[Ss][Hh][Aa]1|[Ss][Hh][Aa]256|[Ss][Hh][Aa]512"/>
+		</xs:restriction>
+	</xs:simpleType>
 
-  <xs:complexType name="steps">
-    <xs:sequence>
-      <xs:element name="step" maxOccurs="unbounded">
-        <xs:complexType>
-          <xs:sequence>
-            <!-- A command or a request, same as a leaf's <run>. Omit it to
-                 reuse the leaf's effective run with this step's <entry>. -->
-            <xs:element name="run" type="run" minOccurs="0"/>
-            <xs:element name="entry" type="entry" minOccurs="0"/>
-            <xs:element name="cwd" type="content" minOccurs="0"/>
-            <xs:element name="stdin" type="content" minOccurs="0"/>
-          </xs:sequence>
-          <xs:attribute name="name" type="xs:string" use="required"/>
-          <xs:attribute name="when" type="xs:string"/>
-          <!-- Repeat the step per element of a list: a context path, or a
-               template that renders a JSON list. The element is .item and its
-               position .index. -->
-          <xs:attribute name="over" type="xs:string"/>
-          <!-- Poll: repeat the step's own run until this predicate holds. It
-               sees the last body promoted to the top level, and at .body. -->
-          <xs:attribute name="until" type="xs:string"/>
-          <!-- The wait between attempts (default 1s) and the cap on them
-               (default 60). Both need until=. -->
-          <xs:attribute name="interval" type="xs:string"/>
-          <xs:attribute name="attempts" type="xs:positiveInteger"/>
-        </xs:complexType>
-      </xs:element>
-    </xs:sequence>
-  </xs:complexType>
+	<xs:complexType name="hash" mixed="true">
+		<xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+		<xs:attribute name="algo" type="hashAlgo"/>
+	</xs:complexType>
 
-  <!-- entry carries request shape (path + query). The loader also accepts
-       arbitrary user-defined child elements for non-HTTP commands; those are
-       not enumerated here. -->
-  <xs:complexType name="entry">
-    <xs:all>
-      <xs:element name="path" type="content" minOccurs="0"/>
-      <xs:element name="query" type="entryQuery" minOccurs="0"/>
-    </xs:all>
-  </xs:complexType>
+	<!--
+		A hand-off to the queue. It stands in for the leaf's <run> and repeats
+		per record of an over= list. A <url> that renders several lines yields
+		one download per line. <to> naming a directory takes the file's name
+		from Content-Disposition or from the URL.
+	-->
+	<xs:complexType name="download">
+		<xs:all>
+			<xs:element name="url" type="content"/>
+			<xs:element name="to" type="content" minOccurs="0"/>
+			<xs:element name="hash" type="hash" minOccurs="0"/>
+			<xs:element name="header" type="header" minOccurs="0" maxOccurs="unbounded"/>
+			<!-- Every <cookie> folds into one Cookie header. -->
+			<xs:element name="cookie" type="header" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="if" type="downloadIf" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="join" type="join" minOccurs="0"/>
+		</xs:all>
+		<xs:attribute name="over" type="overExpr"/>
+		<xs:attribute name="when" type="template"/>
+		<xs:attribute name="transport" type="xs:token"/>
+		<!--
+			The bucket a part joins, and its place in that bucket. Both are
+			templates over the record, and both describe a <join>, so a
+			declaration that carries either one without a <join> fails the load.
+			order= is read as a number: a capture numbers its parts 2, 3, 10,
+			and a lexical sort puts 10 first.
+		-->
+		<xs:attribute name="group" type="template"/>
+		<xs:attribute name="order" type="template"/>
+	</xs:complexType>
 
-  <xs:complexType name="entryQuery">
-    <xs:sequence>
-      <xs:element name="param" type="header" minOccurs="0" maxOccurs="unbounded"/>
-    </xs:sequence>
-  </xs:complexType>
+	<!--
+		The one file a group of parts becomes. Each member still needs its own
+		<to>, so the parts land separately and the join concatenates them.
+		contiguous= reports a gap in the numeric order, and it reads the numbers
+		order= gives.
+	-->
+	<xs:complexType name="join">
+		<xs:attribute name="to" type="template" use="required"/>
+		<xs:attribute name="cleanup" type="bool"/>
+		<xs:attribute name="contiguous" type="joinGap"/>
+	</xs:complexType>
 
-  <!-- ===== Command tree (recursive) ===== -->
-  <xs:complexType name="command">
-    <xs:sequence>
-      <xs:element name="arg" type="arg" minOccurs="0" maxOccurs="unbounded"/>
-      <xs:element name="flag" type="flag" minOccurs="0" maxOccurs="unbounded"/>
-      <xs:element name="vars" type="vars" minOccurs="0"/>
-      <xs:element name="run" type="run" minOccurs="0"/>
-      <xs:element name="cwd" type="content" minOccurs="0"/>
-      <xs:element name="stdin" type="content" minOccurs="0"/>
-      <xs:element name="confirm" type="content" minOccurs="0"/>
-      <xs:element name="preconditions" type="preconditions" minOccurs="0"/>
-      <xs:element name="steps" type="steps" minOccurs="0"/>
-      <xs:element name="entry" type="entry" minOccurs="0"/>
-      <xs:element name="fields" type="fields" minOccurs="0" maxOccurs="unbounded"/>
-      <xs:element name="tml" type="tml" minOccurs="0"/>
-      <xs:element name="format" type="formatRef" minOccurs="0"/>
-      <xs:element name="download" type="download" minOccurs="0" maxOccurs="unbounded"/>
-      <xs:element name="command" type="command" minOccurs="0" maxOccurs="unbounded"/>
-    </xs:sequence>
-    <xs:attribute name="name" type="xs:string" use="required"/>
-    <xs:attribute name="description" type="xs:string"/>
-    <xs:attribute name="passthrough" type="xs:boolean"/>
-    <!-- A node with subcommands that also runs. Every <arg> then needs a
-         pattern= that matches no subcommand name. -->
-    <xs:attribute name="runnable" type="xs:boolean"/>
-    <xs:attribute name="confirm" type="xs:string"/>
-  </xs:complexType>
+	<xs:simpleType name="joinGap">
+		<xs:restriction base="xs:token">
+			<xs:enumeration value="warn"/>
+			<xs:enumeration value="error"/>
+		</xs:restriction>
+	</xs:simpleType>
 
-  <!-- ===== Root ===== -->
-  <xs:element name="config">
-    <xs:complexType>
-      <xs:sequence>
-        <xs:element name="description" type="xs:string" minOccurs="0"/>
-        <xs:element name="vars" type="vars" minOccurs="0"/>
-        <xs:element name="transports" type="transports" minOccurs="0"/>
-        <xs:element name="downloads" type="downloads" minOccurs="0"/>
-        <xs:element name="run" type="run" minOccurs="0"/>
-        <xs:element name="cwd" type="content" minOccurs="0"/>
-        <xs:element name="stdin" type="content" minOccurs="0"/>
-        <xs:element name="formats" type="formats" minOccurs="0"/>
-        <xs:element name="command" type="command" minOccurs="0" maxOccurs="unbounded"/>
-      </xs:sequence>
-      <xs:attribute name="name" type="xs:string" use="required"/>
-      <xs:attribute name="schema" type="xs:string"/>
-    </xs:complexType>
-  </xs:element>
+	<xs:complexType name="downloadIf">
+		<xs:choice minOccurs="0" maxOccurs="unbounded">
+			<xs:element name="header" type="header"/>
+			<xs:element name="cookie" type="header"/>
+		</xs:choice>
+		<xs:attribute name="test" type="path" use="required"/>
+	</xs:complexType>
+
+	<!-- ===== 5. The fields auto-formatter ===== -->
+
+	<!--
+		A <field> body is a record-relative path, and expr= is a template that
+		sees the record promoted plus the whole context through $. One or the
+		other: the branches below make an expr= field empty and a path field
+		non-empty, which is the pair of errors the loader reports.
+	-->
+	<xs:complexType name="fieldAttrs">
+		<xs:attribute name="name" type="nonEmpty" use="required"/>
+		<xs:attribute name="default" type="xs:string"/>
+		<xs:attribute name="truncate" type="xs:integer"/>
+		<xs:attribute name="firstline" type="bool"/>
+		<xs:attribute name="priority" type="xs:integer"/>
+		<xs:attribute name="show_in" type="xs:token"/>
+	</xs:complexType>
+
+	<xs:complexType name="fieldByExpr">
+		<xs:complexContent>
+			<xs:extension base="fieldAttrs">
+				<xs:attribute name="expr" type="nonEmpty" use="required"/>
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+
+	<xs:complexType name="fieldByPath">
+		<xs:simpleContent>
+			<xs:extension base="path">
+				<xs:attribute name="name" type="nonEmpty" use="required"/>
+				<xs:attribute name="default" type="xs:string"/>
+				<xs:attribute name="truncate" type="xs:integer"/>
+				<xs:attribute name="firstline" type="bool"/>
+				<xs:attribute name="priority" type="xs:integer"/>
+				<xs:attribute name="show_in" type="xs:token"/>
+				<xs:attribute name="expr" use="prohibited"/>
+			</xs:extension>
+		</xs:simpleContent>
+	</xs:complexType>
+
+	<!--
+		when= is a template predicate over the format context. A leaf may carry
+		several <fields>, and every block whose predicate holds renders, in
+		document order.
+	-->
+	<xs:complexType name="fields">
+		<xs:sequence>
+			<xs:element name="field" minOccurs="0" maxOccurs="unbounded">
+				<xs:alternative test="@expr" type="fieldByExpr"/>
+				<xs:alternative type="fieldByPath"/>
+			</xs:element>
+		</xs:sequence>
+		<xs:attribute name="over" type="path"/>
+		<xs:attribute name="footer" type="template"/>
+		<xs:attribute name="when" type="template"/>
+	</xs:complexType>
+
+	<!-- ===== 6. The tml screen ===== -->
+
+	<!--
+		A prop takes its value from its own text, from="path", or over="path"
+		with one <field> per part of a list element. Exactly one of the three,
+		which the three branches state: over= brings the fields, from= is empty,
+		and the remaining form is text.
+	-->
+	<xs:complexType name="tmlFieldByExpr">
+		<xs:attribute name="name" type="nonEmpty" use="required"/>
+		<xs:attribute name="expr" type="nonEmpty" use="required"/>
+		<xs:attribute name="lines" type="bool"/>
+		<xs:attribute name="last" type="xs:token"/>
+		<xs:attribute name="truncate" type="xs:token"/>
+	</xs:complexType>
+
+	<xs:complexType name="tmlFieldByPath">
+		<xs:simpleContent>
+			<xs:extension base="path">
+				<xs:attribute name="name" type="nonEmpty" use="required"/>
+				<xs:attribute name="expr" use="prohibited"/>
+				<xs:attribute name="lines" type="bool"/>
+				<xs:attribute name="last" type="xs:token"/>
+				<xs:attribute name="truncate" type="xs:token"/>
+			</xs:extension>
+		</xs:simpleContent>
+	</xs:complexType>
+
+	<!-- over= names the parts of each element, so it needs at least one. -->
+	<xs:complexType name="propOver">
+		<xs:sequence>
+			<xs:element name="field" maxOccurs="unbounded">
+				<xs:alternative test="@expr" type="tmlFieldByExpr"/>
+				<xs:alternative type="tmlFieldByPath"/>
+			</xs:element>
+		</xs:sequence>
+		<xs:attribute name="name" type="nonEmpty" use="required"/>
+		<xs:attribute name="over" type="path" use="required"/>
+		<xs:attribute name="from" use="prohibited"/>
+	</xs:complexType>
+
+	<xs:complexType name="propFrom">
+		<xs:attribute name="name" type="nonEmpty" use="required"/>
+		<xs:attribute name="from" type="path" use="required"/>
+		<xs:attribute name="over" use="prohibited"/>
+	</xs:complexType>
+
+	<xs:complexType name="propText" mixed="true">
+		<xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+		<xs:attribute name="name" type="nonEmpty" use="required"/>
+		<xs:attribute name="from" use="prohibited"/>
+		<xs:attribute name="over" use="prohibited"/>
+	</xs:complexType>
+
+	<xs:complexType name="tml">
+		<xs:sequence>
+			<xs:element name="prop" minOccurs="0" maxOccurs="unbounded">
+				<xs:alternative test="@over" type="propOver"/>
+				<xs:alternative test="@from" type="propFrom"/>
+				<xs:alternative type="propText"/>
+			</xs:element>
+		</xs:sequence>
+		<xs:attribute name="src" type="nonEmpty" use="required"/>
+		<xs:attribute name="dark" type="bool"/>
+	</xs:complexType>
+
+	<!-- ===== 7. The legacy format and view presentation ===== -->
+
+	<xs:simpleType name="formatInput">
+		<xs:restriction base="xs:token">
+			<xs:enumeration value="json"/>
+			<xs:enumeration value="lines"/>
+			<xs:enumeration value="raw"/>
+		</xs:restriction>
+	</xs:simpleType>
+
+	<xs:complexType name="view" mixed="true">
+		<xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+		<xs:attribute name="name" type="nonEmpty" use="required"/>
+		<xs:attribute name="when" type="template"/>
+		<xs:attribute name="default" type="bool"/>
+	</xs:complexType>
+
+	<xs:element name="format">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element name="view" type="view" minOccurs="0" maxOccurs="unbounded"/>
+			</xs:sequence>
+			<!-- A leaf's <format ref=> names a top-level one instead. -->
+			<xs:attribute name="name" type="nonEmpty"/>
+			<xs:attribute name="ref" type="nonEmpty"/>
+			<xs:attribute name="input" type="formatInput"/>
+			<xs:attribute name="when" type="template"/>
+		</xs:complexType>
+		<xs:unique name="viewName">
+			<xs:selector xpath="view"/>
+			<xs:field xpath="@name"/>
+		</xs:unique>
+	</xs:element>
+
+	<xs:element name="formats">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element ref="format" minOccurs="0" maxOccurs="unbounded"/>
+			</xs:sequence>
+		</xs:complexType>
+		<xs:unique name="formatName">
+			<xs:selector xpath="format"/>
+			<xs:field xpath="@name"/>
+		</xs:unique>
+	</xs:element>
+
+	<!-- ===== 8. Args, flags, vars, steps ===== -->
+
+	<xs:simpleType name="argType">
+		<xs:restriction base="xs:token">
+			<xs:enumeration value=""/>
+			<xs:enumeration value="string"/>
+			<xs:enumeration value="int"/>
+		</xs:restriction>
+	</xs:simpleType>
+
+	<xs:simpleType name="flagType">
+		<xs:restriction base="xs:token">
+			<xs:enumeration value=""/>
+			<xs:enumeration value="string"/>
+			<xs:enumeration value="bool"/>
+			<xs:enumeration value="int"/>
+			<xs:enumeration value="string-slice"/>
+		</xs:restriction>
+	</xs:simpleType>
+
+	<xs:complexType name="arg">
+		<xs:attribute name="name" type="nonEmpty" use="required"/>
+		<xs:attribute name="type" type="argType"/>
+		<xs:attribute name="required" type="bool"/>
+		<xs:attribute name="variadic" type="bool"/>
+		<!--
+			A Go regular expression every supplied value must match. Each arg of
+			a runnable= node needs one: it is what keeps an argument and a
+			subcommand name apart.
+		-->
+		<xs:attribute name="pattern" type="nonEmpty"/>
+		<xs:attribute name="description" type="xs:string"/>
+	</xs:complexType>
+
+	<!-- One character. A short is spelled -x, so it has room for exactly one. -->
+	<xs:simpleType name="shortFlag">
+		<xs:restriction base="xs:string">
+			<xs:length value="1"/>
+			<xs:pattern value="[^\s]"/>
+		</xs:restriction>
+	</xs:simpleType>
+
+	<!--
+		A flag name never starts with "no-": cobra owns that prefix for the
+		negation of a bool.
+	-->
+	<xs:simpleType name="flagName">
+		<xs:restriction base="xs:token">
+			<xs:minLength value="1"/>
+			<xs:pattern value="([^n].*)|(n)|(n[^o].*)|(no)|(no[^-].*)"/>
+		</xs:restriction>
+	</xs:simpleType>
+
+	<!--
+		default= is read as the flag's own type, so an int flag defaulting to
+		"notanint" fails the load. The branches below check it here instead:
+		one per type that parses its default, and a string default for the rest.
+		A string-slice default is a comma-separated list, which is any string.
+	-->
+	<xs:complexType name="flagAttrs">
+		<xs:attribute name="name" type="flagName" use="required"/>
+		<xs:attribute name="short" type="shortFlag"/>
+		<xs:attribute name="type" type="flagType"/>
+		<xs:attribute name="required" type="bool"/>
+		<!-- A comma-separated list of flag names on the same node. -->
+		<xs:attribute name="conflicts" type="xs:token"/>
+		<xs:attribute name="description" type="xs:string"/>
+	</xs:complexType>
+
+	<xs:complexType name="flagOfInt">
+		<xs:complexContent>
+			<xs:extension base="flagAttrs">
+				<xs:attribute name="default" type="xs:integer"/>
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+
+	<xs:complexType name="flagOfBool">
+		<xs:complexContent>
+			<xs:extension base="flagAttrs">
+				<xs:attribute name="default" type="bool"/>
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+
+	<xs:complexType name="flagOfString">
+		<xs:complexContent>
+			<xs:extension base="flagAttrs">
+				<xs:attribute name="default" type="xs:string"/>
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+
+	<xs:element name="vars">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element name="var" minOccurs="0" maxOccurs="unbounded">
+					<xs:complexType mixed="true">
+						<xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
+						<xs:attribute name="name" type="path" use="required"/>
+					</xs:complexType>
+				</xs:element>
+			</xs:sequence>
+		</xs:complexType>
+		<xs:unique name="varName">
+			<xs:selector xpath="var"/>
+			<xs:field xpath="@name"/>
+		</xs:unique>
+	</xs:element>
+
+	<xs:complexType name="preconditions">
+		<xs:sequence>
+			<xs:element name="precondition" type="content" minOccurs="0" maxOccurs="unbounded"/>
+		</xs:sequence>
+	</xs:complexType>
+
+
+	<!--
+		<entry> becomes .entry, as JSON. Its children are the object's keys, so
+		their names belong to the author rather than to this language. It is
+		therefore the ur-type, the one element here whose content this schema
+		cannot constrain. README.md says what the loader checks instead.
+	-->
+	<xs:element name="entry"/>
+
+	<!--
+		A step runs its own command or request, or reuses the leaf's with this
+		step's <entry>. over= repeats it once per element of a list.
+	-->
+	<xs:complexType name="step">
+		<xs:all>
+			<xs:element name="run" type="run" minOccurs="0"/>
+			<xs:element ref="entry" minOccurs="0"/>
+			<xs:element name="cwd" type="content" minOccurs="0"/>
+			<xs:element name="stdin" type="content" minOccurs="0"/>
+		</xs:all>
+		<xs:attribute name="name" type="nonEmpty" use="required"/>
+		<xs:attribute name="when" type="template"/>
+		<xs:attribute name="over" type="overExpr"/>
+		<!--
+			Polling. The step repeats until until= holds, waiting interval=
+			between tries and giving up after attempts= of them.
+		-->
+		<xs:attribute name="until" type="template"/>
+		<xs:attribute name="interval" type="xs:token"/>
+		<xs:attribute name="attempts" type="xs:integer"/>
+	</xs:complexType>
+
+	<xs:element name="steps">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element name="step" type="step" minOccurs="0" maxOccurs="unbounded"/>
+			</xs:sequence>
+		</xs:complexType>
+		<xs:unique name="stepName">
+			<xs:selector xpath="step"/>
+			<xs:field xpath="@name"/>
+		</xs:unique>
+	</xs:element>
+
+	<!-- ===== 9. The command tree ===== -->
+
+	<!--
+		A command name carries no whitespace and no slash, and it is none of the
+		four names cobra owns. Each step below removes one reserved name, and a
+		restriction of a restriction enforces the patterns it inherits as well
+		as the one it states, so the five patterns hold together.
+
+		One pattern reads: anything whose first character is not the word's
+		first, or that stops at each prefix of the word, or that diverges at
+		some later character, or that carries the whole word and more.
+	-->
+	<xs:simpleType name="nameChars">
+		<xs:restriction base="xs:token">
+			<xs:minLength value="1"/>
+			<xs:pattern value="[^\s/]+"/>
+		</xs:restriction>
+	</xs:simpleType>
+
+	<xs:simpleType name="notHelp">
+		<xs:restriction base="nameChars">
+			<xs:pattern value="[^h].*|h|h[^e].*|he|he[^l].*|hel|hel[^p].*|help.+"/>
+		</xs:restriction>
+	</xs:simpleType>
+
+	<xs:simpleType name="notDocs">
+		<xs:restriction base="notHelp">
+			<xs:pattern value="[^d].*|d|d[^o].*|do|do[^c].*|doc|doc[^s].*|docs.+"/>
+		</xs:restriction>
+	</xs:simpleType>
+
+	<xs:simpleType name="notCompletion">
+		<xs:restriction base="notDocs">
+			<xs:pattern value="[^c].*|c|c[^o].*|co|co[^m].*|com|com[^p].*|comp|comp[^l].*|compl|compl[^e].*|comple|comple[^t].*|complet|complet[^i].*|completi|completi[^o].*|completio|completio[^n].*|completion.+"/>
+		</xs:restriction>
+	</xs:simpleType>
+
+	<xs:simpleType name="commandName">
+		<xs:restriction base="notCompletion">
+			<xs:pattern value="[^_].*|_|_[^_].*|__|__[^c].*|__c|__c[^o].*|__co|__co[^m].*|__com|__com[^p].*|__comp|__comp[^l].*|__compl|__compl[^e].*|__comple|__comple[^t].*|__complet|__complet[^e].*|__complete.+"/>
+		</xs:restriction>
+	</xs:simpleType>
+
+	<xs:complexType name="command">
+		<xs:all>
+			<xs:element name="arg" type="arg" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="flag" minOccurs="0" maxOccurs="unbounded">
+				<xs:alternative test="@type = 'int'" type="flagOfInt"/>
+				<xs:alternative test="@type = 'bool'" type="flagOfBool"/>
+				<xs:alternative type="flagOfString"/>
+			</xs:element>
+			<xs:element ref="vars" minOccurs="0"/>
+			<xs:element name="run" type="run" minOccurs="0"/>
+			<xs:element name="cwd" type="content" minOccurs="0"/>
+			<xs:element name="stdin" type="content" minOccurs="0"/>
+			<xs:element name="confirm" type="content" minOccurs="0"/>
+			<xs:element name="preconditions" type="preconditions" minOccurs="0"/>
+			<xs:element ref="steps" minOccurs="0"/>
+			<xs:element ref="entry" minOccurs="0"/>
+			<xs:element name="fields" type="fields" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="tml" type="tml" minOccurs="0"/>
+			<xs:element ref="format" minOccurs="0"/>
+			<xs:element name="download" type="download" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element ref="command" minOccurs="0" maxOccurs="unbounded"/>
+		</xs:all>
+		<xs:attribute name="name" type="commandName" use="required"/>
+		<xs:attribute name="description" type="xs:string"/>
+		<xs:attribute name="passthrough" type="bool"/>
+		<!--
+			A node with subcommands that also runs. Every <arg> then needs a
+			pattern= that matches no subcommand name.
+		-->
+		<xs:attribute name="runnable" type="bool"/>
+		<xs:attribute name="confirm" type="xs:string"/>
+	</xs:complexType>
+
+	<!--
+		<command> is global so the recursion below refers to one declaration,
+		and so the uniqueness of a name among siblings is checked at every
+		depth rather than only at the root.
+	-->
+	<xs:element name="command" type="command">
+		<xs:unique name="subcommandName">
+			<xs:selector xpath="command"/>
+			<xs:field xpath="@name"/>
+		</xs:unique>
+		<xs:unique name="argName">
+			<xs:selector xpath="arg"/>
+			<xs:field xpath="@name"/>
+		</xs:unique>
+		<xs:unique name="flagName">
+			<xs:selector xpath="flag"/>
+			<xs:field xpath="@name"/>
+		</xs:unique>
+		<xs:unique name="flagShort">
+			<xs:selector xpath="flag"/>
+			<xs:field xpath="@short"/>
+		</xs:unique>
+	</xs:element>
+
+	<!-- ===== 10. Root ===== -->
+
+	<xs:element name="config">
+		<xs:complexType>
+			<xs:all>
+				<xs:element name="description" type="literal" minOccurs="0"/>
+				<xs:element ref="vars" minOccurs="0"/>
+				<xs:element ref="transports" minOccurs="0"/>
+				<xs:element name="downloads" type="downloads" minOccurs="0"/>
+				<xs:element name="run" type="run" minOccurs="0"/>
+				<xs:element name="cwd" type="content" minOccurs="0"/>
+				<xs:element name="stdin" type="content" minOccurs="0"/>
+				<xs:element ref="formats" minOccurs="0"/>
+				<xs:element ref="command" minOccurs="0" maxOccurs="unbounded"/>
+			</xs:all>
+			<xs:attribute name="name" type="nonEmpty" use="required"/>
+			<xs:attribute name="schema" type="xs:string"/>
+		</xs:complexType>
+		<xs:unique name="topCommandName">
+			<xs:selector xpath="command"/>
+			<xs:field xpath="@name"/>
+		</xs:unique>
+	</xs:element>
 
 </xs:schema>

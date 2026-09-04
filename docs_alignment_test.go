@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
@@ -62,13 +63,27 @@ func TestDocs_AsFlagUsageNamesEverySink(t *testing.T) {
 	}
 }
 
+// eitherCase spells a name as the XSD pattern for it does. The loader
+// lowercases algo=, so the schema matches every casing of each name.
+func eitherCase(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if unicode.IsLetter(r) {
+			fmt.Fprintf(&b, "[%c%c]", unicode.ToUpper(r), r)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 func TestDocs_HashAlgosAreDocumented(t *testing.T) {
 	readme := readmeSection(t, "### Checking a download against a digest")
 	schema := schemaDoc
 	for algo := range hashAlgos {
 		assert.Contains(t, readme, algo, "the README omits the %q digest algorithm", algo)
-		assert.Contains(t, schema, fmt.Sprintf("<xs:enumeration value=%q/>", algo),
-			"the XSD hashAlgo enumeration omits %q", algo)
+		assert.Contains(t, schema, eitherCase(algo),
+			"the XSD hashAlgo pattern omits %q", algo)
 	}
 	assert.Contains(t, readme, defaultHashAlgo+"` (the default)")
 }
