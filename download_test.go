@@ -77,9 +77,13 @@ func TestValidate_DownloadRules(t *testing.T) {
 		_, err := loadStr(t, `<config name="x"><command name="g"><download><to>f</to></download></command></config>`)
 		assert.ErrorContains(t, err, "requires a <url>")
 	})
-	t.Run("leaves only", func(t *testing.T) {
+	t.Run("needs a node that runs", func(t *testing.T) {
 		_, err := loadStr(t, `<config name="x"><command name="g"><download><url>u</url></download><command name="c"><run>x</run></command></command></config>`)
-		assert.ErrorContains(t, err, "only allowed on leaves")
+		assert.ErrorContains(t, err, "needs a node that runs")
+	})
+	t.Run("a runnable parent runs, so it may download", func(t *testing.T) {
+		_, err := loadStr(t, `<config name="x"><command name="g" runnable="true"><download><url>u</url></download><command name="c"><run>x</run></command></command></config>`)
+		assert.NoError(t, err)
 	})
 	t.Run("not with fields", func(t *testing.T) {
 		_, err := loadStr(t, `<config name="x"><command name="g"><download><url>u</url></download><fields><field name="A">a</field></fields></command></config>`)

@@ -262,16 +262,16 @@ func validateDownloadSettings(d *Downloads) error {
 }
 
 // validateDownloads checks a command's <download> declarations: they are the
-// leaf's action, so they cannot sit on a group node, and their output is file
-// paths rather than records for a formatter to shape.
+// node's action, so they need a node that runs, and their output is file paths
+// rather than records for a formatter to shape.
 func validateDownloads(c *Command, where string, transports map[string]*Transport) error {
 	if len(c.Downloads) == 0 {
 		return nil
 	}
-	if len(c.Commands) > 0 {
-		return fmt.Errorf("%s: <download> is only allowed on leaves (nodes with no subcommands)", where)
+	if !c.executes() {
+		return fmt.Errorf("%s: <download> needs a node that runs (a leaf, or a parent with runnable=)", where)
 	}
-	if c.Fields != nil || c.Format.Defined() {
+	if len(c.Fields) > 0 || c.Format.Defined() {
 		return fmt.Errorf("%s: <download> writes files rather than records, so <fields>/<format> cannot shape it", where)
 	}
 	for i := range c.Downloads {

@@ -84,8 +84,16 @@ func registerConflicts(cmd *cobra.Command, flags []Flag) {
 // declared types. A variadic arg (always last) collects all remaining values
 // into a typed slice; an unsupplied optional variadic arg yields an empty
 // slice so templates can range over it without nil checks.
+//
+// Every declared arg is present, supplied or not: an omitted optional arg holds
+// the zero value of its type ("" or 0). A template that reads it therefore sees
+// a string, which is what a helper like urlpath needs, instead of the nil that
+// missingkey=zero renders as "<no value>".
 func gatherArgs(node Command, args []string) (map[string]any, error) {
 	out := make(map[string]any, len(node.Args))
+	for _, a := range node.Args {
+		out[a.Name] = zeroArg(a)
+	}
 	for i, a := range node.Args {
 		if a.Variadic {
 			rest := []string{}
@@ -122,6 +130,21 @@ func gatherArgs(node Command, args []string) (map[string]any, error) {
 		out[a.Name] = v
 	}
 	return out, nil
+}
+
+// zeroArg is the value an omitted arg holds. A variadic arg keeps the empty
+// slice a template ranges over.
+func zeroArg(a Arg) any {
+	switch {
+	case a.Variadic && a.Type == "int":
+		return []int{}
+	case a.Variadic:
+		return []string{}
+	case a.Type == "int":
+		return 0
+	default:
+		return ""
+	}
 }
 
 // gatherFlags builds the .flag sub-map from the cobra-parsed flag set.

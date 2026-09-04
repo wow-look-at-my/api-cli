@@ -68,6 +68,10 @@
          request out of a default transport. Omit to use the registry's
          default, if any. -->
     <xs:attribute name="transport" type="xs:string"/>
+    <!-- Comma-separated error statuses that are an answer rather than a
+         failure ("404" or "404,410"). The body reaches the caller with exit
+         code 0. It needs the built-in client. -->
+    <xs:attribute name="allow-status" type="xs:string"/>
   </xs:complexType>
 
   <!-- ===== Transports: programs that perform requests ===== -->
@@ -196,6 +200,10 @@
     </xs:sequence>
     <xs:attribute name="over" type="xs:string"/>
     <xs:attribute name="footer" type="xs:string"/>
+    <!-- Template predicate over the format context (.data, .tty, .arg, .flag,
+         .result, ...). A leaf may declare several <fields>, and each one whose
+         predicate holds renders, in document order. -->
+    <xs:attribute name="when" type="xs:string"/>
   </xs:complexType>
 
   <xs:complexType name="field" mixed="true">
@@ -246,6 +254,10 @@
     <xs:attribute name="type" type="xs:string"/>
     <xs:attribute name="required" type="xs:boolean"/>
     <xs:attribute name="variadic" type="xs:boolean"/>
+    <!-- A Go regular expression every supplied value must match. Required on
+         each arg of a runnable= node, where it is what keeps an argument and a
+         subcommand name apart. -->
+    <xs:attribute name="pattern" type="xs:string"/>
     <xs:attribute name="description" type="xs:string"/>
   </xs:complexType>
 
@@ -319,7 +331,7 @@
       <xs:element name="preconditions" type="preconditions" minOccurs="0"/>
       <xs:element name="steps" type="steps" minOccurs="0"/>
       <xs:element name="entry" type="entry" minOccurs="0"/>
-      <xs:element name="fields" type="fields" minOccurs="0"/>
+      <xs:element name="fields" type="fields" minOccurs="0" maxOccurs="unbounded"/>
       <xs:element name="format" type="formatRef" minOccurs="0"/>
       <xs:element name="download" type="download" minOccurs="0" maxOccurs="unbounded"/>
       <xs:element name="command" type="command" minOccurs="0" maxOccurs="unbounded"/>
@@ -327,6 +339,9 @@
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="description" type="xs:string"/>
     <xs:attribute name="passthrough" type="xs:boolean"/>
+    <!-- A node with subcommands that also runs. Every <arg> then needs a
+         pattern= that matches no subcommand name. -->
+    <xs:attribute name="runnable" type="xs:boolean"/>
     <xs:attribute name="confirm" type="xs:string"/>
   </xs:complexType>
 

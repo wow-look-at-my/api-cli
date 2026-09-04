@@ -207,7 +207,7 @@ func selectView(views []View, ctx map[string]any, viewFlag string, cache map[pre
 // Formatting is suppressed when the user opts out (--no-format / --format=raw /
 // NO_FORMAT). A <fields> declaration otherwise always formats. A legacy
 // <format> additionally requires its author `when` predicate to be truthy.
-func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, fields *Fields, formatRef *FormatRef, formats map[string]*Format) (int, error) {
+func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, blocks []FieldsBlock, formatRef *FormatRef, formats map[string]*Format) (int, error) {
 	verdict := userVerdictFromFlags(c)
 
 	streamRaw := func() int {
@@ -224,15 +224,15 @@ func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin strin
 
 	// --as forces a representation even when the leaf declared no <fields>:
 	// project nothing and let the data shape (or the chosen sink) decide.
-	if fields == nil {
+	if len(blocks) == 0 {
 		if sink, _ := c.Root().PersistentFlags().GetString("as"); strings.TrimSpace(sink) != "" {
-			fields = &Fields{}
+			blocks = []FieldsBlock{{Fields: &Fields{}}}
 		}
 	}
 
-	if fields != nil {
-		logVerbose("format: applying <fields> auto-formatter")
-		return runFieldsFormatted(c, cmdTmpl, request, cwd, stdin, data, fields, verdict), nil
+	if len(blocks) > 0 {
+		logVerbose("format: applying <fields> auto-formatter (%d block(s))", len(blocks))
+		return runFieldsFormatted(c, cmdTmpl, request, cwd, stdin, data, blocks, verdict), nil
 	}
 
 	effFmt := resolveFormat(formatRef, formats)
@@ -293,8 +293,10 @@ func streamRequest(request *Request, data map[string]any) int {
 }
 
 // runFieldsFormatted captures the leaf's JSON output and renders it through the
-// <fields> auto-formatter.
-func runFieldsFormatted(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, fields *Fields, verdict userVerdict) int {
+// <fields> auto-formatter. Every block whose when= predicate holds renders, in
+// order, so one leaf shows a table and a detail view on different calls, or two
+// tables on the same call. A leaf whose blocks all sit out prints the raw body.
+func runFieldsFormatted(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, blocks []FieldsBlock, verdict userVerdict) int {
 	out, overflowed, code := captureRun(cmdTmpl, request, cwd, stdin, data)
 	if overflowed {
 		logVerbose("format: output overflowed cap, streamed raw")
@@ -321,13 +323,58 @@ func runFieldsFormatted(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, s
 	if isTTY {
 		dropWidth = width
 	}
-	rendered, err := renderFields(fields, parsed, ctx, strings.TrimSpace(sink), dropWidth)
+	rendered, matched, err := renderFieldsBlocks(blocks, parsed, ctx, strings.TrimSpace(sink), dropWidth)
 	if err != nil {
 		fmt.Fprintln(execStderr, "error:", err)
 		return 1
 	}
+	if !matched {
+		logVerbose("format: no <fields> block matched, printing the raw body")
+		fmt.Fprint(execStdout, out)
+		return 0
+	}
 	fmt.Fprint(execStdout, rendered)
 	return 0
+}
+
+// renderFieldsBlocks renders each block whose when= predicate holds, in order,
+// and joins the results. matched is false when no block applies, which leaves
+// the caller to print the body as it arrived.
+func renderFieldsBlocks(blocks []FieldsBlock, parsed any, ctx map[string]any, sink string, dropWidth int) (out string, matched bool, err error) {
+	cache := map[predicateKey]bool{}
+	var parts []string
+	for i, b := range blocks {
+		if b.When != "" {
+			ok, perr := renderPredicate(b.When, ctx, cache)
+			if perr != nil {
+				return "", false, fmt.Errorf("fields[%d] when: %w", i, perr)
+			}
+			logDebug("fields[%d]: when=%q => %v", i, b.When, ok)
+			if !ok {
+				continue
+			}
+		}
+		rendered, rerr := renderFields(b.Fields, parsed, ctx, sink, dropWidth)
+		if rerr != nil {
+			return "", false, rerr
+		}
+		parts = append(parts, rendered)
+	}
+	if len(parts) == 0 {
+		return "", false, nil
+	}
+	return joinBlocks(parts), true, nil
+}
+
+// joinBlocks stacks rendered blocks with one blank line between them, so two
+// tables on one screen do not read as one table.
+func joinBlocks(parts []string) string {
+	for i, p := range parts {
+		if i < len(parts)-1 && !strings.HasSuffix(p, "\n\n") {
+			parts[i] = strings.TrimRight(p, "\n") + "\n\n"
+		}
+	}
+	return strings.Join(parts, "")
 }
 
 // runFormatted executes the leaf via captureRun and renders the captured output
