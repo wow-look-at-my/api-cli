@@ -46,6 +46,18 @@
 		</xs:restriction>
 	</xs:simpleType>
 
+	<!--
+		A step's or a download's over=: a context path, or a template whose
+		output is read as JSON. The second form is how a config reshapes a
+		fan-out result without leaving the config. A <fields over=> and a
+		<prop over=> are paths only, so they keep the narrower type.
+	-->
+	<xs:simpleType name="overExpr">
+		<xs:restriction base="xs:token">
+			<xs:minLength value="1"/>
+		</xs:restriction>
+	</xs:simpleType>
+
 	<!-- A Go text/template fragment. It is rendered, never parsed here. -->
 	<xs:simpleType name="template">
 		<xs:restriction base="nonEmpty"/>
@@ -102,25 +114,6 @@
 		<xs:group ref="placeholders" minOccurs="0" maxOccurs="unbounded"/>
 		<xs:attribute name="each" type="path" use="required"/>
 	</xs:complexType>
-
-	<!-- The one file a group of parts becomes. A group short a part is not
-	     written at all, and the run exits non-zero. -->
-	<xs:complexType name="join">
-		<!-- The output path, as a template over the record. Relative to the
-		     download directory. -->
-		<xs:attribute name="to" type="nonEmpty" use="required"/>
-		<!-- Remove the parts once the output lands. -->
-		<xs:attribute name="cleanup" type="bool"/>
-		<!-- Report a hole in the numbering. Needs order=. -->
-		<xs:attribute name="contiguous" type="contiguousMode"/>
-	</xs:complexType>
-
-	<xs:simpleType name="contiguousMode">
-		<xs:restriction base="xs:string">
-			<xs:enumeration value="warn"/>
-			<xs:enumeration value="error"/>
-		</xs:restriction>
-	</xs:simpleType>
 
 	<xs:group name="placeholders">
 		<xs:choice>
@@ -300,20 +293,44 @@
 			<xs:element name="url" type="content"/>
 			<xs:element name="to" type="content" minOccurs="0"/>
 			<xs:element name="hash" type="hash" minOccurs="0"/>
-			<xs:element name="join" type="join" minOccurs="0"/>
 			<xs:element name="header" type="header" minOccurs="0" maxOccurs="unbounded"/>
 			<!-- Every <cookie> folds into one Cookie header. -->
 			<xs:element name="cookie" type="header" minOccurs="0" maxOccurs="unbounded"/>
 			<xs:element name="if" type="downloadIf" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="join" type="join" minOccurs="0"/>
 		</xs:all>
-		<xs:attribute name="over" type="path"/>
+		<xs:attribute name="over" type="overExpr"/>
 		<xs:attribute name="when" type="template"/>
-		<!-- Both are templates over the record and both need a <join>: group=
-		     buckets the members; order= is the number they sort by. -->
+		<xs:attribute name="transport" type="xs:token"/>
+		<!--
+			The bucket a part joins, and its place in that bucket. Both are
+			templates over the record, and both describe a <join>, so a
+			declaration that carries either one without a <join> fails the load.
+			order= is read as a number: a capture numbers its parts 2, 3, 10,
+			and a lexical sort puts 10 first.
+		-->
 		<xs:attribute name="group" type="template"/>
 		<xs:attribute name="order" type="template"/>
-		<xs:attribute name="transport" type="xs:token"/>
 	</xs:complexType>
+
+	<!--
+		The one file a group of parts becomes. Each member still needs its own
+		<to>, so the parts land separately and the join concatenates them.
+		contiguous= reports a gap in the numeric order, and it reads the numbers
+		order= gives.
+	-->
+	<xs:complexType name="join">
+		<xs:attribute name="to" type="template" use="required"/>
+		<xs:attribute name="cleanup" type="bool"/>
+		<xs:attribute name="contiguous" type="joinGap"/>
+	</xs:complexType>
+
+	<xs:simpleType name="joinGap">
+		<xs:restriction base="xs:token">
+			<xs:enumeration value="warn"/>
+			<xs:enumeration value="error"/>
+		</xs:restriction>
+	</xs:simpleType>
 
 	<xs:complexType name="downloadIf">
 		<xs:choice minOccurs="0" maxOccurs="unbounded">
@@ -407,9 +424,10 @@
 		</xs:simpleContent>
 	</xs:complexType>
 
+	<!-- over= names the parts of each element, so it needs at least one. -->
 	<xs:complexType name="propOver">
 		<xs:sequence>
-			<xs:element name="field" minOccurs="0" maxOccurs="unbounded">
+			<xs:element name="field" maxOccurs="unbounded">
 				<xs:alternative test="@expr" type="tmlFieldByExpr"/>
 				<xs:alternative type="tmlFieldByPath"/>
 			</xs:element>
@@ -628,14 +646,14 @@
 		</xs:all>
 		<xs:attribute name="name" type="nonEmpty" use="required"/>
 		<xs:attribute name="when" type="template"/>
-		<xs:attribute name="over" type="path"/>
-		<!-- Poll: repeat the step's own run until this predicate holds. It sees
-		     the last body promoted to the top level, and at .body. -->
+		<xs:attribute name="over" type="overExpr"/>
+		<!--
+			Polling. The step repeats until until= holds, waiting interval=
+			between tries and giving up after attempts= of them.
+		-->
 		<xs:attribute name="until" type="template"/>
-		<!-- The wait between attempts (default 1s) and the cap on them
-		     (default 60). Both need until=. -->
-		<xs:attribute name="interval" type="template"/>
-		<xs:attribute name="attempts" type="xs:positiveInteger"/>
+		<xs:attribute name="interval" type="xs:token"/>
+		<xs:attribute name="attempts" type="xs:integer"/>
 	</xs:complexType>
 
 	<xs:element name="steps">
