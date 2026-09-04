@@ -88,6 +88,24 @@ func TestStepWhen_GuardsTheStepRender(t *testing.T) {
 	assert.Equal(t, []string{"/detail/9", "/list"}, seen)
 }
 
+// urlpath takes a string, so an int arg fails the render. The README says to
+// drop urlpath there, because a number has nothing to escape. This pins the
+// failure a config author sees.
+func TestOptionalArg_UrlpathRejectsAnIntArg(t *testing.T) {
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:    "user",
+			Args:    []Arg{{Name: "id", Type: "int"}},
+			Request: &Request{Method: "GET", URL: "https://e/users/{{ urlpath .arg.id }}"},
+		}},
+	}
+
+	code, _, errOut := execCmdFull(t, cfg, "user", "7")
+	assert.NotEqual(t, 0, code)
+	assert.Contains(t, errOut, "expected string")
+}
+
 func TestValidate_PreconditionCannotReadResult(t *testing.T) {
 	cfg := &Config{
 		Name: "t",

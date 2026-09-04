@@ -90,7 +90,8 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 3. If it inherits, thread it in `buildCommand` (`build.go`) and in `collectMCPLeaves` (`mcp.go`).
 4. If it needs validation, extend `validate` or `validateCommand`.
 5. Document it in `api.schema.xsd` and in `README.md`. Exercise it in `api.example.xml` when an integration test needs it.
-6. Add tests: a unit test that parses and validates it in `xmlsource_test.go`, plus an integration test.
+6. A grammar limit goes in the README's "Limits and workarounds" table, with the shape to write instead. A limit the loader can catch also gets a `validate` error that names that alternative.
+7. Add tests: a unit test that parses and validates it in `xmlsource_test.go`, plus an integration test.
 
 ## Common gotchas
 

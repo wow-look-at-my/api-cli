@@ -72,7 +72,8 @@ func runRequest(req *Request, data map[string]any, errOut io.Writer) (string, in
 		// A transport program reports an exit code, and the status it saw is not
 		// ours to read. Saying so beats an attribute that quietly does nothing.
 		if len(prepared.AllowStatus) > 0 {
-			fmt.Fprintf(errOut, "error: allow-status needs the built-in client; transport %q reports an exit code, not a status\n", transport.Name)
+			fmt.Fprintf(errOut, "error: allow-status needs the built-in client, and transport %q reports an exit code rather than a status. Write transport=%q on this request to opt it out of the default transport, or let the program fail and branch in a <step when=>.\n",
+				transport.Name, builtinTransportName)
 			return "", 1
 		}
 		out, c := runViaTransport(transport, prepared, data, errOut)

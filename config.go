@@ -487,6 +487,9 @@ func validateRequest(r *Request, where string, transports map[string]*Transport)
 	if _, ok := transports[name]; !ok {
 		return fmt.Errorf("%s: references unknown transport %q", where, name)
 	}
+	if len(r.AllowStatus) > 0 {
+		return fmt.Errorf("%s: allow-status needs the built-in client, and transport %q reports an exit code rather than a status; write transport=%q on this request, or let the program fail and branch in a <step when=>", where, name, builtinTransportName)
+	}
 	return nil
 }
 

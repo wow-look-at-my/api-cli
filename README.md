@@ -613,6 +613,20 @@ A config is **XML 1.1**: `<?xml version="1.1" encoding="UTF-8"?>`. Structural in
 
 An attribute value is always raw, a template or a context path. A Go template needs double quotes for `eq .x "y"`, so put `'single quotes'` around such an attribute, or escape the inner quotes. The `schema=` attribute is an editor hint that points at the XSD. The loader ignores it.
 
+## Limits and workarounds
+
+Each row is something the grammar does not do, and the shape to write instead. Every one of them is a real report from somebody who got stuck.
+
+| Limit | Write this instead |
+|-------|--------------------|
+| **A parent command cannot run.** A node with `<command>` children prints help and nothing else. So `tool [id]` cannot be both a no-arg dashboard and a with-id detail view. Cobra reads the first positional as a subcommand name, and a value that collides with a child name goes to the child. | Give the parent a verb: `tool list` and `tool show [id]`. When both calls hit one endpoint, make it **one leaf** with an optional `<arg>` and two [`<fields when=>` blocks](#more-than-one-shape-on-one-leaf). That is the case those blocks exist for. |
+| **`urlpath` takes a string.** An `<arg type="int">` reaches it as a number, and the render fails with `expected string`. | Drop `as="urlpath"` for an int, because a number has nothing to escape. Declare the arg as a string when the value itself needs escaping. |
+| **A legacy `<format>` prints raw output off a terminal.** An omitted `when=` means `{{.tty}}`, so a redirect, a pipe and the MCP server all skip the view. | Write `when="true"` on the format, or move the leaf to [`<fields>`](#output-fields), which renders anywhere and takes `--as`. `--format=always` forces the terminal answer for one call. |
+| **`.result` is empty in a `<precondition>`.** Preconditions run before the steps, and the loader rejects one that reads `.result`. | Put the check in a `<step when=>`, which runs in order with the other steps. A step that fails aborts the leaf with its own exit code. |
+| **`allow-status=` needs the built-in client.** A `<transport>` program reports an exit code, and the status it saw is not ours to read. A named transport plus `allow-status` is a load error. | Put `transport="http"` on that one request, which opts it out of a default transport and back onto the built-in client. Otherwise let the program exit non-zero, and branch on `.result` in a later `<step when=>`. |
+| **A leaf takes `<fields>` or `<format>`, never both.** | Keep `<format>` for a leaf that needs full control of the template. Everything else belongs in `<fields>`, which the sinks and `--as` understand. |
+| **Nothing selects a transport at run time.** There is no `--transport` flag, by design: how a request reaches its endpoint is a property of the endpoint. | Name the transport in the config, on the `<request>` or as the registry `default="true"`. `transport="http"` is the per-request way back to the built-in client. |
+
 ## Config schema
 
 An XSD reference for the grammar lives at [`api.schema.xsd`](./api.schema.xsd), and `api-cli docs schema` prints it. It documents each element and attribute, for editor tooling. It is a guide, and not the enforcement point. The loader is authoritative, because api-cli validates a config by loading it. A strict XSD validator also cannot express the recursive `<command>` grammar.
@@ -647,7 +661,7 @@ An XSD reference for the grammar lives at [`api.schema.xsd`](./api.schema.xsd), 
 | `<preconditions><precondition>` | Leaf-only. A non-empty render is a fatal error message (exit 1). It runs before `<steps>`, so `.result` holds nothing. A config that reads `.result` there fails to load. |
 | `<fields when=>` / `<format>` | The automatic output shape, or a legacy format. Leaf-only, and never both. `<fields>` repeats: every block whose `when=` holds renders. |
 | `<download over= when= transport=>` | Leaf-only, repeatable. Hands URLs to the download queue. See [Downloads](#downloads). |
-| `<command>` | Nested subcommands. |
+| `<command>` | Nested subcommands. A node with children prints help and never runs. See [Limits and workarounds](#limits-and-workarounds). |
 
 ### `<arg>` and `<flag>`
 
