@@ -50,8 +50,8 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
-	github.com/wow-look-at-my/xml-validator/reader v0.0.0-20260823201203-7268eddb2e3f // indirect
-	github.com/wow-look-at-my/xml-validator/validator v0.0.0-20260823201203-7268eddb2e3f // indirect
+	github.com/wow-look-at-my/xml-validator/reader v0.0.0-20260823201203-7268eddb2e3f // indirect; go-toolchain:auto-branch
+	github.com/wow-look-at-my/xml-validator/validator v0.0.0-20260823201203-7268eddb2e3f // indirect; go-toolchain:auto-branch
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
