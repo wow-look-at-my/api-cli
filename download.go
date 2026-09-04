@@ -20,9 +20,6 @@ import (
 const (
 	defaultConcurrency = 4
 	defaultRetries     = 3
-	// maxLogLines caps the auto-sized log region; the region also never takes
-	// more than half the terminal.
-	maxLogLines = 15
 )
 
 // Downloads is the top-level <downloads> element: settings for the process-wide
@@ -31,7 +28,6 @@ type Downloads struct {
 	Concurrency int    `json:"concurrency,omitempty"`
 	Retries     int    `json:"retries,omitempty"`
 	Dir         string `json:"dir,omitempty"`
-	LogLines    int    `json:"logLines,omitempty"`
 	// RetriesSet distinguishes retries="0" -- a config that wants a failure
 	// reported immediately -- from an absent attribute, which takes the default.
 	RetriesSet bool `json:"retriesSet,omitempty"`
@@ -75,7 +71,6 @@ type downloadSettings struct {
 	Concurrency int
 	Retries     int
 	Dir         string
-	LogLines    int
 	NoTUI       bool
 }
 
@@ -108,7 +103,6 @@ func resolveDownloadSettings(c *cobra.Command) downloadSettings {
 		if d.Dir != "" {
 			s.Dir = d.Dir
 		}
-		s.LogLines = d.LogLines
 	}
 	if c == nil {
 		return s
@@ -124,18 +118,13 @@ func resolveDownloadSettings(c *cobra.Command) downloadSettings {
 			s.Dir = v
 		}
 	}
-	if flags.Changed("log-lines") {
-		if v, err := flags.GetInt("log-lines"); err == nil && v > 0 {
-			s.LogLines = v
-		}
-	}
 	s.NoTUI, _ = flags.GetBool("no-tui")
 	return s
 }
 
 // buildDownloads parses the top-level <downloads> settings element.
 func buildDownloads(n *xnode) (*Downloads, error) {
-	if err := checkAttrs(n, "concurrency", "retries", "dir", "log_lines"); err != nil {
+	if err := checkAttrs(n, "concurrency", "retries", "dir"); err != nil {
 		return nil, err
 	}
 	if len(n.Children()) > 0 {
@@ -148,7 +137,6 @@ func buildDownloads(n *xnode) (*Downloads, error) {
 	}{
 		{"concurrency", &d.Concurrency},
 		{"retries", &d.Retries},
-		{"log_lines", &d.LogLines},
 	} {
 		raw := strings.TrimSpace(n.Attr(f.attr))
 		if raw == "" {
@@ -252,7 +240,6 @@ func validateDownloadSettings(d *Downloads) error {
 	}{
 		{"concurrency", d.Concurrency, 1},
 		{"retries", d.Retries, 0},
-		{"log_lines", d.LogLines, 0},
 	} {
 		if f.val != 0 && f.val < f.min {
 			return fmt.Errorf("<downloads>: %s=%d must be >= %d", f.name, f.val, f.min)
