@@ -168,6 +168,39 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		verboseMode = true
 	}
 
+	every, err := watchInterval(c)
+	if err != nil {
+		return err
+	}
+	if every > 0 {
+		if err := watchable(c, node, confirmTmpl); err != nil {
+			return err
+		}
+		title := strings.TrimSpace(c.CommandPath() + " " + strings.Join(args, " "))
+		return runWatch(title, every, func() error {
+			return runLeafOnce(c, node, args, vars, cmdTmpl, request, cwdTmpl, stdinTmpl, confirmTmpl, formatRef, formats)
+		})
+	}
+	return runLeafOnce(c, node, args, vars, cmdTmpl, request, cwdTmpl, stdinTmpl, confirmTmpl, formatRef, formats)
+}
+
+// watchable rejects a leaf that cannot repeat. A download transfers a file one
+// time, and a confirm prompt writes into the frame buffer where nobody can
+// answer it, so both fail here rather than hang or repeat the transfer.
+func watchable(c *cobra.Command, node Command, confirmTmpl string) error {
+	if len(node.Downloads) > 0 {
+		return fmt.Errorf("--watch does not apply to a <download> leaf")
+	}
+	if confirmTmpl != "" {
+		if yes, _ := c.Root().PersistentFlags().GetBool("yes"); !yes {
+			return fmt.Errorf("--watch on a leaf that asks for confirmation needs --yes")
+		}
+	}
+	return nil
+}
+
+// runLeafOnce is one whole run of a leaf. It is also one watch frame.
+func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, request *Request, cwdTmpl, stdinTmpl, confirmTmpl string, formatRef *FormatRef, formats map[string]*Format) error {
 	var data map[string]any
 	var err error
 

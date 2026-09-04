@@ -167,6 +167,9 @@ func mcpRunDownloads(dls []Download, data map[string]any) (string, bool) {
 // non-*os.File writer (a buffer in tests, a pipe in a shell) is never a
 // terminal, which is exactly the "piped to a file" case.
 func stdoutSize() (bool, int, int) {
+	if ttyOverride != nil {
+		return true, ttyOverride.width, ttyOverride.height
+	}
 	f, ok := execStdout.(*os.File)
 	if !ok {
 		return false, 0, 0

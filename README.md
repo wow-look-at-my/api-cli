@@ -340,6 +340,25 @@ Feb 8, 2026  →  Sep 2, 2026   (7 months)
 
 The sample's `repo commits` command maps `commit.author.date` to a timeline in the same way. When the upstream JSON already carries keys named `label`, `date`, `start` and `end`, you can leave the `<fields>` block out. `... --as=timeline` then derives them directly.
 
+## Watch
+
+`--watch <interval>` re-runs the command on an interval and repaints its output in place, the way `watch(1)` does. The value is a duration (`2s`, `500ms`) or a plain number of seconds (`2`). The floor is 100ms.
+
+```text
+$ ghr repo releases golang/go --watch 30s
+every 30s: ghr repo releases golang/go    13:45:07
+
+TAG        PUBLISHED     DOWNLOADS
+go1.25     Sep 2, 2026   184213
+go1.25rc1  Jun 10, 2026   12044
+```
+
+A frame is one whole run of the leaf: the steps, the entry, the request and the formatter. Nothing is cached between frames, so a `<var>`, a step result and the response are all fresh each time. The frame keeps the real terminal size. A `<fields>` table therefore stays a table under a watch, rather than falling back to the piped representation.
+
+The output of the leaf and its diagnostics both land in the frame. A failed run reports the failure in place, and the watch continues. Ctrl-C ends the watch, leaves the last frame on screen and exits 130. A frame taller than the terminal is clipped, and the last row says how many lines it dropped. Redirected output gets no repainting: the frames append, which makes `--watch 5s ... > log` a poll log.
+
+Two leaves refuse to repeat. A `<download>` leaf transfers a file one time, and `--watch` on it is an error. A leaf with a `confirm` prompt needs `--yes`, because the prompt draws into the frame where nobody can answer it.
+
 ## Examples
 
 ### Wrap a REST API
@@ -617,6 +636,7 @@ An XSD reference for the grammar lives at [`api.schema.xsd`](./api.schema.xsd), 
 | `--format <mode>` |       | `auto`  | `raw` / `auto` / `always`. |
 | `--as <sink>`     |       |         | Force a `<fields>` representation: `table|list|lines|raw|json|markdown|csv|timeline`. |
 | `--view <name>`   |       |         | Pick a named legacy view, bypassing predicate selection. |
+| `--watch <every>` |       |         | Re-run on an interval and repaint in place: `2s`, `500ms`, or seconds (`2`). See [Watch](#watch). |
 | `--var KEY=VALUE` |       |         | Set an env var before evaluation (so `{{.env.KEY}}` sees it). Repeatable. |
 | `--concurrency <n>` |     | `4`     | Parallel downloads. See [Downloads](#downloads). |
 | `--download-dir <path>` | | `.`     | Base directory for `<download>` destinations. |

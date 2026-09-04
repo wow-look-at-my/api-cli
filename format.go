@@ -70,9 +70,20 @@ func userVerdictFromFlags(c *cobra.Command) userVerdict {
 	return userYes
 }
 
+// termSize is a terminal's dimensions.
+type termSize struct{ width, height int }
+
+// ttyOverride answers the terminal probes while a display captures the output
+// on its way to the screen. A watch frame lands in a buffer, and the buffer is
+// not a terminal, but the frame the user reads is on one.
+var ttyOverride *termSize
+
 // stdoutTTY reports whether execStdout is a terminal. Non-*os.File writers
 // (e.g. bytes.Buffer in tests) return false — exactly what tests want.
 func stdoutTTY() (bool, int) {
+	if ttyOverride != nil {
+		return true, ttyOverride.width
+	}
 	f, ok := execStdout.(*os.File)
 	if !ok {
 		return false, 0
