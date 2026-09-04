@@ -157,13 +157,27 @@
 		</command>
 	</command>
 
-	<command name="posts" description="Work with posts.">
-		<command name="get" description="Fetch a post by ID.">
-			<arg name="id" type="int" required="true" description="Numeric post ID."/>
-			<entry>
-				<path>/posts/<value name="arg.id"/></path>
-			</entry>
-		</command>
+	<!--
+		A runnable parent: `posts` and `posts 1` run this node, and `posts list`
+		runs the child. The pattern is what keeps the two apart, and the loader
+		rejects one that matches a subcommand name.
+	-->
+	<command name="posts" runnable="true" description="List posts, show one, or work with them.">
+		<arg name="id" type="int" pattern="^[0-9]+$" description="Numeric post ID. Omit it for the list."/>
+		<entry>
+			<path>/posts<if test="arg.id">/<value name="arg.id"/></if></path>
+		</entry>
+		<fields when="{{ not .arg.id }}" footer="{{ len .data }} posts">
+			<field name="id">id</field>
+			<field name="userId">userId</field>
+			<field name="title" truncate="40">title</field>
+		</fields>
+		<fields when="{{ .arg.id }}">
+			<field name="id">id</field>
+			<field name="userId">userId</field>
+			<field name="title">title</field>
+			<field name="body">body</field>
+		</fields>
 		<command name="list" description="List posts, optionally filtered by user.">
 			<flag name="user" short="u" type="int" default="0" description="Filter by user ID; 0 means all."/>
 			<fields footer="{{ len .data }} posts">

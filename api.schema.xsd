@@ -254,6 +254,10 @@
     <xs:attribute name="type" type="xs:string"/>
     <xs:attribute name="required" type="xs:boolean"/>
     <xs:attribute name="variadic" type="xs:boolean"/>
+    <!-- A Go regular expression every supplied value must match. Required on
+         each arg of a runnable= node, where it is what keeps an argument and a
+         subcommand name apart. -->
+    <xs:attribute name="pattern" type="xs:string"/>
     <xs:attribute name="description" type="xs:string"/>
   </xs:complexType>
 
@@ -335,6 +339,9 @@
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="description" type="xs:string"/>
     <xs:attribute name="passthrough" type="xs:boolean"/>
+    <!-- A node with subcommands that also runs. Every <arg> then needs a
+         pattern= that matches no subcommand name. -->
+    <xs:attribute name="runnable" type="xs:boolean"/>
     <xs:attribute name="confirm" type="xs:string"/>
   </xs:complexType>
 

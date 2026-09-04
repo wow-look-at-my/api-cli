@@ -52,6 +52,12 @@ type Config struct {
 // The rendered string is fed to the child process's stdin. When empty/unset,
 // the child inherits the parent process's stdin.
 //
+// `runnable` makes a node with subcommands execute in its own right, which is
+// how one name is both `tool [id]` and `tool sub`. Cobra reads the first
+// positional as a subcommand name, so every arg of a runnable node needs a
+// `pattern` that matches none of its subcommand names. `--` ends the subcommand
+// lookup, for a value that starts with a dash.
+//
 // `steps` run sequentially before the leaf's own run. A step runs a command or
 // a request — the same fork as `<run>` — and defaults to the leaf's effective
 // run when it declares neither. Each step's output is captured and parsed as
@@ -61,6 +67,7 @@ type Command struct {
 	Name          string          `json:"name"`
 	Description   string          `json:"description,omitempty"`
 	Passthrough   bool            `json:"passthrough,omitempty"`
+	Runnable      bool            `json:"runnable,omitempty"`
 	Args          []Arg           `json:"args,omitempty"`
 	Flags         []Flag          `json:"flags,omitempty"`
 	Vars          map[string]any  `json:"vars,omitempty"`
@@ -185,11 +192,16 @@ type Step struct {
 // []string (or []int) and must be the last entry in the args list. A required
 // variadic arg requires at least one value; an optional variadic arg accepts
 // zero or more.
+// Pattern is a regular expression every supplied value must match. It is
+// validation on a leaf, and it is what makes a runnable parent unambiguous: the
+// loader rejects a pattern that matches one of the node's own subcommand names,
+// so a value cobra reads as an argument can never be a subcommand.
 type Arg struct {
 	Name        string `json:"name"`
 	Type        string `json:"type,omitempty"`
 	Required    bool   `json:"required,omitempty"`
 	Variadic    bool   `json:"variadic,omitempty"`
+	Pattern     string `json:"pattern,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
@@ -545,6 +557,9 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	if c.Passthrough && len(c.Commands) > 0 {
 		return fmt.Errorf("%s: passthrough is only allowed on leaves", where)
 	}
+	if err := validateRunnable(c, where); err != nil {
+		return err
+	}
 
 	argNames := set.New[string]()
 	requiredAfterOptional := false
@@ -627,8 +642,8 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	if len(c.Fields) > 0 && c.Format.Defined() {
 		return fmt.Errorf("%s: use either <fields> or <format>, not both", where)
 	}
-	if len(c.Fields) > 0 && len(c.Commands) > 0 {
-		return fmt.Errorf("%s: <fields> is only allowed on leaves (nodes with no subcommands)", where)
+	if len(c.Fields) > 0 && !c.executes() {
+		return fmt.Errorf("%s: <fields> needs a node that runs (a leaf, or a parent with runnable=)", where)
 	}
 
 	if err := validateDownloads(c, where, transports); err != nil {
@@ -637,23 +652,22 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 
 	haveRun := inheritedRun || c.Command.Defined() || c.Request.Defined()
 
-	// Leaf: must have something to do. A <download> leaf is that something —
+	// A node that runs must have something to do. A <download> is that something —
 	// the hand-off is the action, so it needs no run of its own.
-	if len(c.Commands) == 0 {
-		if !haveRun && len(c.Downloads) == 0 {
-			return fmt.Errorf("%s: leaf has no command/request/download and no ancestor defines one", where)
-		}
+	if c.executes() && !haveRun && len(c.Downloads) == 0 {
+		return fmt.Errorf("%s: %s has no command/request/download and no ancestor defines one", where, nodeKind(c))
 	}
 
-	// `entry` and `steps` only make sense on leaves.
-	if len(c.Entry) > 0 && len(c.Commands) > 0 {
-		return fmt.Errorf("%s: `entry` is only allowed on leaves (nodes with no subcommands)", where)
+	// `entry`, `steps` and `preconditions` belong to the run, so they need a
+	// node that has one.
+	if len(c.Entry) > 0 && !c.executes() {
+		return fmt.Errorf("%s: `entry` needs a node that runs (a leaf, or a parent with runnable=)", where)
 	}
-	if len(c.Steps) > 0 && len(c.Commands) > 0 {
-		return fmt.Errorf("%s: `steps` is only allowed on leaves (nodes with no subcommands)", where)
+	if len(c.Steps) > 0 && !c.executes() {
+		return fmt.Errorf("%s: `steps` needs a node that runs (a leaf, or a parent with runnable=)", where)
 	}
-	if len(c.Preconditions) > 0 && len(c.Commands) > 0 {
-		return fmt.Errorf("%s: `preconditions` is only allowed on leaves (nodes with no subcommands)", where)
+	if len(c.Preconditions) > 0 && !c.executes() {
+		return fmt.Errorf("%s: `preconditions` needs a node that runs (a leaf, or a parent with runnable=)", where)
 	}
 	stepNames := set.New[string]()
 	for i, s := range c.Steps {

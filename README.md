@@ -40,7 +40,8 @@ cp api.example.xml api.xml          # or pass --config <path>
 ./api-cli --help
 ./api-cli users get 1
 ./api-cli users list --limit 3
-./api-cli posts get 1
+./api-cli posts 1                   # a runnable parent: `posts` lists, `posts 1` shows one
+./api-cli posts search --contains sunt
 ```
 
 ## How it works
@@ -463,6 +464,34 @@ The engine does not care whether a command is HTTP. Here is a small git wrapper.
 ./tar-safe extract out.tar.gz                 # --to defaults to "out"
 ```
 
+## A parent that also runs
+
+A node with `<command>` children prints help and nothing else. `runnable="true"` makes it execute as well, so one name is the group **and** the command. `tool thing` and `tool thing 42` run the parent, and `tool thing create` runs the child.
+
+```xml
+<command name="thing" runnable="true" description="List things, or show one.">
+	<arg name="id" pattern="^[0-9]+$" description="Numeric thing ID. Omit it for the list."/>
+	<run>
+		<request><url><value name="var.api"/>/things<if test="arg.id">/<value name="arg.id" as="urlpath"/></if></url></request>
+	</run>
+	<fields when="{{ not .arg.id }}" over="items"><field name="id">id</field></fields>
+	<fields when="{{ .arg.id }}"><field name="name">name</field></fields>
+	<command name="create" description="Create a thing."><run><request method="POST">...</request></run></command>
+</command>
+```
+
+Cobra reads the first positional as a subcommand name, so the two stay apart only when no argument value can spell one. `pattern=` is how a config states that, and the loader enforces it.
+
+- **Every `<arg>` on a runnable node needs a `pattern=`.** It is a Go regular expression, and anchoring it with `^` and `$` is what makes it narrow.
+- **A pattern that matches one of the node's own subcommand names is a load error.** It may not match a name cobra owns either: `help`, `completion`, `__complete` or `docs`.
+- **A value that matches nothing is neither.** The error names both halves: the pattern the value missed, and the subcommands it is not.
+- **`--` ends the subcommand lookup.** That is how a value that starts with a dash reaches the parent: `tool thing -- -5`.
+- **`runnable="true"` and `passthrough="true"` cannot both hold.** Passthrough takes every argument, which leaves nothing to name a subcommand.
+
+A runnable parent is a full node. `<arg>`, `<flag>`, `<steps>`, `<entry>`, `<fields>`, `<download>` and `<run>` all work as they do on a leaf. Its `<run>` still inherits to the children, as an ancestor's always did. It also becomes an MCP tool of its own, named for its path, next to the tools its children become.
+
+`pattern=` works on a leaf too, where it is plain validation with no dispatch to disambiguate. `<arg name="sha" pattern="^[0-9a-f]{7,40}$"/>` rejects a bad value before the request goes out.
+
 ## Passthrough mode
 
 A leaf that sets `passthrough="true"` accepts arbitrary positional args, which is everything after `--` in the wrapper script. It then does its own minimal flag extraction.
@@ -619,7 +648,7 @@ Each row is something the grammar does not do, and the shape to write instead. E
 
 | Limit | Write this instead |
 |-------|--------------------|
-| **A parent command cannot run.** A node with `<command>` children prints help and nothing else. So `tool [id]` cannot be both a no-arg dashboard and a with-id detail view. Cobra reads the first positional as a subcommand name, and a value that collides with a child name goes to the child. | Give the parent a verb: `tool list` and `tool show [id]`. When both calls hit one endpoint, make it **one leaf** with an optional `<arg>` and two [`<fields when=>` blocks](#more-than-one-shape-on-one-leaf). That is the case those blocks exist for. |
+| **A subcommand name always wins over an argument.** Cobra reads the first positional as a subcommand name, so a [runnable parent](#a-parent-that-also-runs) needs values that cannot spell one. | Give every arg of a runnable node a `pattern=` that matches no subcommand name. The loader enforces that. Use `--` for a value that starts with a dash. |
 | **`urlpath` takes a string.** An `<arg type="int">` reaches it as a number, and the render fails with `expected string`. | Drop `as="urlpath"` for an int, because a number has nothing to escape. Declare the arg as a string when the value itself needs escaping. |
 | **A legacy `<format>` prints raw output off a terminal.** An omitted `when=` means `{{.tty}}`, so a redirect, a pipe and the MCP server all skip the view. | Write `when="true"` on the format, or move the leaf to [`<fields>`](#output-fields), which renders anywhere and takes `--as`. `--format=always` forces the terminal answer for one call. |
 | **`.result` is empty in a `<precondition>`.** Preconditions run before the steps, and the loader rejects one that reads `.result`. | Put the check in a `<step when=>`, which runs in order with the other steps. A step that fails aborts the leaf with its own exit code. |
@@ -652,6 +681,7 @@ An XSD reference for the grammar lives at [`api.schema.xsd`](./api.schema.xsd), 
 | `name=` (required) | Subcommand name. No whitespace or slashes, and not `help`, `completion`, `__complete`, or `docs`. |
 | `description=` | Shown in help. |
 | `passthrough="true"` | Leaf-only. See [Passthrough mode](#passthrough-mode). |
+| `runnable="true"` | A node with subcommands runs in its own right. Every `<arg>` then needs a `pattern=`. See [A parent that also runs](#a-parent-that-also-runs). |
 | `confirm=` (or `<confirm>`) | Prompt `<msg> [y/N]` before the run. `--yes` bypasses it. Off a terminal the run refuses rather than assume a yes. Inherited. |
 | `<arg>` / `<flag>` | Positional args / named flags. |
 | `<vars>` | Merged with ancestor vars (this node wins). |
@@ -661,11 +691,11 @@ An XSD reference for the grammar lives at [`api.schema.xsd`](./api.schema.xsd), 
 | `<preconditions><precondition>` | Leaf-only. A non-empty render is a fatal error message (exit 1). It runs before `<steps>`, so `.result` holds nothing. A config that reads `.result` there fails to load. |
 | `<fields when=>` / `<format>` | The automatic output shape, or a legacy format. Leaf-only, and never both. `<fields>` repeats: every block whose `when=` holds renders. |
 | `<download over= when= transport=>` | Leaf-only, repeatable. Hands URLs to the download queue. See [Downloads](#downloads). |
-| `<command>` | Nested subcommands. A node with children prints help and never runs. See [Limits and workarounds](#limits-and-workarounds). |
+| `<command>` | Nested subcommands. A node with children prints help, unless it declares `runnable="true"`. |
 
 ### `<arg>` and `<flag>`
 
-`<arg name= type="string|int" required= variadic= description=/>`. A `variadic` arg comes last, and it collects the rest into a typed slice. Pair it with `spread`. A required arg cannot follow an optional one, because cobra counts positions and nothing can fill the gap.
+`<arg name= type="string|int" required= variadic= pattern= description=/>`. A `variadic` arg comes last, and it collects the rest into a typed slice. Pair it with `spread`. A required arg cannot follow an optional one, because cobra counts positions and nothing can fill the gap. `pattern=` is a Go regular expression every supplied value must match, and a [runnable parent](#a-parent-that-also-runs) requires one on each arg.
 
 **Every declared arg is present.** An omitted optional arg holds the zero value of its type. That is `""` for a string, `0` for an int, and an empty slice for a variadic. A string reaches `urlpath .arg.id`, and every other helper that takes a string, with no guard around it. The same holds on the MCP side for a tool argument the caller leaves out.
 

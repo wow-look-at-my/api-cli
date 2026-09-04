@@ -31,6 +31,7 @@ Do not add a new third-party dependency without a clear cause.
 | `dsl.go`                        | The api-dsl boundary: `xnode` = `apidsl.Node`, plus `parseDOM`/`checkAttrs`/`compileContent`/`compileTextElem`/`textOf`/`isPlaceholder`/`envMap`/`lookupPath`/`mergeVars`/`isTruthy`/`templateTruthy`. An element's name is the method `Name()`, never a field. |
 | `xmlsource.go`                  | `parseConfigXML` + config builders (`buildConfig`, `buildCommandNode`/`addCommandChild`, `buildRun`, `buildFields`, `buildEntry`, ...). `<entry>` is converted to a `json.RawMessage`. |
 | `xmlrequest.go`                 | The `<request>` half of the source: `buildRequest`, `buildQuery`/`buildParam`, `buildHeader`, and `parseAllowStatus` for `allow-status=`. |
+| `runnable.go`                   | A parent that also runs: `Command.executes`, `validateRunnable` (a pattern may not match a subcommand name), and the cobra arg validators (`matchArgPatterns`, `chainArgs`). |
 | `build.go`                      | Builds the `cobra.Command` tree. Threads inheritance for run (`*Cmd`/`*Request`), `cwd`/`stdin`/`confirm`/`format`. `runLeaf`, `resolveContext` (the leaf's data context: two var passes around the flag gather), `renderVars` (fixpoint — vars may reference other vars). |
 | `flags.go`                      | Declared `<arg>`/`<flag>` on both sides of a run: `registerFlag`/`registerConflicts` on the cobra command, `gatherArgs`/`gatherFlags`/`passthroughParse` back out into `.arg`/`.flag`. |
 | `exec.go`                       | Shell/argv execution: `doExec` (streaming), `captureExec` (steps), `captureExecCapped` (format path, 32 MiB cap), `parseResult`, `cappedTee`. `resolveArgv` renders a `*Cmd` to its final argv, for the caller that cannot execute where it renders (a download's transport). |
@@ -82,6 +83,7 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 17. **Every declared arg is in `.arg`.** `zeroArg` (`flags.go`) fills an omitted optional arg with the zero value of its type, on the CLI side and the MCP side. A helper that takes a string, such as `urlpath`, therefore gets one instead of nil.
 18. **`allow-status=` keeps an error status.** `preparedRequest.allows` (`request.go`) makes `doHTTP` return that body with code 0. A `<transport>` request that declares it fails, because a program reports an exit code rather than a status.
 19. **A precondition runs before the steps**, so `validate` rejects one that reads `.result` (`config.go`). Move the check into a `<step when=>`.
+20. **A node runs when `executes()` says so** (`runnable.go`): a leaf, or a parent with `runnable="true"`. That predicate gates `RunE` (`build.go`), the MCP tool list (`mcp.go`) and every "leaf-only" validation. `validateRunnable` keeps dispatch decidable. Each arg of a runnable node needs a `pattern=`. A pattern that matches a subcommand name, its own or one cobra owns, is a load error.
 
 ## Adding a new field to the config
 

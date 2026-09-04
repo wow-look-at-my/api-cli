@@ -277,13 +277,14 @@ func buildFormat(n *xnode) (*Format, error) {
 }
 
 func buildCommandNode(n *xnode) (*Command, error) {
-	if err := checkAttrs(n, "name", "description", "passthrough", "confirm"); err != nil {
+	if err := checkAttrs(n, "name", "description", "passthrough", "runnable", "confirm"); err != nil {
 		return nil, err
 	}
 	c := &Command{
 		Name:        n.Attr("name"),
 		Description: n.Attr("description"),
 		Passthrough: n.Attr("passthrough") == "true",
+		Runnable:    n.Attr("runnable") == "true",
 		Confirm:     n.Attr("confirm"),
 	}
 	for _, child := range n.Children() {
@@ -398,7 +399,7 @@ func addCommandChild(c *Command, child *xnode) error {
 }
 
 func buildArg(n *xnode) (Arg, error) {
-	if err := checkAttrs(n, "name", "type", "required", "variadic", "description"); err != nil {
+	if err := checkAttrs(n, "name", "type", "required", "variadic", "pattern", "description"); err != nil {
 		return Arg{}, err
 	}
 	return Arg{
@@ -406,6 +407,7 @@ func buildArg(n *xnode) (Arg, error) {
 		Type:        n.Attr("type"),
 		Required:    n.Attr("required") == "true",
 		Variadic:    n.Attr("variadic") == "true",
+		Pattern:     strings.TrimSpace(n.Attr("pattern")),
 		Description: n.Attr("description"),
 	}, nil
 }
