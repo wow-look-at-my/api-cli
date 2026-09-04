@@ -67,6 +67,9 @@ type downloadSpec struct {
 	// Transport is the resolved program that fetches this file in place of the
 	// built-in client, or nil for the built-in client.
 	Transport *downloadTransport
+	// Join, when set, makes this file one member of a group that becomes a
+	// single output once every member has landed.
+	Join *joinPart
 }
 
 // downloadItem is a spec plus its live progress. Every mutable field is atomic
@@ -133,6 +136,11 @@ type downloadBatch struct {
 	// than read from execStderr on a worker, so the display can swap the
 	// process's channels without a worker reading them mid-swap.
 	errOut io.Writer
+	// onDone is called with each finished item, whatever its outcome. The
+	// joiner watches it so a group concatenates the moment its own last part
+	// lands, rather than after the whole queue drains. Set before the first
+	// add: a worker can finish an item while the caller is still enqueuing.
+	onDone func(*downloadItem)
 
 	wg    sync.WaitGroup
 	mu    sync.Mutex
@@ -193,6 +201,9 @@ func (q *downloadQueue) batch(log func(string, ...any), errOut io.Writer) *downl
 func (q *downloadQueue) worker() {
 	for item := range q.jobs {
 		q.run(item)
+		if done := item.batch.onDone; done != nil {
+			done(item)
+		}
 		item.batch.wg.Done()
 	}
 }

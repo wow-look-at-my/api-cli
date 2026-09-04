@@ -88,13 +88,30 @@ func (s *downloadSession) run(dls []Download, data map[string]any) int {
 
 	logVerbose("downloads: %d queued at concurrency %d", len(specs), s.settings.Concurrency)
 	start := time.Now()
+	j := newJoiner(specs, s.batch.log)
+	s.batch.onDone = j.note
 	for _, spec := range specs {
 		s.batch.add(spec)
 	}
 	items := s.batch.wait()
+	joinErrs := j.wait()
 	s.close()
 
-	return reportDownloads(items, time.Since(start), s.tty)
+	code := reportDownloads(items, time.Since(start), s.tty)
+	return reportJoins(joinErrs, code)
+}
+
+// reportJoins writes what the joiner could not write. A failed join is the
+// run's outcome even when every transfer succeeded: the caller asked for one
+// file per group, and a group short a part never became one.
+func reportJoins(errs []error, code int) int {
+	for _, err := range errs {
+		fmt.Fprintln(execStderr, "error:", err)
+	}
+	if len(errs) > 0 {
+		return 1
+	}
+	return code
 }
 
 // reportDownloads writes the run's outcome. On a terminal the display already
@@ -145,13 +162,20 @@ func mcpRunDownloads(dls []Download, data map[string]any) (string, bool) {
 	if len(specs) == 0 {
 		return "no downloads: every <download> was skipped or matched nothing", false
 	}
+	j := newJoiner(specs, batch.log)
+	batch.onDone = j.note
 	for _, spec := range specs {
 		batch.add(spec)
 	}
 
 	var out strings.Builder
 	failed := 0
-	for _, item := range batch.wait() {
+	items := batch.wait()
+	for _, err := range j.wait() {
+		failed++
+		fmt.Fprintf(&out, "join failed: %v\n", err)
+	}
+	for _, item := range items {
 		if err := item.failure(); err != nil {
 			failed++
 			fmt.Fprintf(&out, "failed %s: %v\n", item.spec.URL, err)
@@ -160,6 +184,23 @@ func mcpRunDownloads(dls []Download, data map[string]any) (string, bool) {
 		fmt.Fprintf(&out, "%s (%s)\n", item.dest(), humanBytes(item.done.Load()))
 	}
 	return strings.TrimRight(log.String()+out.String(), "\n"), failed > 0
+}
+
+// openScratch gives the run a working directory of its own, published as
+// `.run.tmpdir`. Parts of a join live there until the join writes the output,
+// so nothing outside the config has to make a directory and pass it in.
+//
+// The returned function removes the directory. A run that keeps its parts (a
+// join without cleanup=, or no join at all) writes them under the download
+// directory instead, which this never touches.
+func openScratch(data map[string]any) (func(), error) {
+	dir, err := os.MkdirTemp("", "api-cli-")
+	if err != nil {
+		return nil, fmt.Errorf("scratch directory: %w", err)
+	}
+	logVerbose("run: scratch directory %s", dir)
+	data["run"] = map[string]any{"tmpdir": dir}
+	return func() { os.RemoveAll(dir) }, nil
 }
 
 // stdoutSize reports whether execStdout is a terminal and how wide it is. A

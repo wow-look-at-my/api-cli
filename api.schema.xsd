@@ -103,6 +103,25 @@
 		<xs:attribute name="each" type="path" use="required"/>
 	</xs:complexType>
 
+	<!-- The one file a group of parts becomes. A group short a part is not
+	     written at all, and the run exits non-zero. -->
+	<xs:complexType name="join">
+		<!-- The output path, as a template over the record. Relative to the
+		     download directory. -->
+		<xs:attribute name="to" type="nonEmpty" use="required"/>
+		<!-- Remove the parts once the output lands. -->
+		<xs:attribute name="cleanup" type="bool"/>
+		<!-- Report a hole in the numbering. Needs order=. -->
+		<xs:attribute name="contiguous" type="contiguousMode"/>
+	</xs:complexType>
+
+	<xs:simpleType name="contiguousMode">
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="warn"/>
+			<xs:enumeration value="error"/>
+		</xs:restriction>
+	</xs:simpleType>
+
 	<xs:group name="placeholders">
 		<xs:choice>
 			<xs:element ref="value"/>
@@ -281,6 +300,7 @@
 			<xs:element name="url" type="content"/>
 			<xs:element name="to" type="content" minOccurs="0"/>
 			<xs:element name="hash" type="hash" minOccurs="0"/>
+			<xs:element name="join" type="join" minOccurs="0"/>
 			<xs:element name="header" type="header" minOccurs="0" maxOccurs="unbounded"/>
 			<!-- Every <cookie> folds into one Cookie header. -->
 			<xs:element name="cookie" type="header" minOccurs="0" maxOccurs="unbounded"/>
@@ -288,6 +308,10 @@
 		</xs:all>
 		<xs:attribute name="over" type="path"/>
 		<xs:attribute name="when" type="template"/>
+		<!-- Both are templates over the record and both need a <join>: group=
+		     buckets the members; order= is the number they sort by. -->
+		<xs:attribute name="group" type="template"/>
+		<xs:attribute name="order" type="template"/>
 		<xs:attribute name="transport" type="xs:token"/>
 	</xs:complexType>
 
@@ -605,6 +629,13 @@
 		<xs:attribute name="name" type="nonEmpty" use="required"/>
 		<xs:attribute name="when" type="template"/>
 		<xs:attribute name="over" type="path"/>
+		<!-- Poll: repeat the step's own run until this predicate holds. It sees
+		     the last body promoted to the top level, and at .body. -->
+		<xs:attribute name="until" type="template"/>
+		<!-- The wait between attempts (default 1s) and the cap on them
+		     (default 60). Both need until=. -->
+		<xs:attribute name="interval" type="template"/>
+		<xs:attribute name="attempts" type="xs:positiveInteger"/>
 	</xs:complexType>
 
 	<xs:element name="steps">

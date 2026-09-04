@@ -37,6 +37,14 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 	resultMap := map[string]any{}
 	data["result"] = resultMap
 
+	if len(leaf.node.Downloads) > 0 {
+		clean, serr := openScratch(data)
+		if serr != nil {
+			return "error: " + serr.Error(), true
+		}
+		defer clean()
+	}
+
 	var stepErrBuf bytes.Buffer
 	stepCap := func(c *Cmd, cwd, stdin string, d any) (string, int) {
 		return captureExecTo(c, cwd, stdin, d, &stepErrBuf)

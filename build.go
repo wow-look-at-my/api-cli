@@ -290,6 +290,11 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 	// log region as the transfers they feed.
 	var session *downloadSession
 	if len(node.Downloads) > 0 {
+		clean, serr := openScratch(data)
+		if serr != nil {
+			return serr
+		}
+		defer clean()
 		session = startDownloadSession(c)
 		defer session.close()
 	}
