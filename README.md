@@ -815,6 +815,30 @@ ghr search repos 'language:go stars:>10000' --sort stars
 ghr repo languages golang/go --as=json
 ```
 
+## Cloudflare Workers
+
+A TypeScript port lives in `workers/` and serves the same configs as HTTP
+endpoints on Cloudflare Workers. Instead of shelling out to `curl`, it
+parses rendered command templates and executes them via `fetch()`.
+
+```sh
+cd workers
+npm install
+npm test        # 242 tests (Workers pool + comparative)
+npm run dev     # local dev server
+```
+
+CLI invocations map to HTTP requests:
+
+| CLI                              | HTTP                          |
+|----------------------------------|-------------------------------|
+| `api-cli users get 1`            | `GET /users/get/1`            |
+| `api-cli users list --limit 3`   | `GET /users/list?limit=3`     |
+| `api-cli user-posts Bret`        | `GET /user-posts/Bret`        |
+
+See `workers/README.md` for the full API mapping, deployment, and
+architecture details.
+
 ## Using the formatter as a library
 
 The `<fields>` formatter is importable on its own, at `github.com/wow-look-at-my/api-cli/fields`. A program with decoded JSON gets the same table, list, JSON, Markdown, CSV, or timeline output, without the XML config language.
@@ -828,7 +852,6 @@ out, err := fields.Render(nil, f, body, map[string]any{"data": body}, "", 0)
 ```
 
 The first argument evaluates `expr=` and `footer=` templates. It may be nil for a declaration that uses neither. See `docs/fields-package.md`.
-
 ## Development
 
 ```sh

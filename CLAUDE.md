@@ -51,6 +51,7 @@ Do not add a new third-party dependency without a clear cause.
 | `api.example.xml`              | Reference config (jsonplaceholder); loaded by `TestExampleConfigsLoad`. Exercises the grammar end to end, including a non-default `curl` transport, a request-step chain (`posts by-user`), and a step-to-queue download hand-off (`archive`). |
 | `samples/github/github.xml`     | Read-only GitHub REST API wrapper in XML: first-class requests, jq noise-trimming, fields views. Used by the CI demo; loaded by `TestGithubSampleLoads`. |
 | `*_test.go`                     | Unit + integration tests. `integration_test.go` has `execCmd`/`execCmdFull`; `request_test.go`/`request_integration_test.go` use httptest via `swapHTTPClient`. |
+| `workers/`                      | Cloudflare Workers TypeScript port. Parses same JSON configs; serves leaves as HTTP endpoints via `fetch()`. See `workers/README.md`. |
 
 ## The XML config model
 
@@ -110,6 +111,23 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 - `go-toolchain` runs `go mod tidy`, vet, all tests with coverage, and the build. **Always run `go-toolchain`, never a bare `go ...`.** Coverage minimum 80%.
 - CI is `.github/workflows/ci.yml`. The `test` job runs `ste-lint` over the markdown, then go-toolchain, then the demo. A second job, `validate-xml`, checks the XML. The build names no `os` and no `arch`, so it produces one fat APE that autoreleases to buildhost.
 - `ste-lint` (`wow-look-at-my/actions@ste-lint#latest`) checks every `*.md` file against the mechanical subset of ASD-STE100. One paragraph is one line, and a sentence caps at 25 words. A contraction, a semicolon, a comma splice or the word "would" fails the job.
+
+## Cloudflare Workers port (`workers/`)
+
+A TypeScript reimplementation that runs on Cloudflare Workers. Parses the
+same JSON config and serves each leaf command as an HTTP endpoint via
+`fetch()` instead of shelling out to `curl`.
+
+Key differences from the Go CLI:
+- Commands are parsed as curl invocations and converted to `fetch()` calls.
+- `cwd`, `stdin`, `confirm`, `fileExists`, `dirExists` are unavailable.
+- Pipe commands (e.g. `| jq ...`) are stripped; use format views instead.
+- Go `text/template` engine reimplemented in TypeScript with sprig subset.
+
+Files: see `workers/README.md` for architecture and API mapping details.
+
+Tests: `cd workers && npm test` runs 242 tests (188 Workers pool + 54
+comparative tests against the Go example configs).
 
 ## Conventions
 
