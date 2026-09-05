@@ -194,9 +194,8 @@ func alignColumns(rows []string, padding int) string {
 	return b.String()
 }
 
-// oneLine folds a value into a single line, so a table row stays a row. A
-// newline puts every later column at the left margin, and a tab opens a
-// column nothing declared.
+// oneLine folds a value into one line: a newline puts every later column at
+// the left margin.
 func oneLine(s string) string {
 	if !strings.ContainsAny(s, "\n\r\t\v\f") {
 		return s
