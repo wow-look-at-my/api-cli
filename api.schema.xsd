@@ -2,28 +2,26 @@
 <!--
 	The api-cli configuration language.
 
-	This schema is the specification of the document api-cli loads. It is
-	checked with wow-look-at-my/xml-validator, and every rule it states is
-	proved by a fixture under examples/. README.md lists the rules the loader
-	enforces that a schema cannot express.
+	This schema is the specification of the language. It is checked with
+	wow-look-at-my/xml-validator, and README.md lists the rules a conforming
+	reader must enforce that a schema cannot express.
 
-	A document mixes text with the placeholders <value>, <if> and <for>. Those
-	come from the api-dsl module, which owns that layer for every consumer.
-	Section 1 states their grammar; the rest of the file is api-cli's own
+	A document mixes text with the placeholders <value>, <if> and <for>.
+	Section 1 states their grammar. The rest of the file is the command
 	vocabulary.
 
-	Child elements are order-free. The loader dispatches on an element's name,
-	so it accepts <fields> before <run> as readily as after it. Every
-	structural element therefore uses xs:all rather than xs:sequence.
+	Child elements are order-free: a document means the same thing with
+	<fields> before <run> as with <fields> after it. Every structural element
+	therefore uses xs:all rather than xs:sequence.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 
 	<!-- ===== 0. Shared lexical types ===== -->
 
 	<!--
-		The loader reads a boolean as `attr == "true"`. Every other spelling is
-		false, silently. This schema permits only the two words, so required="1"
-		fails the check instead of turning the flag off without a word.
+		A boolean is one of two words. required="1" and required="yes" are not
+		booleans in this language, and each fails the check by name rather than
+		reading as false.
 	-->
 	<xs:simpleType name="bool">
 		<xs:restriction base="xs:token">
@@ -58,12 +56,12 @@
 		</xs:restriction>
 	</xs:simpleType>
 
-	<!-- A Go text/template fragment. It is rendered, never parsed here. -->
+	<!-- A template fragment. It is rendered, never parsed here. -->
 	<xs:simpleType name="template">
 		<xs:restriction base="nonEmpty"/>
 	</xs:simpleType>
 
-	<!-- ===== 1. The api-dsl placeholder layer ===== -->
+	<!-- ===== 1. The placeholder layer ===== -->
 
 	<!--
 		<value name="p"/> reads a context path. <value expr="{{ . }}"/> is a
@@ -137,8 +135,7 @@
 
 	<!--
 		<run> is one of three things: a request, an argv list, or shell text.
-		The choice is what keeps them apart, which the loader also does with
-		"cannot mix <argv> with <...>" and "<request> must be the only child".
+		The choice is what keeps them apart. A run never mixes two of them.
 	-->
 	<xs:complexType name="run" mixed="true">
 		<xs:choice minOccurs="0">
@@ -270,7 +267,7 @@
 		<xs:attribute name="dir" type="nonEmpty"/>
 	</xs:complexType>
 
-	<!-- The loader lowercases algo=, so every casing of the four names loads. -->
+	<!-- algo= is case-insensitive, so every casing of the four names is legal. -->
 	<xs:simpleType name="hashAlgo">
 		<xs:restriction base="xs:token">
 			<xs:pattern value="[Mm][Dd]5|[Ss][Hh][Aa]1|[Ss][Hh][Aa]256|[Ss][Hh][Aa]512"/>
@@ -346,7 +343,7 @@
 		A <field> body is a record-relative path, and expr= is a template that
 		sees the record promoted plus the whole context through $. One or the
 		other: the branches below make an expr= field empty and a path field
-		non-empty, which is the pair of errors the loader reports.
+		non-empty, so a field that states both, or neither, is rejected.
 	-->
 	<xs:complexType name="fieldAttrs">
 		<xs:attribute name="name" type="nonEmpty" use="required"/>
@@ -534,7 +531,7 @@
 		<xs:attribute name="required" type="bool"/>
 		<xs:attribute name="variadic" type="bool"/>
 		<!--
-			A Go regular expression every supplied value must match. Each arg of
+			A regular expression every supplied value must match. Each arg of
 			a runnable= node needs one: it is what keeps an argument and a
 			subcommand name apart.
 		-->
@@ -629,7 +626,7 @@
 		<entry> becomes .entry, as JSON. Its children are the object's keys, so
 		their names belong to the author rather than to this language. It is
 		therefore the ur-type, the one element here whose content this schema
-		cannot constrain. README.md says what the loader checks instead.
+		cannot constrain.
 	-->
 	<xs:element name="entry"/>
 

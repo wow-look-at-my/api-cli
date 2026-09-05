@@ -128,8 +128,8 @@ func decodeRune(s string) (rune, int) {
 	}
 }
 
-// A column past wideColumn earns wideGutter in place of the caller's padding:
-// across a small gap, a long run of prose reads into the column beside it.
+// A column past wideColumn earns wideGutter: across a small gap, a long run
+// of prose reads into the column beside it.
 const (
 	wideColumn = 50
 	wideGutter = 3
@@ -194,9 +194,9 @@ func alignColumns(rows []string, padding int) string {
 	return b.String()
 }
 
-// oneLine folds a value into a single line, so a table row stays a row. A cell
-// that keeps its newlines puts every later column at the left margin, and a tab
-// opens a column nothing declared. A whitespace run becomes a space.
+// oneLine folds a value into a single line, so a table row stays a row. A
+// newline puts every later column at the left margin, and a tab opens a
+// column nothing declared.
 func oneLine(s string) string {
 	if !strings.ContainsAny(s, "\n\r\t\v\f") {
 		return s

@@ -19,7 +19,7 @@ require github.com/wow-look-at-my/go-containers v0.0.0-20260826161058-40a3d1ef3d
 require (
 	charm.land/bubbletea/v2 v2.0.9
 	github.com/spf13/pflag v1.0.9
-	github.com/wow-look-at-my/tml v0.0.0-20260904221419-92bbafca1cf2 // go-toolchain:auto-branch
+	github.com/wow-look-at-my/tml v0.0.0-20260905025106-7f78f9582290 // go-toolchain:auto-branch
 )
 
 require (
@@ -50,8 +50,8 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
-	github.com/wow-look-at-my/xml-validator/reader v0.0.0-20260823201203-7268eddb2e3f // indirect; go-toolchain:auto-branch
-	github.com/wow-look-at-my/xml-validator/validator v0.0.0-20260823201203-7268eddb2e3f // indirect; go-toolchain:auto-branch
+	github.com/wow-look-at-my/xml-validator/reader v0.0.0-20260823201203-7268eddb2e3f // indirect
+	github.com/wow-look-at-my/xml-validator/validator v0.0.0-20260823201203-7268eddb2e3f // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
