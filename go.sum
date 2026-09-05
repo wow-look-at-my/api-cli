@@ -93,10 +93,10 @@ github.com/wow-look-at-my/testify v0.0.0-20260217010200-5fd2c08e3abb h1:kLSElPim
 github.com/wow-look-at-my/testify v0.0.0-20260217010200-5fd2c08e3abb/go.mod h1:xlD/Hz0iizP83KvPMWiQ8dbEvfjRGQ2A5qsK+GBq9do=
 github.com/wow-look-at-my/tml v0.0.0-20260905025106-7f78f9582290 h1:mjV5cvRFlb3Cc0KTr2ljOpBRxfFICjO4RKhPZE1v2FM=
 github.com/wow-look-at-my/tml v0.0.0-20260905025106-7f78f9582290/go.mod h1:Dbhr2rd2sm1+Q0DE9U+7vU79pdtOO/jGbc+7A/DjTts=
-github.com/wow-look-at-my/xml-validator/reader v0.0.0-20260823201203-7268eddb2e3f h1:Agjl7o3+QTwaB0x1SOXKvWBa0B92ezVmomq8uSu7Vo0=
-github.com/wow-look-at-my/xml-validator/reader v0.0.0-20260823201203-7268eddb2e3f/go.mod h1:fo8rGd1J/vHnMhYJC8G83y0p0qLPTodt0PQWgPs4Lt8=
-github.com/wow-look-at-my/xml-validator/validator v0.0.0-20260823201203-7268eddb2e3f h1:RlDOfsJjYqgALLw78r911v/O977Z8J5sDjlWG38tjws=
-github.com/wow-look-at-my/xml-validator/validator v0.0.0-20260823201203-7268eddb2e3f/go.mod h1:Ns6nb3kmT1kZNUzZ1IEpGFLoyFmgMFd17xoqsbOIHEQ=
+github.com/wow-look-at-my/xml-validator/reader v0.0.0-20260905064311-b54c8b4b3c13 h1:L4DJ+nHsVwYA0qOqD16K7SPOYbHCcN2ESbLYyY3rRxo=
+github.com/wow-look-at-my/xml-validator/reader v0.0.0-20260905064311-b54c8b4b3c13/go.mod h1:SZM9gvcAVyMkwkyvOzlP9K3907ZughuxMWCoW06zJgA=
+github.com/wow-look-at-my/xml-validator/validator v0.0.0-20260905064311-b54c8b4b3c13 h1:vJBi24+0a2FKakZfW0WU9+ygzqYYiIEHcQstsDVPr1I=
+github.com/wow-look-at-my/xml-validator/validator v0.0.0-20260905064311-b54c8b4b3c13/go.mod h1:Mdk/U/+usyEZ8Psr0BJj/94Ge8SQqUwBaa7pcY2XvR8=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e h1:JVG44RsyaB9T2KIHavMF/ppJZNG9ZpyihvCd0w101no=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e/go.mod h1:RbqR21r5mrJuqunuUZ/Dhy/avygyECGrLceyNeo4LiM=
 github.com/yosida95/uritemplate/v3 v3.0.2 h1:Ed3Oyj9yrmi9087+NczuL5BwkIc4wvTb5zIM+UJPGz4=
