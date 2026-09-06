@@ -777,7 +777,7 @@ A config is **XML 1.1**: `<?xml version="1.1" encoding="UTF-8"?>`. Structural in
 
 ```xml
 <?xml version="1.1" encoding="UTF-8"?>
-<config name="apicli" schema="./api.schema.xsd">
+<config name="apicli" schema="https://raw.githubusercontent.com/wow-look-at-my/api-cli-spec/master/api-cli.xsd">
 	<vars>
 		<var name="base_url">https://api.example.com/v1</var>
 		<var name="filter"><![CDATA[walk(if type=="object" then with_entries(select(.key|endswith("url")|not)) else . end)]]></var>
@@ -806,7 +806,7 @@ Each row is something the grammar does not do, and the shape to write instead. E
 
 ## Config schema
 
-The grammar is an XSD at [`api.schema.xsd`](./api.schema.xsd), and `api-cli docs schema` prints it. Check a config against it with [xml-validator](https://github.com/wow-look-at-my/xml-validator): `xml-validator --schema api.schema.xsd ./api.xml`. CI checks every config this repo ships that way. The schema lives in [api-cli-spec](https://github.com/wow-look-at-my/api-cli-spec), which proves it against documents that must validate and documents that must be rejected. The file here is a copy, and CI fails when the two drift apart. The loader stays authoritative at run time. It enforces the rules a schema cannot state. One example is the rule that a leaf needs a run, its own or an ancestor's. api-cli-spec lists all of those rules.
+The grammar is an XSD that [api-cli-spec](https://github.com/wow-look-at-my/api-cli-spec) owns, and `api-cli docs schema` prints it. Write it out and check a config against it with [xml-validator](https://github.com/wow-look-at-my/xml-validator): `api-cli docs schema > api.xsd && xml-validator --schema api.xsd ./api.xml`. The test suite checks every config this repo ships that way. This repo keeps no copy of the schema. The loader stays authoritative at run time. It enforces the rules a schema cannot state. One example is the rule that a leaf needs a run, its own or an ancestor's. api-cli-spec lists all of those rules.
 
 ### Top-level elements
 

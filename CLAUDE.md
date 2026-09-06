@@ -19,8 +19,8 @@ It is a *hybrid* tool. HTTP requests are first-class (`<run><request>`, no curl 
 - Timeline sink: `github.com/wow-look-at-my/ascii-timeline/timeline`, a pure-stdlib renderer. It powers `--as=timeline`.
 - Screens: `github.com/wow-look-at-my/tml`, the terminal markup language, plus `charm.land/bubbletea/v2` for the watch program. Both arrive with `<tml>`. See docs and rules 17 and 18.
 - Test assertions: `github.com/stretchr/testify`.
-- XML validation (CI only): `wow-look-at-my/xml-validator` checks well-formedness and **XML 1.1**. Shipped files declare `version="1.1"`. CI also runs it with `--schema api.schema.xsd` over every shipped config.
-- The grammar: `github.com/wow-look-at-my/api-cli-spec` owns `api-cli.xsd` and proves it against a corpus of documents that must validate and documents that must be rejected. `api.schema.xsd` here is a byte-identical copy, which `api-cli docs schema` prints, and CI fails when the two drift apart.
+- XML validation: `wow-look-at-my/xml-validator` checks well-formedness and **XML 1.1**. Shipped files declare `version="1.1"`. Its `validator` package also validates each shipped config against the grammar in `schema_test.go`.
+- The grammar: `github.com/wow-look-at-my/api-cli-spec` owns `api-cli.xsd` and holds it to a resolved form per document. This repo keeps no copy: `spec.Schema` is the embedded original, which `api-cli docs schema` prints and the tests validate against.
 
 Do not add a new third-party dependency without a clear cause.
 
@@ -52,8 +52,7 @@ Do not add a new third-party dependency without a clear cause.
 | `format.go`                     | Execution + presentation dispatch: `execLeaf` picks command-vs-request execution and fields-vs-legacy-format-vs-raw output. `captureRun`, `streamRequest`, `runFieldsFormatted`, `runFormatted`, `resolveFormat`, `selectView`. |
 | `render.go`                     | `renderString` (over one shared `apidsl.NewRenderer(cliFuncs())`), `renderEntry`, and `cliFuncs` — the helpers this CLI adds to the shared set (`shellquote`, `spread`, `fileExists`, `tabwriter`, `padRight`, ...). `addQueryValue` builds a `<query from=>` value. It also holds the `fields` package bindings: `cliRenderer` (the CLI's template evaluator, injected into `fields.Render`) and the aliases the rest of the CLI calls the aligner by. |
 | `mcp.go` / `mcp_exec.go`        | MCP server: one tool per leaf. Threads run (`*Cmd`/`*Request`) + format inheritance; `mcpExecLeaf` runs the leaf and applies `<fields>` (like `--format=always`: `.tty` true, width 80) or a legacy format. |
-| `cors.go` / `debug.go` / `docs.go` | CORS middleware for MCP HTTP/SSE; verbose/debug logging; the `docs` subcommand (embeds `README.md`, `api.schema.xsd`, `api.example.xml`). |
-| `api.schema.xsd`                | The XML grammar, copied byte for byte from api-cli-spec (editor aid + `docs schema`). CI checks every shipped config against it. The loader stays authoritative at run time, and it enforces the semantic rules a schema cannot state. |
+| `cors.go` / `debug.go` / `docs.go` | CORS middleware for MCP HTTP/SSE; verbose/debug logging; the `docs` subcommand (embeds `README.md` and `api.example.xml`, and prints the grammar from `spec.Schema`). |
 | `api.example.xml`              | Reference config (jsonplaceholder); loaded by `TestExampleConfigsLoad`. Exercises the grammar end to end, including a non-default `curl` transport, a request-step chain (`posts by-user`), and a step-to-queue download hand-off (`archive`). |
 | `samples/github/github.xml`     | Read-only GitHub REST API wrapper in XML: first-class requests, jq noise-trimming, fields views. Used by the CI demo; loaded by `TestGithubSampleLoads`. |
 | `*_test.go`                     | Unit + integration tests. `integration_test.go` has `execCmd`/`execCmdFull`; `request_test.go`/`request_integration_test.go` use httptest via `swapHTTPClient`. |
@@ -106,7 +105,7 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 2. Parse it in the relevant `build*` function in `xmlsource.go`. Reject an unknown attribute with `checkAttrs`.
 3. If it inherits, thread it in `buildCommand` (`build.go`) and in `collectMCPLeaves` (`mcp.go`).
 4. If it needs validation, extend `validate` or `validateCommand`.
-5. Add it to `api-cli.xsd` in api-cli-spec, with a fixture on each side of the rule, and copy the result over `api.schema.xsd` here. Document it in `README.md`. Exercise it in `api.example.xml` when an integration test needs it.
+5. Add it to `api-cli.xsd` in api-cli-spec, with a document that uses it and the resolved form that document produces. Bump the module here once that lands. Document it in `README.md`. Exercise it in `api.example.xml` when an integration test needs it.
 6. A grammar limit goes in the README's "Limits and workarounds" table, with the shape to write instead. A limit the loader can catch also gets a `validate` error that names that alternative.
 7. Add tests: a unit test that parses and validates it in `xmlsource_test.go`, plus an integration test.
 
@@ -123,7 +122,7 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 ## Tooling
 
 - `go-toolchain` runs `go mod tidy`, vet, all tests with coverage, and the build. **Always run `go-toolchain`, never a bare `go ...`.** Coverage minimum 80%.
-- CI is `.github/workflows/ci.yml`. The `test` job runs `ste-lint` over the markdown, then go-toolchain, then the demo. A second job, `validate-xml`, checks the XML for well-formedness, checks each shipped config against `api.schema.xsd`, and fails when that copy drifts from api-cli-spec. The build names no `os` and no `arch`, so it produces one fat APE that autoreleases to buildhost.
+- CI is `.github/workflows/ci.yml`. The `test` job runs `ste-lint` over the markdown, then go-toolchain, then the demo. A second job, `validate-xml`, checks every XML file for well-formedness. The grammar check itself is a Go test. The build names no `os` and no `arch`, so it produces one fat APE that autoreleases to buildhost.
 - `ste-lint` (`wow-look-at-my/actions@ste-lint#latest`) checks every `*.md` file against the mechanical subset of ASD-STE100. One paragraph is one line, and a sentence caps at 25 words. A contraction, a semicolon, a comma splice or the word "would" fails the job.
 
 ## Conventions

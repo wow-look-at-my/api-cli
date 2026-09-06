@@ -10,7 +10,7 @@
 	still general-purpose: a <run> can be a plain shell command, not just HTTP.
 -->
 
-<config name="apicli" schema="./api.schema.xsd">
+<config name="apicli" schema="https://raw.githubusercontent.com/wow-look-at-my/api-cli-spec/master/api-cli.xsd">
 
 	<description>Declarative alias CLI for https://jsonplaceholder.typicode.com -- a public fake REST API. Every leaf inherits the root request; declare an &lt;entry&gt; and a &lt;fields&gt; shape and the output formats itself.</description>
 

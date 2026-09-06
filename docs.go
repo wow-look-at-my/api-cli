@@ -5,13 +5,15 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	spec "github.com/wow-look-at-my/api-cli-spec"
 )
 
 //go:embed README.md
 var readmeDoc string
 
-//go:embed api.schema.xsd
-var schemaDoc string
+// The grammar comes from the specification module, so this binary prints the
+// one text rather than a copy of it.
+var schemaDoc = spec.Schema
 
 //go:embed api.example.xml
 var exampleDoc string
