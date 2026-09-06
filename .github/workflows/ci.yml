@@ -35,5 +35,4 @@ jobs:
         with:
           files: '**/*.xml **/*.xsd **/*.tml'
 
-      # Each shipped config goes against the grammar in the test suite, which
-      # reads it from the api-cli-spec module rather than from a copy.
+      # The grammar check is a Go test, which reads the schema from api-cli-spec.
