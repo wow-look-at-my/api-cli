@@ -66,7 +66,7 @@
 
 <config
 	name="github"
-	schema="https://raw.githubusercontent.com/wow-look-at-my/api-cli/master/api.schema.xsd">
+	schema="https://raw.githubusercontent.com/wow-look-at-my/api-cli-spec/master/api-cli.xsd">
 
 	<description>Comfortable read-only wrapper for the GitHub REST API. Aggressively strips noise from responses: *url fields, GraphQL node_ids, empty gravatar_ids, duplicate counts, reaction breakdowns, permission objects, and other metadata that bloats output without adding value. Set $GITHUB_TOKEN / $GH_TOKEN for authenticated access (60 req/hr unauthenticated, 5000/hr authenticated). Set $GITHUB_API_URL to target a GitHub Enterprise Server instance.</description>
 

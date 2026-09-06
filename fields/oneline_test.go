@@ -103,7 +103,7 @@ func TestFields_TableDropCountsTheWideGutter(t *testing.T) {
 	wide := strings.Repeat("x", 51)
 	parsed := []any{map[string]any{"a": wide, "b": "end"}}
 	f := &Fields{List: []Field{{Name: "a", Path: "a"}, {Name: "b", Path: "b"}}}
-	// The wide column, its wide gutter and "end" need one column more than this.
+	// The wide column, its wide gutter and "end" do not fit in this width.
 	out, err := renderFields(testRenderer, f, parsed, fctx(parsed), "table", 56)
 	require.NoError(t, err)
 	assert.NotContains(t, out, "end")

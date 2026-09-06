@@ -32,6 +32,7 @@ jobs:
       - uses: actions/checkout@v4
       # The schema is an XML 1.1 document too, and a pattern covers a file added later.
       - uses: wow-look-at-my/xml-validator@master
-        # No schema= here: --schema overflows the stack on the recursive <command> grammar.
         with:
           files: '**/*.xml **/*.xsd **/*.tml'
+
+      # The grammar check is a Go test, which reads the schema from api-cli-spec.
