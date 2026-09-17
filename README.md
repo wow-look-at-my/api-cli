@@ -658,6 +658,18 @@ exec api-cli --config mock-toolchain.xml cc -- "$@"
 
 `mock.example.xml` is a full stand-in toolchain: a compiler, an archiver and a linker.
 
+### Installing the wrappers
+
+`--install-mocks <dir>` writes one executable script per `<mock>` leaf and exits. Each script is named after its leaf, so a leaf at `tools cc` installs as `cc`. Put that directory first on `PATH`, and the build reaches the stand-in instead of the real tool. Nothing in the build system itself changes.
+
+```sh
+api-cli --config mock-toolchain.xml --install-mocks ./mockbin
+export PATH="$PWD/mockbin:$PATH"
+make
+```
+
+A name that more than one mock leaf carries is an error. One script cannot answer for both leaves. The build then calls a stand-in nobody can trace back.
+
 ### What an input matches
 
 `match=` is a regular expression tested against each element of `.rest`, in order. The first match lands at `.mock.<name>`. With `variadic="true"` every match lands there as a list instead.
@@ -946,6 +958,7 @@ One predicate covers both cases. `{{ .arg.id }}` is truthy when the arg is prese
 | `--version`       |       |         | Print the binary's version. Needs no config. |
 | `--mcp <transport>` |     |         | Run the config as an MCP server: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes a tool named for its command path, with underscores (`users_get`). The HTTP and SSE servers also answer `GET /health`. The server behaves as `--format=always` does, with `.tty` true and width 80. |
 | `--cors <level>`  |       | `strict`| CORS for the MCP HTTP/SSE server. See [CORS levels](#cors-levels). |
+| `--install-mocks <dir>` | |        | Write one wrapper script per `<mock>` leaf into the directory, then exit. See [Mock executables](#mock-executables). |
 | `--quiet`         | `-q`  | false   | Suppress the `N executions` line. |
 | `--yes`           | `-y`  | false   | Skip `confirm` prompts. |
 | `--verbose`       |       | false   | Show executed commands/requests, exit codes, conditions on stderr. |

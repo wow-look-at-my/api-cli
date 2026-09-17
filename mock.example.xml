@@ -2,10 +2,8 @@
 <!--
 	A stand-in C toolchain.
 
-	Put a wrapper script for each leaf on PATH ahead of the real tool:
-
-		#!/bin/sh
-		exec api-cli --config mock.example.xml cc -- "$@"
+	Put a wrapper script for each leaf on PATH ahead of the real tool. README's
+	"Mock executables" section gives the one line each script holds.
 
 	make then drives a whole build that compiles nothing. Each tool writes the
 	artifacts the next step looks for, and every call lands in one record file,
