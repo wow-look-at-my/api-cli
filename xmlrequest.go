@@ -10,8 +10,7 @@ import (
 )
 
 // parseAllowStatus reads an allow-status attribute: a comma-separated list of
-// HTTP status codes that must not fail the request. It rejects anything that is
-// not a status a server can send, and anything below 400, which never fails.
+// HTTP status codes that must not fail the request.
 func parseAllowStatus(raw string) ([]int, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
