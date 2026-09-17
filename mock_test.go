@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// loadMock parses a config and fails the test on a load error.
+// loadMock parses and validates a config, and fails the test on a load error.
 func loadMock(t *testing.T, xml string) *Config {
 	t.Helper()
-	cfg, err := Load([]byte(xml))
+	cfg, err := loadStr(t, xml)
 	require.NoError(t, err)
 	return cfg
 }
@@ -181,9 +181,9 @@ func TestMock_ExitCodeIsATemplate(t *testing.T) {
 func TestMock_RequiredInputThatMatchesNothingFails(t *testing.T) {
 	chdir(t, t.TempDir())
 
-	code, _, errOut := execCmdFull(t, loadMock(t, ccMock), "cc", "--", "-c")
-	assert.NotEqual(t, 0, code)
-	assert.Contains(t, errOut, `input "src" matched nothing`)
+	code, _ := execCmd(t, loadMock(t, ccMock), "cc", "--", "-c")
+	assert.Equal(t, 1, code, "a broken invocation fails rather than writing a file named .o")
+	assert.NoFileExists(t, ".o")
 }
 
 // The thin-wrapper shape: the record lands, then the leaf's own run executes.
@@ -316,7 +316,7 @@ func TestMock_LoadErrors(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, err := Load([]byte(tc.xml))
+			_, err := loadStr(t, tc.xml)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.want)
 		})

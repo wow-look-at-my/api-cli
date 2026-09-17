@@ -166,7 +166,7 @@ func buildMockOutput(n *xnode) (MockOutput, error) {
 	if err := checkAttrs(n, "path", "when", "over", "from", "append", "mode"); err != nil {
 		return MockOutput{}, err
 	}
-	body, err := compileTextElem(n)
+	body, err := compileContent(n)
 	if err != nil {
 		return MockOutput{}, err
 	}
@@ -195,7 +195,7 @@ func buildMockRecord(n *xnode) (MockRecord, error) {
 	if err := checkAttrs(n, "path", "when"); err != nil {
 		return MockRecord{}, err
 	}
-	body, err := compileTextElem(n)
+	body, err := compileContent(n)
 	if err != nil {
 		return MockRecord{}, err
 	}

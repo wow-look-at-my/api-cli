@@ -112,7 +112,7 @@ func TestInstallMocks_ConfigWithNoMockFails(t *testing.T) {
 }
 
 func TestCollectMockWrappers_FindsNestedLeaves(t *testing.T) {
-	cfg, err := Load([]byte(installable))
+	cfg, err := loadStr(t, installable)
 	require.NoError(t, err)
 
 	got := collectMockWrappers(cfg.Commands, nil)
