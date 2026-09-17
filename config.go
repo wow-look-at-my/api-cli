@@ -87,6 +87,7 @@ type Command struct {
 	Format        *FormatRef      `json:"format,omitempty"`
 	Fields        []FieldsBlock   `json:"fields,omitempty"`
 	TML           *TML            `json:"tml,omitempty"`
+	Mock          *Mock           `json:"mock,omitempty"`
 	Downloads     []Download      `json:"downloads,omitempty"`
 	Commands      []Command       `json:"commands,omitempty"`
 }
@@ -579,6 +580,9 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	if err := validateRunnable(c, where); err != nil {
 		return err
 	}
+	if err := validateMock(c, where); err != nil {
+		return err
+	}
 
 	argNames := set.New[string]()
 	requiredAfterOptional := false
@@ -684,9 +688,10 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	haveRun := inheritedRun || c.Command.Defined() || c.Request.Defined()
 
 	// A node that runs must have something to do. A <download> is that something —
-	// the hand-off is the action, so it needs no run of its own.
-	if c.executes() && !haveRun && len(c.Downloads) == 0 {
-		return fmt.Errorf("%s: %s has no command/request/download and no ancestor defines one", where, nodeKind(c))
+	// the hand-off is the action, so it needs no run of its own. A <mock> is the
+	// same: standing in for a program is the action.
+	if c.executes() && !haveRun && len(c.Downloads) == 0 && c.Mock == nil {
+		return fmt.Errorf("%s: %s has no command/request/download/mock and no ancestor defines one", where, nodeKind(c))
 	}
 
 	// `entry`, `steps` and `preconditions` belong to the run, so they need a

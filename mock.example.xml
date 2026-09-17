@@ -1,0 +1,69 @@
+<?xml version="1.1" encoding="UTF-8"?>
+<!--
+	A stand-in C toolchain.
+
+	Put a wrapper script for each leaf on PATH ahead of the real tool:
+
+		#!/bin/sh
+		exec api-cli --config mock.example.xml cc -- "$@"
+
+	make then drives a whole build that compiles nothing. Each tool writes the
+	artifacts the next step looks for, and every call lands in one record file,
+	which is a compilation database the build produced about itself.
+-->
+<config name="mock-toolchain">
+	<vars>
+		<var name="record">build/compile_commands.jsonl</var>
+	</vars>
+
+	<command name="cc" passthrough="true" description="Stand in for a C compiler.">
+		<flag name="o" short="o" type="string" description="Output file."/>
+		<flag name="c" type="bool" description="Compile only, do not link."/>
+		<mock>
+			<input name="src" match="\.(c|cc|cpp)$" required="true"/>
+			<!-- -o wins, exactly as it does for the real tool. -->
+			<output path="{{ .flag.o }}" when="{{ .flag.o }}"/>
+			<output path="{{ stem .mock.src }}.o" when="{{ and .flag.c (not .flag.o) }}"/>
+			<output path="a.out" when="{{ and (not .flag.c) (not .flag.o) }}" mode="0755"/>
+			<record path="{{ .var.record }}"/>
+		</mock>
+	</command>
+
+	<command name="ar" passthrough="true" description="Stand in for an archiver.">
+		<mock>
+			<input name="archive" match="\.a$" required="true"/>
+			<input name="members" match="\.o$" variadic="true"/>
+			<!--
+				The body names the members, so a later step of the build can
+				read the archive back rather than guess what went into it.
+			-->
+			<output path="{{ .mock.archive }}">!&lt;arch&gt;
+<for each="mock.members"><value name="."/>
+</for></output>
+			<record path="{{ .var.record }}"/>
+		</mock>
+	</command>
+
+	<command name="ld" passthrough="true" description="Stand in for a linker.">
+		<flag name="o" short="o" type="string" description="Output binary."/>
+		<mock exit="{{ if .flag.o }}0{{ else }}1{{ end }}">
+			<input name="objects" match="\.(o|a)$" variadic="true" required="true"/>
+			<output path="{{ .flag.o }}" when="{{ .flag.o }}" mode="0755"/>
+			<stderr><if test="flag.o"><else/>ld: no output file named
+</if></stderr>
+			<record path="{{ .var.record }}" when="{{ .flag.o }}"/>
+		</mock>
+	</command>
+
+	<!--
+		One source, one object: an <output over=> writes N artifacts from one
+		declaration, the way a real compiler handles a batch of sources.
+	-->
+	<command name="cc-batch" passthrough="true" description="Compile every source named on the command line.">
+		<mock>
+			<input name="sources" match="\.c$" variadic="true" required="true"/>
+			<output over="mock.sources" path="build/{{ stem .item }}.o"/>
+			<record path="{{ .var.record }}"/>
+		</mock>
+	</command>
+</config>
