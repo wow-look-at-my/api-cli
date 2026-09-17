@@ -681,10 +681,13 @@ The engine publishes these keys next to the named ones.
 
 | Key            | Value                                                        |
 |----------------|--------------------------------------------------------------|
-| `.mock.argv`   | The whole incoming argv, as `.rest` holds it.                |
+| `.mock.argv`   | The whole command line, the leaf's name first. A `<record>` replays these, so it holds every declared flag, not the leftovers alone. |
+| `.mock.prog`   | The leaf's name, which is the name the build called.         |
 | `.mock.cwd`    | The working directory of this call.                          |
 | `.mock.file`   | The first input that resolved to something.                  |
 | `.mock.outputs` | Every path this call writes. `.mock.output` is the first.   |
+
+An `<input>` matches `.rest`, never `.mock.argv`. A declared `<flag>` is already pulled out of the leftovers, and reading it back off the command line defeats the declaration.
 
 ### What an output writes
 
@@ -705,6 +708,10 @@ The engine publishes these keys next to the named ones.
 ```
 
 The element's text overrides that body. The append is what makes it safe under `make -j`: each call adds its own line without reading what is already there.
+
+### Output text and the trailing newline
+
+An element's text is trimmed, which is how the whole config language treats text. A literal newline at the end of a `<stdout>`, a `<stderr>` or an `<output>` body therefore does not survive. Write it as `<value expr="{{ &quot;\n&quot; }}"/>` wherever a real program emits one.
 
 ### Thin wrappers over the real tool
 

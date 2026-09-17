@@ -86,7 +86,9 @@ func TestMock_RecordIsACompileCommandsEntry(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(lines[0]), &entry))
 	assert.Equal(t, dir, entry.Directory)
-	assert.Equal(t, []string{"-c", "src/foo.c"}, entry.Arguments)
+	// The whole command line, the program first: a consumer replays these, and
+	// the leftovers alone are missing every flag the leaf declared.
+	assert.Equal(t, []string{"cc", "-c", "src/foo.c"}, entry.Arguments)
 	assert.Equal(t, "src/foo.c", entry.File)
 	assert.Equal(t, "foo.o", entry.Output)
 }
@@ -139,7 +141,7 @@ func TestMock_BodyAndModeReachTheFile(t *testing.T) {
 		<mock>
 			<input name="objects" match="\.o$" variadic="true"/>
 			<output path="app" mode="0755">#!/bin/sh
-<for each="mock.objects"># <value name="."/>
+<for each="mock.objects"># <value expr="{{ . }}"/>
 </for></output>
 		</mock>
 	</command>
@@ -165,8 +167,7 @@ func TestMock_ExitCodeIsATemplate(t *testing.T) {
 	<command name="cc" passthrough="true">
 		<mock exit="{{ if .mock.src }}0{{ else }}1{{ end }}">
 			<input name="src" match="\.c$"/>
-			<stderr>cc: no input files
-</stderr>
+			<stderr>cc: no input files<value expr="{{ &quot;\n&quot; }}"/></stderr>
 		</mock>
 	</command>
 </config>`)

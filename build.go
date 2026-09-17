@@ -334,7 +334,7 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 	// declares a run does not fire that run on the way past.
 	if node.Mock != nil {
 		logVerbose("leaf %q: standing in for a program", node.Name)
-		code, mockErr := runMock(node.Mock, data, execStdout, execStderr)
+		code, mockErr := runMock(node.Mock, node.Name, args, data, execStdout, execStderr)
 		if mockErr != nil {
 			return mockErr
 		}

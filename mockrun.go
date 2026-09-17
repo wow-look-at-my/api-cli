@@ -14,7 +14,7 @@ import (
 
 // reservedMockNames are the keys the engine itself puts on .mock, so an
 // <input> may not take one.
-var reservedMockNames = set.Of("argv", "cwd", "file", "output", "outputs")
+var reservedMockNames = set.Of("argv", "prog", "cwd", "file", "output", "outputs")
 
 // defaultMockMode is the mode of a mock artifact. A build tool reads the
 // timestamp, so the bytes and the bits both only have to be plausible.
@@ -34,11 +34,14 @@ type mockFile struct {
 // resolveMockInputs walks .rest with each <input>'s pattern and publishes the
 // result at .mock. It runs before anything is written, because an output path
 // is usually derived from an input.
-func resolveMockInputs(m *Mock, data map[string]any) error {
+func resolveMockInputs(m *Mock, prog string, raw []string, data map[string]any) error {
+	// An input matches the LEFTOVERS, because a declared <flag> was already
+	// pulled out of them and reading it back off the command line would defeat
+	// the declaration.
 	rest, _ := asList(data["rest"])
-	argv := make([]string, 0, len(rest))
+	leftovers := make([]string, 0, len(rest))
 	for _, el := range rest {
-		argv = append(argv, fmt.Sprintf("%v", el))
+		leftovers = append(leftovers, fmt.Sprintf("%v", el))
 	}
 
 	cwd, err := os.Getwd()
@@ -46,14 +49,27 @@ func resolveMockInputs(m *Mock, data map[string]any) error {
 		return fmt.Errorf("mock: working directory: %w", err)
 	}
 
-	mock := map[string]any{"argv": argv, "cwd": cwd}
+	// .mock.argv is the WHOLE command line, program name first. A record is a
+	// compile_commands.json entry, and a consumer of one replays those
+	// arguments: the leftovers alone are missing every flag the leaf declared.
+	argv := make([]string, 0, len(raw)+1)
+	if prog != "" {
+		argv = append(argv, prog)
+	}
+	if len(raw) > 0 {
+		argv = append(argv, raw...)
+	} else {
+		argv = append(argv, leftovers...)
+	}
+
+	mock := map[string]any{"argv": argv, "prog": prog, "cwd": cwd}
 	data["mock"] = mock
 
 	var first string
 	for i := range m.Inputs {
 		in := &m.Inputs[i]
 		var hits []string
-		for _, a := range argv {
+		for _, a := range leftovers {
 			if in.re.MatchString(a) {
 				hits = append(hits, a)
 				if !in.Variadic {
@@ -64,7 +80,7 @@ func resolveMockInputs(m *Mock, data map[string]any) error {
 
 		if in.Variadic {
 			if len(hits) == 0 && in.Required {
-				return fmt.Errorf("mock: input %q matched nothing in %v (match=%q)", in.Name, argv, in.Match)
+				return fmt.Errorf("mock: input %q matched nothing in %v (match=%q)", in.Name, leftovers, in.Match)
 			}
 			mock[in.Name] = hits
 			if first == "" && len(hits) > 0 {
@@ -78,7 +94,7 @@ func resolveMockInputs(m *Mock, data map[string]any) error {
 		case len(hits) > 0:
 			value = hits[0]
 		case in.Required:
-			return fmt.Errorf("mock: input %q matched nothing in %v (match=%q)", in.Name, argv, in.Match)
+			return fmt.Errorf("mock: input %q matched nothing in %v (match=%q)", in.Name, leftovers, in.Match)
 		case in.Default != "":
 			// The default renders against .mock as it stands, so a later input
 			// can fall back to one resolved before it.
@@ -313,8 +329,8 @@ func appendMockRecords(m *Mock, data map[string]any) error {
 // runMock is the leaf's action. It resolves the inputs, plans and writes the
 // outputs, appends the records, then emits whatever the mock says. The return
 // is the exit code the process takes when no <run> follows.
-func runMock(m *Mock, data map[string]any, out, errw io.Writer) (int, error) {
-	if err := resolveMockInputs(m, data); err != nil {
+func runMock(m *Mock, prog string, raw []string, data map[string]any, out, errw io.Writer) (int, error) {
+	if err := resolveMockInputs(m, prog, raw, data); err != nil {
 		return 1, err
 	}
 	files, err := planMockOutputs(m, data)

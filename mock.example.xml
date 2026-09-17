@@ -36,7 +36,7 @@
 				read the archive back rather than guess what went into it.
 			-->
 			<output path="{{ .mock.archive }}">!&lt;arch&gt;
-<for each="mock.members"><value name="."/>
+<for each="mock.members"><value expr="{{ . }}"/>
 </for></output>
 			<record path="{{ .var.record }}"/>
 		</mock>
@@ -47,8 +47,11 @@
 		<mock exit="{{ if .flag.o }}0{{ else }}1{{ end }}">
 			<input name="objects" match="\.(o|a)$" variadic="true" required="true"/>
 			<output path="{{ .flag.o }}" when="{{ .flag.o }}" mode="0755"/>
-			<stderr><if test="flag.o"><else/>ld: no output file named
-</if></stderr>
+			<!--
+				The trailing newline is explicit. The language trims an
+				element's text, so a literal one at the end does not survive.
+			-->
+			<stderr><if test="flag.o"><else/>ld: no output file named<value expr="{{ &quot;\n&quot; }}"/></if></stderr>
 			<record path="{{ .var.record }}" when="{{ .flag.o }}"/>
 		</mock>
 	</command>

@@ -77,7 +77,7 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 	// records and the outputs land.
 	if leaf.node.Mock != nil {
 		var mockOut, mockErr bytes.Buffer
-		code, err := runMock(leaf.node.Mock, data, &mockOut, &mockErr)
+		code, err := runMock(leaf.node.Mock, leaf.node.Name, nil, data, &mockOut, &mockErr)
 		if err != nil {
 			return "error: " + err.Error(), true
 		}
