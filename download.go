@@ -21,7 +21,7 @@ const (
 )
 
 // Downloads is the top-level <downloads> element: settings for the process-wide
-// download queue. a single queue serves the whole run, so these are set a single time.
+// download queue. One queue serves the whole run, so these are set once.
 type Downloads struct {
 	Concurrency int    `json:"concurrency,omitempty"`
 	Retries     int    `json:"retries,omitempty"`
@@ -31,10 +31,10 @@ type Downloads struct {
 	RetriesSet bool `json:"retriesSet,omitempty"`
 }
 
-// Download is a single hand-off on a leaf: the URL a step worked out, where to
-// put it, and the auth that reaches it. Every string is a template rendered
-// against the leaf's full data context (.arg, .flag, .env, .var, .entry,
-// .result), so a URL parsed out of an earlier step is just `.result.<step>.<path>`.
+// Download is one hand-off on a leaf: the URL a step worked out, where to put
+// it, and the auth that reaches it. Every string is a template rendered against
+// the leaf's full data context (.arg, .flag, .env, .var, .entry, .result), so a
+// URL parsed out of an earlier step is just `.result.<step>.<path>`.
 //
 // With `over=`, the declaration repeats per record in that list: the record's
 // keys are promoted to the top level (like a <field expr=>) and the record
@@ -43,8 +43,8 @@ type Download struct {
 	Over string `json:"over,omitempty"`
 	When string `json:"when,omitempty"`
 	// Group and Order describe the bucket a <join> concatenates. Both are
-	// templates over the record, so a single declaration produces the
-	// parts of several outputs at the same time.
+	// templates over the record, so one declaration produces the parts of
+	// several outputs at once.
 	Group     string   `json:"group,omitempty"`
 	Order     string   `json:"order,omitempty"`
 	Join      *Join    `json:"join,omitempty"`
@@ -69,8 +69,8 @@ var hashAlgos = map[string]int{
 
 const defaultHashAlgo = "sha256"
 
-// downloadSettings is the effective configuration for a single run: config
-// values with the command line layered on top.
+// downloadSettings is the effective configuration for one run: config values
+// with the command line layered on top.
 type downloadSettings struct {
 	Concurrency int
 	Retries     int
@@ -156,6 +156,7 @@ func buildDownloads(n *xnode) (*Downloads, error) {
 	return d, nil
 }
 
+// buildDownload parses one <download> hand-off on a leaf.
 func buildDownload(n *xnode) (Download, error) {
 	if err := checkAttrs(n, "over", "when", "transport", "group", "order"); err != nil {
 		return Download{}, err
@@ -333,9 +334,9 @@ func planDownloads(dls []Download, data map[string]any, dir string) ([]downloadS
 				return nil, err
 			}
 			for _, spec := range specs {
-				// Records rendering a single file name is a <to> that forgot
-				// to vary — caught here rather than after N transfers have
-				// overwritten each other into a single file.
+				// Two records rendering one file name is a <to> that forgot to
+				// vary — caught here rather than after N transfers have
+				// overwritten each other into one file.
 				if !spec.DestIsDir {
 					if prev, dup := claimed[spec.Dest]; dup {
 						return nil, fmt.Errorf("download[%d]: %s and %s would both write %s; give <to> something that varies per record",
@@ -355,10 +356,10 @@ func planDownloads(dls []Download, data map[string]any, dir string) ([]downloadS
 	return out, nil
 }
 
-// downloadRecords expands `over=` into a single render context per record. A
-// path that resolves to nothing is a config error, not an empty run: silently
-// downloading empty files is exactly how a renamed field goes unnoticed. An
-// empty list, on the other hand, legitimately means "nothing matched".
+// downloadRecords expands `over=` into one render context per record. A path
+// that resolves to nothing is a config error, not an empty run: silently
+// downloading zero files is exactly how a renamed field goes unnoticed. An empty
+// list, on the other hand, legitimately means "nothing matched".
 func downloadRecords(d *Download, data map[string]any, idx int) ([]map[string]any, error) {
 	if d.Over == "" {
 		return []map[string]any{data}, nil
@@ -389,9 +390,9 @@ func downloadCtx(data map[string]any, rec any) map[string]any {
 	return promoteCtx(data, rec, "item")
 }
 
-// planOne renders a single declaration against a single record. A <url> that
-// renders to several lines yields several downloads — which is what a <for>
-// loop inside it produces — and then <to> names the directory they share.
+// planOne renders one declaration against one record. A <url> that renders to
+// several lines yields several downloads — which is what a <for> loop inside it
+// produces — and then <to> names the directory they share.
 func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSpec, error) {
 	rawURL, err := renderString(d.URL, ctx)
 	if err != nil {
@@ -457,8 +458,8 @@ func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSp
 			Hash: digest, HashAlgo: d.HashAlgo, Transport: transport,
 		}
 		if join != nil {
-			// A single copy per file: a <url> that rendered several lines
-			// shares a single record, and the queue order then separates them.
+			// One copy per file: a <url> that rendered several lines shares one
+			// record, and the queue order then separates them.
 			part := *join
 			spec.Join = &part
 		}
@@ -467,13 +468,13 @@ func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSp
 	return out, nil
 }
 
-// renderHash renders the expected digest for a single record and normalizes it.
+// renderHash renders the expected digest for one record and normalizes it.
 //
 // An empty render means this record carries no digest — which is how a <hash>
-// body wrapped in an <if test=> opts a single record of an `over=` list out.
-// Anything else must be a digest of the right shape: a manifest field that got
-// renamed renders as the template engine's placeholder, and silently not
-// verifying is the a single outcome a verification feature must never have.
+// body wrapped in an <if test=> opts one record of an `over=` list out. Anything
+// else must be a digest of the right shape: a manifest field that got renamed
+// renders as the template engine's placeholder, and silently not verifying is
+// the one outcome a verification feature must never have.
 func renderHash(d *Download, ctx map[string]any, idx int) (string, error) {
 	if d.Hash == "" {
 		return "", nil
@@ -482,8 +483,8 @@ func renderHash(d *Download, ctx map[string]any, idx int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("download[%d]: render hash: %w", idx, err)
 	}
-	// A digest often arrives as the earliest field of a `sha256sum`
-	// line ("<hex> <name>"), so read that field rather than the whole line.
+	// A digest often arrives as the first field of a `sha256sum` line
+	// ("<hex>  <name>"), so read that field rather than the whole line.
 	fields := strings.Fields(raw)
 	if len(fields) == 0 {
 		return "", nil
@@ -500,7 +501,8 @@ func renderHash(d *Download, ctx map[string]any, idx int) (string, error) {
 // downloadDest resolves where a file lands. An empty <to> means "the download
 // directory, named by the server"; a <to> ending in "/" or naming an existing
 // directory means the same with an explicit directory; anything else is the
-// exact file path.
+// exact file path. Several URLs sharing one <to> always treat it as a
+// directory — one name cannot serve them all.
 func downloadDest(dir, to string, multi bool) (string, bool) {
 	if to == "" {
 		return dir, true
@@ -525,7 +527,7 @@ func underDir(dir, p string) string {
 }
 
 // joinCookies folds <cookie> entries (and any Cookie header the author wrote by
-// hand) into a single Cookie header value.
+// hand) into one Cookie header value.
 func joinCookies(headers, cookies []renderedHeader) string {
 	var parts []string
 	for _, h := range headers {
@@ -552,7 +554,8 @@ func withoutHeader(headers []renderedHeader, name string) []renderedHeader {
 	return out
 }
 
-// splitLines returns the non-empty trimmed lines of s.
+// splitLines returns the non-empty trimmed lines of s. A URL cannot contain a
+// newline, so this is an unambiguous way to let one <url> yield many.
 func splitLines(s string) []string {
 	var out []string
 	for _, line := range strings.Split(s, "\n") {

@@ -203,6 +203,7 @@ func TestWithCORS_Strict_SameOriginAllowed(t *testing.T) {
 }
 
 func TestWithCORS_Strict_LocalhostNotSameOriginRejected(t *testing.T) {
+	// Bound to 127.0.0.1; localhost (different hostname) is rejected.
 	h := withCORS(okHandler(), CorsStrict, "127.0.0.1:8080")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, newCorsRequest(http.MethodGet, "http://localhost:8080"))

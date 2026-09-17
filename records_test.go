@@ -183,6 +183,8 @@ func TestIntegration_RequestOverListOfRecords(t *testing.T) {
 	assert.Equal(t, "id  name   status\n1   alpha  ok\n2   beta   bad\n3   gamma  ok\n", out)
 }
 
+// The loud failure: a path that names nothing exits non-zero and says which
+// path, instead of printing one empty record over exit 0.
 func TestIntegration_RequestOverMissingPathFailsLoudly(t *testing.T) {
 	srv := probeServer(t)
 	cfg := &Config{

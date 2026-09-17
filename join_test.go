@@ -68,8 +68,8 @@ func TestJoin_PartNeedsItsOwnFile(t *testing.T) {
 	assert.Contains(t, err.Error(), "a joined part needs its own <to>")
 }
 
-// A join orders by number, so a key that is not a single is a load-time
-// answer rather than a file concatenated in the wrong order.
+// A join orders by number, so a key that is not one is a load-time answer
+// rather than a file concatenated in the wrong order.
 func TestJoin_OrderMustBeNumeric(t *testing.T) {
 	d := Download{
 		URL:   "https://example.test/x",
@@ -107,6 +107,7 @@ func TestJoin_PlansGroupAndOrder(t *testing.T) {
 	assert.True(t, specs[0].Join.Cleanup)
 }
 
+// Without order=, the queue's own order stands in for one.
 func TestJoin_OrderDefaultsToQueueOrder(t *testing.T) {
 	d := Download{
 		Over: "var.parts",

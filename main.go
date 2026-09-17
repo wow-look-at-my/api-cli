@@ -18,7 +18,8 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stderr))
 }
 
-// run is the process body, split out of main for testability.
+// run is the process body, split out of main for testability. argv is the
+// slice of arguments (os.Args[1:] in production); errOut receives diagnostics.
 func run(argv []string, errOut io.Writer) int {
 	cfgPath, mcpTransport, corsValue, envVars, installMocks := preparseGlobals(argv)
 

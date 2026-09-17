@@ -12,14 +12,14 @@ import (
 	"sync"
 )
 
-// Both verdicts <join contiguous=> accepts.
+// The two verdicts <join contiguous=> accepts.
 const (
 	joinGapWarn  = "warn"
 	joinGapError = "error"
 )
 
-// Join is the <join> child of a <download>: the a single file every member
-// of a group becomes. The parts are the transfer's unit and the join is the
+// Join is the <join> child of a <download>: the one file every member of a
+// group becomes. The parts are the transfer's unit and the join is the
 // caller's, so the config names both and nothing outside it has to know the
 // layout the parts landed in.
 type Join struct {
@@ -31,7 +31,7 @@ type Join struct {
 }
 
 // buildJoin parses a <join> child. Its attributes are templates over the same
-// record the parts are, so a single declaration names a single output per group.
+// record the parts are, so one declaration names one output per group.
 func buildJoin(n *xnode) (*Join, error) {
 	if err := checkAttrs(n, "to", "cleanup", "contiguous"); err != nil {
 		return nil, err
@@ -53,9 +53,9 @@ func buildJoin(n *xnode) (*Join, error) {
 	return j, nil
 }
 
-// validateJoin checks a single declaration's join grammar. group= and order=
-// only mean something to a join, so a declaration that carries them without a
-// single is a config that expects a concatenation nobody asked for.
+// validateJoin checks one declaration's join grammar. group= and order= only
+// mean something to a join, so a declaration that carries them without one is
+// a config that expects a concatenation nobody asked for.
 func validateJoin(d *Download, where string) error {
 	if d.Join == nil {
 		if d.Group != "" || d.Order != "" {
@@ -80,12 +80,13 @@ func validateJoin(d *Download, where string) error {
 	return nil
 }
 
-// planJoin renders a single record's membership: which bucket the file
-// belongs to, where that bucket lands, and its place in the order.
+// planJoin renders one record's membership: which bucket the file belongs to,
+// where that bucket lands, and its place in the order.
 //
-// A value that is not a number fails here: concatenating in the wrong order
-// produces a plausible file that is silently wrong, which is worse than no file
-// at all.
+// order= is read as a number rather than as text, because a capture numbers its
+// parts 2, 3, 10 and a lexical sort puts 10 first. A value that is not a number
+// fails here: concatenating in the wrong order produces a plausible file that
+// is silently wrong, which is worse than no file at all.
 func planJoin(d *Download, ctx map[string]any, dir string, idx int) (*joinPart, error) {
 	if d.Join == nil {
 		return nil, nil
@@ -123,8 +124,8 @@ func planJoin(d *Download, ctx map[string]any, dir string, idx int) (*joinPart, 
 	return part, nil
 }
 
-// joinPart is a single file's membership in a concatenation: which output it
-// belongs to and where it goes in that output.
+// joinPart is one file's membership in a concatenation: which output it belongs
+// to and where it goes in that output.
 type joinPart struct {
 	Group      string
 	Dest       string
@@ -135,12 +136,12 @@ type joinPart struct {
 }
 
 // joiner concatenates each group of parts into its output. A group joins as
-// soon as its own last member lands, so a run of many items writes its
-// earliest output while the rest are still transferring.
+// soon as its own last member lands, so a run of many items writes its first
+// output while the rest are still transferring.
 //
 // Membership is decided at plan time, so the joiner knows every group's size
-// before the earliest transfer starts. It therefore needs no registration
-// step racing against a download that finishes earliest.
+// before the first transfer starts. It therefore needs no registration step
+// racing against a download that finishes first.
 type joiner struct {
 	log func(string, ...any)
 
@@ -150,7 +151,7 @@ type joiner struct {
 	wg       sync.WaitGroup
 }
 
-// joinGroup is a single output and the members it still waits for.
+// joinGroup is one output and the members it still waits for.
 type joinGroup struct {
 	dest    string
 	spec    joinPart
@@ -183,9 +184,9 @@ func newJoiner(specs []downloadSpec, log func(string, ...any)) *joiner {
 	return &joiner{log: log, groups: groups}
 }
 
-// note takes a single finished download. The last member of a group starts
-// that group's join on a goroutine of its own, so the queue's workers stay
-// on transfers.
+// note takes one finished download. The last member of a group starts that
+// group's join on a goroutine of its own, so the queue's workers stay on
+// transfers.
 func (j *joiner) note(item *downloadItem) {
 	if j == nil || item.spec.Join == nil {
 		return
@@ -226,9 +227,9 @@ func (j *joiner) wait() []error {
 	return j.failures
 }
 
-// finish writes a single group's output. A group short a member is not written
-// at all: half a file that carries the real name reads as a complete capture,
-// and nothing downstream can tell the difference.
+// finish writes one group's output. A group short a member is not written at
+// all: half a file that carries the real name reads as a complete capture, and
+// nothing downstream can tell the difference.
 func (j *joiner) finish(g *joinGroup) error {
 	sort.SliceStable(g.members, func(a, b int) bool {
 		return g.members[a].spec.Join.Order < g.members[b].spec.Join.Order
@@ -265,9 +266,9 @@ func (j *joiner) finish(g *joinGroup) error {
 	return nil
 }
 
-// checkDest rejects a group whose members disagree about the output. records
-// that render a single group name and destinations describe a file that cannot
-// exist, and picking any of them silently loses the other's parts.
+// checkDest rejects a group whose members disagree about the output. Two
+// records that render one group name and two destinations describe a file that
+// cannot exist, and picking one of them silently loses the other's parts.
 func (j *joiner) checkDest(g *joinGroup) error {
 	for _, item := range g.members {
 		if item.spec.Join.Dest != g.dest {
@@ -277,7 +278,9 @@ func (j *joiner) checkDest(g *joinGroup) error {
 	return nil
 }
 
-// checkGaps reports a hole in a group's numbering.
+// checkGaps reports a hole in a group's numbering. A capture that lost part 7
+// still concatenates into a plausible file, so the numbers are the only place
+// the loss is visible.
 func (j *joiner) checkGaps(g *joinGroup) error {
 	if g.spec.Contiguous == "" {
 		return nil
@@ -323,9 +326,9 @@ func missingOrders(members []*downloadItem) []string {
 	return out
 }
 
-// concatFiles streams the parts into a single file, in the order given. It
-// writes a .part sibling exactly as a transfer does, so an interrupted join
-// never leaves a truncated file wearing the output's name.
+// concatFiles streams the parts into one file, in the order given. It writes a
+// .part sibling first, exactly as a transfer does, so an interrupted join never
+// leaves a truncated file wearing the output's name.
 func concatFiles(dest string, members []*downloadItem) error {
 	if dir := filepath.Dir(dest); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -351,8 +354,8 @@ func concatFiles(dest string, members []*downloadItem) error {
 	return os.Rename(tmp, dest)
 }
 
-// appendFile copies a single part into the open output. io.Copy streams it,
-// so a part larger than memory costs nothing but time.
+// appendFile copies one part into the open output. io.Copy streams it, so a
+// part larger than memory costs nothing but time.
 func appendFile(out io.Writer, path string) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -364,8 +367,8 @@ func appendFile(out io.Writer, path string) error {
 }
 
 // pruneEmptyDirs removes the directories the parts left behind, innermost
-// earliest. A join that groups by item usually gives each item a directory,
-// and leaving those empty directories behind reads as an incomplete cleanup.
+// first. A join that groups by item usually gives each item a directory, and
+// leaving those empty directories behind reads as an incomplete cleanup.
 func pruneEmptyDirs(members []*downloadItem) {
 	seen := set.New[string]()
 	for _, item := range members {

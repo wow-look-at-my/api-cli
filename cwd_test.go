@@ -243,6 +243,8 @@ func TestIntegration_CwdMissingDirFails(t *testing.T) {
 		}},
 	}
 	code, _, _ := execCmdFull(t, cfg, "x")
+	// Go's exec.Cmd.Run returns an error when Dir doesn't exist; we surface
+	// it as 127 (failed to start).
 	assert.Equal(t, 127, code)
 }
 

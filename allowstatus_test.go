@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestAllowStatus_FallbackChain is the "try A, then B" shape: the first step
+// may 404, and the second step runs on what the first one stored.
 func TestAllowStatus_FallbackChain(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/a" {

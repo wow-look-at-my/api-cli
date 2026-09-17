@@ -11,14 +11,14 @@ import (
 	"time"
 )
 
-// The download TUI: a block of slots pinned to the bottom of the screen, a
-// single per in-flight transfer plus a totals line, each repainted over its
-// own previous line.
+// The download TUI: a block of slots pinned to the bottom of the screen, one
+// per in-flight transfer plus a totals line, each repainted over its own
+// previous line.
 //
 // Everything else -- a finished transfer, a step's output, a transport's stderr
-// -- is written a single time, above the block, and scrolls away into the
-// terminal's own scrollback. So a run reads as a growing list of what landed,
-// with the live slots always at the bottom.
+// -- is written once, above the block, and scrolls away into the terminal's own
+// scrollback. So a run reads as a growing list of what landed, with the live
+// slots always at the bottom.
 //
 // It repaints with a handful of ANSI sequences rather than a terminal library,
 // because the block is a few plain lines and the cursor never leaves it.
@@ -67,8 +67,8 @@ func newTUI(out io.Writer, width int, snapshot func() []*downloadItem) *tui {
 	}
 }
 
-// Start begins repainting until Stop. Painting from a single goroutine
-// keeps the frame consistent while workers mutate progress underneath it.
+// Start begins repainting until Stop. Painting from one goroutine keeps the
+// frame consistent while workers mutate progress underneath it.
 func (t *tui) Start() {
 	t.mu.Lock()
 	t.started = true
@@ -95,6 +95,8 @@ func (t *tui) Start() {
 // testable without taking the test binary down with it.
 var tuiExit = os.Exit
 
+// interruptExitCode is the conventional 128+SIGINT status for a run the user
+// cut short.
 const interruptExitCode = 130
 
 // watchInterrupt puts the terminal back if the run is cut short. Without it a
@@ -186,7 +188,7 @@ func (t *tui) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// logf adds a single preformatted line. The queue's log hook points here.
+// logf adds one preformatted line. The queue's log hook points here.
 func (t *tui) logf(format string, args ...any) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -203,8 +205,8 @@ func (t *tui) appendLog(line string) {
 //
 // The queued lines land on rows the old block occupied, so they cost no extra
 // scrolling, and the block that follows pushes them up into the scrollback for
-// good. That is the whole trick: a single cursor movement per frame, and a
-// finished transfer is written exactly a single time.
+// good. That is the whole trick: one cursor movement per frame, and a finished
+// transfer is written exactly once.
 func (t *tui) paint() {
 	lines := t.frame(time.Now())
 
@@ -223,8 +225,8 @@ func (t *tui) paint() {
 	for _, line := range lines {
 		writeRow(&b, line, t.width)
 	}
-	// A block shorter than the last a single leaves stale rows below; clear
-	// them, then come back up so the next repaint still starts at the block's top.
+	// A block shorter than the last one leaves stale rows below; clear them,
+	// then come back up so the next repaint still starts at the block's top.
 	if extra := t.painted - len(t.pending) - len(lines); extra > 0 {
 		for i := 0; i < extra; i++ {
 			b.WriteString(ansiClearLine)
@@ -237,15 +239,15 @@ func (t *tui) paint() {
 	fmt.Fprint(t.out, b.String())
 }
 
-// writeRow emits a single line over whatever the row held before.
+// writeRow emits one line over whatever the row held before.
 func writeRow(b *strings.Builder, line string, width int) {
 	b.WriteString(ansiClearLine)
 	b.WriteString(clipDisplay(line, width))
 	b.WriteByte('\n')
 }
 
-// frame renders the block: the counts header, a single slot per in-flight
-// download, and the aggregate line.
+// frame renders the block: the counts header, one slot per in-flight download,
+// and the aggregate line.
 func (t *tui) frame(now time.Time) []string {
 	items := t.snapshot()
 	totals := tallyDownloads(items, now)
@@ -287,11 +289,16 @@ func aggregateProgress(t downloadTotals) itemProgress {
 	return p
 }
 
-// Every column has a fixed width so the rows form real columns.
+// The progress columns, each sized for its widest legal value: a bar, the
+// percentage, the size pair ("1023.9 KiB / 1023.9 KiB+"), the rate
+// ("999.9 KiB/s"), and the ETA. Every column has a fixed width so the rows form
+// real columns.
 //
 // prio orders what goes when the terminal cannot fit them all. The bar goes
-// earliest despite being the eye-catching column: it is the a single thing here
-// the percentage beside it already says.
+// first despite being the eye-catching column: it is the one thing here the
+// percentage beside it already says. At 80 columns that leaves name, percent,
+// sizes, rate, and ETA — the numbers — and spends the recovered room on the
+// file name.
 const (
 	colBar = iota
 	colPct
@@ -316,9 +323,9 @@ const (
 	maxLabelWidth = 32
 )
 
-// progressLayout is the column arrangement for a single frame. It is computed
-// a single time and used for every row, because a layout decided per row
-// would let a single wide value knock that row's columns out of line with its neighbours'.
+// progressLayout is the column arrangement for one frame. It is computed once
+// and used for every row, because a layout decided per row would let one wide
+// value knock that row's columns out of line with its neighbours'.
 type progressLayout struct {
 	label int
 	keep  []int
@@ -352,9 +359,9 @@ func planProgressLayout(width int) progressLayout {
 	return progressLayout{label: label, keep: keep}
 }
 
-// progressLine renders a single row into the frame's layout. Each column is
-// clipped and padded to its declared width, so an unexpectedly wide value costs
-// its own cell and never the alignment.
+// progressLine renders one row into the frame's layout. Each column is clipped
+// and padded to its declared width, so an unexpectedly wide value costs its own
+// cell and never the alignment.
 func progressLine(label string, p itemProgress, lay progressLayout) string {
 	if lay.label == 0 {
 		lay = planProgressLayout(80)
@@ -446,7 +453,7 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTP"[exp])
 }
 
-// shortDuration renders an ETA as mm:ss, or h:mm:ss a single time it passes an hour.
+// shortDuration renders an ETA as mm:ss, or h:mm:ss once it passes an hour.
 func shortDuration(d time.Duration) string {
 	if d < 0 {
 		d = 0

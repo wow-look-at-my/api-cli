@@ -88,8 +88,8 @@ func TestSteps_RequestStepThenCommandLeaf(t *testing.T) {
 	assert.Equal(t, "2 executions\n", errOut)
 }
 
-// A command step and a request step compose in a single leaf, each
-// seeing the other's result.
+// A command step and a request step compose in one leaf, each seeing the
+// other's result.
 func TestSteps_MixedCommandAndRequest(t *testing.T) {
 	srv, seen := recordingServer(t, map[string]string{"/things/9": `{"label":"nine"}`})
 	swapHTTPClient(t, srv)

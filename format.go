@@ -11,12 +11,12 @@ import (
 )
 
 // defaultFormatCap is the byte threshold above which captureExecCapped flushes
-// to streaming and skips the format step.
+// to streaming and skips the format step. 32 MiB.
 const defaultFormatCap = 32 << 20
 
-// It is a page the terminal scrolls, not a screen, so it is tall enough that a
-// board of cards is never cut off. The blank rows under the content are
-// trimmed.
+// tmlPageHeight is the viewport a one-shot <tml> frame lays out in. It is a
+// page the terminal scrolls, not a screen, so it is tall enough that a board of
+// cards is never cut off. The blank rows under the content are trimmed.
 const tmlPageHeight = 1000
 
 // userVerdict is the user-side decision about formatting. The author-side is
@@ -42,7 +42,13 @@ func resolveFormat(ref *FormatRef, formats map[string]*Format) *Format {
 	return formats[ref.Name]
 }
 
-// default -> userYes
+// userVerdictFromFlags consults the persistent flags and env vars in
+// precedence order:
+//  1. --no-format       -> userNo
+//  2. --format=<value>  -> raw=>userNo, always=>userAlways, auto=>(env or default)
+//  3. NO_FORMAT         -> userNo (any non-empty value, NO_COLOR-style)
+//  4. API_CLI_FORMAT    -> raw / always / auto
+//  5. default           -> userYes
 func userVerdictFromFlags(c *cobra.Command) userVerdict {
 	root := c.Root().PersistentFlags()
 	if no, _ := root.GetBool("no-format"); no {
@@ -73,7 +79,8 @@ func userVerdictFromFlags(c *cobra.Command) userVerdict {
 type termSize struct{ width, height int }
 
 // ttyOverride answers the terminal probes while a display captures the output
-// on its way to the screen.
+// on its way to the screen. A watch frame lands in a buffer, and the buffer is
+// not a terminal, but the frame the user reads is on one.
 var ttyOverride *termSize
 
 // stdoutTTY reports whether execStdout is a terminal. Non-*os.File writers
@@ -143,7 +150,9 @@ type predicateKey struct {
 	ctx  uintptr
 }
 
-// ctxIdentity returns a stable identity for a context map.
+// ctxIdentity returns a stable identity for a context map. The map header's
+// pointer is stable for the lifetime of the map; we don't mutate ctx after
+// passing it in, so this is safe for one-invocation caching.
 func ctxIdentity(m map[string]any) uintptr {
 	if m == nil {
 		return 0
@@ -168,10 +177,11 @@ func parseInput(s, mode string) any {
 	}
 }
 
-// selectView picks the view to render. If viewFlag is non-empty,
-//  return the named view (or error). Else earliest view whose
-//  When predicate is truthy. Else earliest view with Default
-//  true.
+// selectView picks the view to render. Selection rules:
+//  1. If viewFlag is non-empty, return the named view (or error).
+//  2. Else first view whose When predicate is truthy.
+//  3. Else first view with Default true.
+//  4. Else views[0].
 func selectView(views []View, ctx map[string]any, viewFlag string, cache map[predicateKey]bool) (*View, error) {
 	if viewFlag != "" {
 		for i := range views {
@@ -236,8 +246,9 @@ func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin strin
 		blocks = []FieldsBlock{{Fields: &Fields{}}}
 	}
 
-	// Piped, the leaf falls through to whatever else it declared, and --as
-	// names a representation the user wants instead of the screen.
+	// A component draws a screen, so it applies only where there is one. Piped,
+	// the leaf falls through to whatever else it declared, and --as names a
+	// representation the user wants instead of the screen.
 	if view.Defined() && sink == "" {
 		isTTY, width, height := stdoutSize()
 		if verdict == userAlways {
@@ -247,11 +258,11 @@ func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin strin
 			if width <= 0 || height <= 0 {
 				width, height = 80, 24
 			}
-			// A single frame prints into a scrolling terminal, so it is a
-			// page rather than a screen: laying it out at the terminal's
-			// height would cut the content off at the bottom row and say
-			// nothing about it. Under a watch (ttyOverride) the screen IS the
-			// height, and the program owns it.
+			// One frame prints into a scrolling terminal, so it is a page
+			// rather than a screen: laying it out at the terminal's height
+			// would cut the content off at the bottom row and say nothing
+			// about it. Under a watch (ttyOverride) the screen IS the height,
+			// and the program owns it.
 			if ttyOverride == nil {
 				height = tmlPageHeight
 			}
@@ -309,7 +320,7 @@ func captureRun(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[stri
 //
 // The trailing newline is cosmetic — it keeps a response off the shell prompt —
 // so it goes only to a terminal. Redirected, the body is somebody's file, and a
-// byte they did not ask for is corruption: a single appended newline is the
+// byte they did not ask for is corruption: one appended newline is the
 // difference between a working archive and a failing checksum.
 func streamRequest(request *Request, data map[string]any) int {
 	out, code := runRequest(request, data, execStderr)
@@ -325,8 +336,8 @@ func streamRequest(request *Request, data map[string]any) int {
 
 // runFieldsFormatted captures the leaf's JSON output and renders it through the
 // <fields> auto-formatter. Every block whose when= predicate holds renders, in
-// order, so a single leaf shows a table and a detail view on different calls,
-// or tables on the same call. A leaf whose blocks all sit out prints the raw body.
+// order, so one leaf shows a table and a detail view on different calls, or two
+// tables on the same call. A leaf whose blocks all sit out prints the raw body.
 func runFieldsFormatted(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, blocks []FieldsBlock, verdict userVerdict) int {
 	out, overflowed, code := captureRun(cmdTmpl, request, cwd, stdin, data)
 	if overflowed {
@@ -368,10 +379,10 @@ func runFieldsFormatted(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, s
 	return 0
 }
 
-// runTMLFormatted captures the leaf's JSON output and draws a single frame of
-// the component. A watch turns this into a terminal program (tmlrun.go); on its
-// own it is a single frame on stdout, which is what makes the same declaration
-// testable without a terminal.
+// runTMLFormatted captures the leaf's JSON output and draws one frame of the
+// component. A watch turns this into a terminal program (tmlrun.go); on its own
+// it is one frame on stdout, which is what makes the same declaration testable
+// without a terminal.
 func runTMLFormatted(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, view *TML, width, height int) int {
 	out, overflowed, code := captureRun(cmdTmpl, request, cwd, stdin, data)
 	if overflowed {
@@ -393,8 +404,8 @@ func runTMLFormatted(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map
 		return 1
 	}
 	// A frame fills the viewport, and the blank rows under the content are the
-	// screen a program owns. Printed a single time into a scrolling terminal
-	// they are just a gap before the prompt, so this path stops at the last drawn row.
+	// screen a program owns. Printed once into a scrolling terminal they are
+	// just a gap before the prompt, so this path stops at the last drawn row.
 	fmt.Fprintln(execStdout, strings.TrimRight(frame, " \n"))
 	return 0
 }
@@ -428,8 +439,8 @@ func renderFieldsBlocks(blocks []FieldsBlock, parsed any, ctx map[string]any, si
 	return joinBlocks(parts), true, nil
 }
 
-// joinBlocks stacks rendered blocks with a single blank line between them,
-// so tables on a single screen do not read as a single table.
+// joinBlocks stacks rendered blocks with one blank line between them, so two
+// tables on one screen do not read as one table.
 func joinBlocks(parts []string) string {
 	for i, p := range parts {
 		if i < len(parts)-1 && !strings.HasSuffix(p, "\n\n") {

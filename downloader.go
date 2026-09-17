@@ -26,10 +26,10 @@ import (
 // reason to wait exponentially longer for it. A var so tests need not sleep.
 var retryDelay = time.Second
 
-// downloadClient performs the transfers. Deliberately not httpClient: that a
-// single caps a whole request at 60s, which is a sane API deadline and a hard
-// ceiling on file size for a downloader. Here the deadlines cover connecting
-// and the wait for headers, and the body then takes as long as it takes.
+// downloadClient performs the transfers. Deliberately not httpClient: that one
+// caps a whole request at 60s, which is a sane API deadline and a hard ceiling
+// on file size for a downloader. Here the deadlines cover connecting and the
+// wait for headers, and the body then takes as long as it takes.
 var downloadClient = &http.Client{
 	Transport: &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
@@ -51,8 +51,8 @@ const (
 	dlFailed
 )
 
-// downloadSpec is a single fully-rendered hand-off: where to fetch from,
-// where to put it, and the auth the config worked out for it.
+// downloadSpec is one fully-rendered hand-off: where to fetch from, where to
+// put it, and the auth the config worked out for it.
 type downloadSpec struct {
 	URL     string
 	Dest    string
@@ -67,8 +67,8 @@ type downloadSpec struct {
 	// Transport is the resolved program that fetches this file in place of the
 	// built-in client, or nil for the built-in client.
 	Transport *downloadTransport
-	// Join, when set, makes this file a single member of a group that
-	// becomes a single output a single time every member has landed.
+	// Join, when set, makes this file one member of a group that becomes a
+	// single output once every member has landed.
 	Join *joinPart
 }
 
@@ -78,9 +78,9 @@ type downloadItem struct {
 	spec  downloadSpec
 	batch *downloadBatch
 
-	name  atomic.Value // string: the destination path, a single
+	name  atomic.Value // string: the destination path, once known
 	done  atomic.Int64
-	total atomic.Int64
+	total atomic.Int64 // -1 until the server reports a length
 	state atomic.Int32
 	start atomic.Int64 // unix nanos
 	end   atomic.Int64 // unix nanos
@@ -90,7 +90,7 @@ type downloadItem struct {
 }
 
 // label is the short name the display and the log use: the destination's file
-// name a single time the transfer has resolved it, and the URL's until then.
+// name once the transfer has resolved it, and the URL's until then.
 func (d *downloadItem) label() string {
 	if s := d.dest(); s != "" {
 		return filepath.Base(s)
@@ -116,9 +116,9 @@ func (d *downloadItem) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// downloadQueue is the shared downloader: a single worker pool for the
-// process, however many hand-offs feed it. Workers live for the process
-// lifetime, so an MCP server that serves many tool calls reuses the same pool.
+// downloadQueue is the shared downloader: one worker pool for the process,
+// however many hand-offs feed it. Workers live for the process lifetime, so an
+// MCP server that serves many tool calls reuses the same pool.
 type downloadQueue struct {
 	concurrency int
 	retries     int
@@ -126,9 +126,9 @@ type downloadQueue struct {
 	jobs        chan *downloadItem
 }
 
-// downloadBatch is a single run's worth of work on the shared queue: the items
-// an invocation enqueued, and where that invocation's log lines go. Batches
-// share the pool, so concurrency is a property of the queue, not of a batch.
+// downloadBatch is one run's worth of work on the shared queue: the items an
+// invocation enqueued, and where that invocation's log lines go. Batches share
+// the pool, so concurrency is a property of the queue, not of a batch.
 type downloadBatch struct {
 	q   *downloadQueue
 	log func(format string, args ...any)
@@ -138,8 +138,8 @@ type downloadBatch struct {
 	errOut io.Writer
 	// onDone is called with each finished item, whatever its outcome. The
 	// joiner watches it so a group concatenates the moment its own last part
-	// lands, rather than after the whole queue drains. Set before the
-	// earliest add: a worker can finish an item while the caller is still enqueuing.
+	// lands, rather than after the whole queue drains. Set before the first
+	// add: a worker can finish an item while the caller is still enqueuing.
 	onDone func(*downloadItem)
 
 	wg    sync.WaitGroup
@@ -147,14 +147,14 @@ type downloadBatch struct {
 	items []*downloadItem
 }
 
-// theQueue is the process-wide queue. A hand-off is meant to reach a single
-// central downloader, so every enqueue in a process lands in the same pool
-// rather than in a pool per declaration.
+// theQueue is the process-wide queue. A hand-off is meant to reach one central
+// downloader, so every enqueue in a process lands in the same pool rather than
+// in a pool per declaration.
 var theQueue *downloadQueue
 
-// sharedQueue returns the process-wide queue, creating it on earliest use with
-// the given settings. Later calls reuse the running pool: a single process
-// loads a single config, so concurrency is decided a single time.
+// sharedQueue returns the process-wide queue, creating it on first use with the
+// given settings. Later calls reuse the running pool: one process loads one
+// config, so concurrency is decided once.
 func sharedQueue(concurrency, retries int) *downloadQueue {
 	if theQueue == nil {
 		theQueue = newDownloadQueue(concurrency, retries)
@@ -185,9 +185,9 @@ func newDownloadQueue(concurrency, retries int) *downloadQueue {
 	return q
 }
 
-// batch opens a unit of work on the queue. log receives a single line per
-// state change and errOut a transport program's stderr; pass nil for
-// either only where nothing is watching.
+// batch opens a unit of work on the queue. log receives one line per state
+// change and errOut a transport program's stderr; pass nil for either only
+// where nothing is watching.
 func (q *downloadQueue) batch(log func(string, ...any), errOut io.Writer) *downloadBatch {
 	if log == nil {
 		log = func(string, ...any) {}
@@ -245,12 +245,12 @@ func (b *downloadBatch) snapshot() []*downloadItem {
 	return out
 }
 
-// run performs a single download, retrying transient failures at a fixed
-// cadence. Every outcome is recorded on the item: a failure is never a silent skip.
+// run performs one download, retrying transient failures at a fixed cadence.
+// Every outcome is recorded on the item: a failure is never a silent skip.
 //
 // A start is not logged. The display gives an in-flight transfer a slot of its
 // own, and a pipe gets the destination path from the summary, so a "downloading
-// X" line only doubles the volume for a single bit of news.
+// X" line only doubles the volume for one bit of news.
 func (q *downloadQueue) run(item *downloadItem) {
 	log := item.batch.log
 	item.state.Store(dlActive)
@@ -264,7 +264,7 @@ func (q *downloadQueue) run(item *downloadItem) {
 			item.end.Store(time.Now().UnixNano())
 			item.state.Store(dlDone)
 			// Name the algorithm on success: a verification you cannot see
-			// happen is indistinguishable from a single that never ran.
+			// happen is indistinguishable from one that never ran.
 			verified := ""
 			if item.spec.Hash != "" {
 				verified = ", " + item.spec.HashAlgo + " ok"
@@ -288,7 +288,8 @@ func (q *downloadQueue) run(item *downloadItem) {
 	log("failed %s: %v", item.label(), err)
 }
 
-// fetch performs a single attempt.
+// fetch performs one attempt. The second return reports whether retrying could
+// plausibly help: a 404 is the answer, not a hiccup.
 func (q *downloadQueue) fetch(item *downloadItem) (error, bool) {
 	if item.spec.Transport != nil {
 		return q.fetchViaTransport(item)
@@ -329,9 +330,9 @@ func (q *downloadQueue) fetch(item *downloadItem) (error, bool) {
 // stdout straight into the destination.
 //
 // Buffering it as a string the way a request-form transport does would put the
-// whole file in memory, so this is the a single place both paths differ. What
-// the program is handed is identical, and what happens to the bytes afterwards
-// -- the .part sibling, the byte count, the digest -- is the same code.
+// whole file in memory, so this is the one place the two paths differ. What the
+// program is handed is identical, and what happens to the bytes afterwards --
+// the .part sibling, the byte count, the digest -- is the same code.
 func (q *downloadQueue) fetchViaTransport(item *downloadItem) (error, bool) {
 	tr := item.spec.Transport
 	pf, err := openPart(item, urlFilename(item.spec.URL))
@@ -347,13 +348,18 @@ func (q *downloadQueue) fetchViaTransport(item *downloadItem) (error, bool) {
 
 	if err := cmd.Run(); err != nil {
 		pf.abort()
+		// A program's exit code says nothing this can read: curl answers 22 for
+		// a 404 and 7 for a refused connection, and another transport will use
+		// its own numbers. So unlike the built-in client, which can tell a 404
+		// from a hiccup, this retries and lets the attempt limit end it.
 		return fmt.Errorf("transport %q: %w", tr.Name, err), true
 	}
 	return pf.commit()
 }
 
 // partFile is a destination mid-write: the .part sibling, the byte counter, and
-// the digest, behind a single writer.
+// the digest, behind one writer. Both fetch paths write through it, so a
+// transport download gets the same guarantees as a built-in one.
 type partFile struct {
 	item   *downloadItem
 	dest   string
@@ -386,6 +392,8 @@ func openPart(item *downloadItem, name string) (*partFile, error) {
 	}
 
 	pf := &partFile{item: item, dest: dest, part: part, file: f}
+	// Digested on the way past, so verifying costs no second pass over a file
+	// that may not fit in memory or in the page cache.
 	sink := []io.Writer{f, item}
 	if pf.digest = newHasher(item.spec.HashAlgo, item.spec.Hash); pf.digest != nil {
 		sink = append(sink, pf.digest)
@@ -441,7 +449,7 @@ func newHasher(algo, want string) hash.Hash {
 }
 
 // retryableStatus reports whether an error status is worth another attempt:
-// server-side faults and both "come back later" client statuses.
+// server-side faults and the two "come back later" client statuses.
 func retryableStatus(code int) bool {
 	switch code {
 	case http.StatusRequestTimeout, http.StatusTooManyRequests:
@@ -450,6 +458,9 @@ func retryableStatus(code int) bool {
 	return code >= 500
 }
 
+// responseFilename picks a file name for a destination that named a directory:
+// the server's Content-Disposition when it offers one, else the URL's last path
+// segment, else a fixed fallback so the file still lands somewhere.
 func responseFilename(resp *http.Response, rawURL string) string {
 	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
 		if _, params, err := mime.ParseMediaType(cd); err == nil {
@@ -485,7 +496,7 @@ func sanitizeFilename(name string) string {
 	return name
 }
 
-// downloadTotals is a single frame's worth of aggregate progress.
+// downloadTotals is one frame's worth of aggregate progress.
 type downloadTotals struct {
 	Active, Queued, Done, Failed int
 	Bytes, Total                 int64
@@ -535,12 +546,12 @@ func tallyDownloads(items []*downloadItem, now time.Time) downloadTotals {
 	return t
 }
 
-// itemProgress is a single download's derived numbers: what the display
-// needs and nothing it would have to recompute.
+// itemProgress is one download's derived numbers: what the display needs and
+// nothing it would have to recompute.
 type itemProgress struct {
 	Done, Total int64
-	Fraction    float64
-	Speed       float64
+	Fraction    float64 // -1 when the total is unknown
+	Speed       float64 // bytes/sec, 0 when not measurable yet
 	ETA         time.Duration
 	HasETA      bool
 	// TotalIsFloor marks an aggregate whose denominator is incomplete because

@@ -22,14 +22,14 @@ type TML struct {
 	Props []TMLProp `json:"props,omitempty"`
 }
 
-// TMLProp is a single argument to the entry component. A component declares
-// its properties and rejects an argument it never declared, so the config
-// names every value it passes rather than offering the whole response and hoping.
+// TMLProp is one argument to the entry component. A component declares its
+// properties and rejects an argument it never declared, so the config names
+// every value it passes rather than offering the whole response and hoping.
 //
-// Text is a template. From reads a single value out of the response. Over
-// reads a list and Fields say which part of each element the item template
-// gets: an element carries exactly the fields named here, because a data
-// template rejects a field it did not declare.
+// Text is a template. From reads one value out of the response. Over reads a
+// list and Fields say which part of each element the item template gets: an
+// element carries exactly the fields named here, because a data template
+// rejects a field it did not declare.
 type TMLProp struct {
 	Name   string     `json:"name"`
 	Text   string     `json:"text,omitempty"`
@@ -38,19 +38,19 @@ type TMLProp struct {
 	Fields []TMLField `json:"fields,omitempty"`
 }
 
-// TMLField maps a single part of a list element to a single property
-// of the item template.
+// TMLField maps one part of a list element to one property of the item
+// template.
 //
-// Path reads a value out of the element. Expr computes a single instead,
-// against the element promoted to the top level and the whole context through
-// `$`, exactly as a <field expr=> does.
+// Path reads a value out of the element. Expr computes one instead, against the
+// element promoted to the top level and the whole context through `$`, exactly
+// as a <field expr=> does.
 //
-// Lines turns the value into a list of strings, which is the property type a data
-// template declares as string[] and walks with <For>. A log is the reason it
-// exists: the value is a single blob of output, and the card shows the tail of it.
-// Last keeps the final N entries, and Truncate clips each a single to a width the
-// card can hold, because TML does no wrapping of its own. Last and Truncate are
-// templates, so a flag sets them: `last="{{ .flag.lines }}"`.
+// Lines turns the value into a list of strings, which is the property type a
+// data template declares as string[] and walks with <For>. A log is the reason
+// it exists: the value is one blob of output, and the card shows the tail of
+// it. Last keeps the final N entries, and Truncate clips each one to a width
+// the card can hold, because TML does no wrapping of its own.
+// Last and Truncate are templates, so a flag sets them: `last="{{ .flag.lines }}"`.
 type TMLField struct {
 	Name     string `json:"name"`
 	Path     string `json:"path,omitempty"`
@@ -103,7 +103,9 @@ func buildTMLProp(n *xnode) (TMLProp, error) {
 		From: strings.TrimSpace(n.Attr("from")),
 		Over: strings.TrimSpace(n.Attr("over")),
 	}
-	// A prop holds EITHER fields or text.
+	// A prop holds EITHER fields or text. The two cannot be read in one pass:
+	// the placeholder compiler reads content it knows, and <field> is this
+	// element's own child rather than a placeholder, so it rejects one.
 	if repeats(n) {
 		for _, child := range n.Children() {
 			if child.Name() != "field" {
@@ -126,7 +128,7 @@ func buildTMLProp(n *xnode) (TMLProp, error) {
 }
 
 // repeats reports whether a prop names the parts of a list element rather than
-// a single value.
+// one value.
 func repeats(n *xnode) bool {
 	for _, child := range n.Children() {
 		if child.Name() == "field" {
@@ -198,7 +200,7 @@ func tmlEntry(src, dir string) string {
 // loaded caches views by entry path, because a watch renders the same component
 // many times and every Load re-reads and re-checks the whole import graph. The
 // entry file's size and modification time key the cache, so editing the file
-// mid-watch reloads it. An imported file is NOT part of the key: change any of
+// mid-watch reloads it. An imported file is NOT part of the key: change one of
 // those and restart.
 var loaded sync.Map
 
@@ -227,7 +229,9 @@ func loadTMLView(path string, dark bool) (*tml.View, error) {
 }
 
 // tmlProps turns the response and the leaf context into the component's
-// arguments.
+// arguments. Every value crosses as a string and the component re-reads it as
+// the type it declared, so an int property takes 3 and a color property takes
+// #d97706 without this side naming types of its own.
 func tmlProps(t *TML, parsed any, ctx map[string]any) (tml.Props, error) {
 	props := make(tml.Props, len(t.Props))
 	for _, p := range t.Props {
@@ -259,8 +263,8 @@ func tmlPropValue(p TMLProp, parsed any, ctx map[string]any) (sema.Value, error)
 	}
 }
 
-// tmlLookup reads a path out of the response body earliest and the whole
-// leaf context then which is the order <fields> resolves an over= in.
+// tmlLookup reads a path out of the response body first and the whole leaf
+// context second, which is the order <fields> resolves an over= in.
 func tmlLookup(path string, parsed any, ctx map[string]any) (any, bool) {
 	if value, ok := fields.Lookup(parsed, path); ok {
 		return value, true
@@ -293,7 +297,7 @@ func tmlListValue(p TMLProp, parsed any, ctx map[string]any) (sema.Value, error)
 	return sema.RecordListValue(records), nil
 }
 
-// tmlFieldValue reads a single part of a single list element.
+// tmlFieldValue reads one part of one list element.
 func tmlFieldValue(f TMLField, element any, index int, ctx map[string]any) (sema.Value, error) {
 	raw := ""
 	if f.Expr != "" {
@@ -368,8 +372,8 @@ func tmlExprData(element any, index int, ctx map[string]any) map[string]any {
 	return data
 }
 
-// tmlLines cuts a single blob of output into the lines a card shows: the last
-// few, each clipped to the width the card can hold.
+// tmlLines cuts one blob of output into the lines a card shows: the last few,
+// each clipped to the width the card can hold.
 func tmlLines(s string, last, truncate int) sema.Value {
 	split := strings.Split(strings.TrimRight(s, "\n"), "\n")
 	if len(split) == 1 && strings.TrimSpace(split[0]) == "" {
@@ -387,7 +391,7 @@ func tmlLines(s string, last, truncate int) sema.Value {
 }
 
 // truncateCells clips a line to n display cells, ellipsis included. It counts
-// cells rather than bytes, because a wide rune costs columns of the card.
+// cells rather than bytes, because a wide rune costs two columns of the card.
 func truncateCells(s string, n int) string {
 	if fields.DisplayWidth(s) <= n {
 		return s
@@ -408,7 +412,7 @@ func truncateCells(s string, n int) string {
 	return string(out) + "…"
 }
 
-// tmlScalarValue renders a single decoded JSON value as the string a component
+// tmlScalarValue renders one decoded JSON value as the string a component
 // re-reads. A missing value is the empty string rather than an error, because a
 // row with a null column is data, not a broken config.
 func tmlScalarValue(v any) sema.Value { return sema.StringValue(tmlScalar(v)) }
@@ -430,7 +434,7 @@ func tmlScalar(v any) string {
 	}
 }
 
-// renderTMLFrame lays the component out at a single size and returns the frame.
+// renderTMLFrame lays the component out at one size and returns the frame.
 func renderTMLFrame(t *TML, dir string, parsed any, ctx map[string]any, width, height int) (string, error) {
 	view, err := loadTMLView(tmlEntry(t.Src, dir), t.Dark)
 	if err != nil {

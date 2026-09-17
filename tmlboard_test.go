@@ -15,12 +15,12 @@ import (
 	"github.com/wow-look-at-my/tml/sema"
 )
 
-// The build-board case: a list call, a single call per element for its log,
-// and a single card per build carrying attributes plus the tail of that log.
+// The build-board case: a list call, one call per element for its log, and one
+// card per build carrying attributes plus the tail of that log.
 //
 // Every server here closes through t.Cleanup rather than a defer, so it
-// outlives the swapped client that points at it. A defer closes it and the
-// global then names a dead server for as long as the restore takes.
+// outlives the swapped client that points at it. A defer closes it first, and
+// the global then names a dead server for as long as the restore takes.
 
 const boardComponent = `<?xml version="1.1" encoding="UTF-8"?>
 <Component xmlns="urn:tml:v1" name="Board">
@@ -61,8 +61,8 @@ func writeBoardComponent(t *testing.T) string {
 }
 
 // fakeCI answers a list call and a per-build detail call, in the shape a CI
-// server takes: the list names the runs, and the detail carries the log as a
-// single entry per stage.
+// server takes: the list names the runs, and the detail carries the log as one
+// entry per stage.
 func fakeCI(t *testing.T, calls *[]string) *httptest.Server {
 	t.Helper()
 	logs := map[string][]map[string]any{
@@ -135,8 +135,8 @@ func TestBuildBoard_OneCardPerBuildWithItsOwnLog(t *testing.T) {
 	code, out, errOut := execCmdFull(t, cfg, "builds", "--format=always")
 	require.Equal(t, 0, code, errOut)
 
-	// The list a single time, then a single detail call per element in the
-	// source order, then the leaf's own call.
+	// The list once, then one detail call per element in the source order, then
+	// the leaf's own call.
 	require.Len(t, calls, 4)
 	assert.Contains(t, calls[0], "/list")
 	assert.Contains(t, calls[1], `{"id":"api"}`)
@@ -146,7 +146,7 @@ func TestBuildBoard_OneCardPerBuildWithItsOwnLog(t *testing.T) {
 	assert.Contains(t, out, "2 building")
 	assert.Contains(t, out, "api")
 	assert.Contains(t, out, "web")
-	// The last stage of the build, not the earliest.
+	// The last stage of the build, not the first.
 	assert.Contains(t, out, "docker build")
 	// last="2" keeps the tail of the joined log and drops what came before.
 	assert.Contains(t, out, "step 2/9")
@@ -155,8 +155,8 @@ func TestBuildBoard_OneCardPerBuildWithItsOwnLog(t *testing.T) {
 	assert.Contains(t, out, "…")
 }
 
-// A failing element fails the step: a board missing a single build reads
-// as a shorter queue rather than as a broken run.
+// A failing element fails the step: a board missing one build reads as a
+// shorter queue rather than as a broken run.
 func TestStepOver_FailingElementFailsTheRun(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/detail") {
@@ -174,8 +174,8 @@ func TestStepOver_FailingElementFailsTheRun(t *testing.T) {
 	assert.NotEqual(t, 0, code)
 }
 
-// A repeated step says what it cannot repeat over, rather than running
-// empty times and leaving an empty board that reads as an idle queue.
+// A repeated step says what it cannot repeat over, rather than running zero
+// times and leaving an empty board that reads as an idle queue.
 func TestStepOver_SaysWhatItCannotRepeat(t *testing.T) {
 	step := []Step{{Name: "detail", Over: "result.running.updates", Command: &Cmd{Shell: true, Template: "true"}}}
 
@@ -241,7 +241,7 @@ func TestTruncateCells(t *testing.T) {
 	assert.Equal(t, "abc", truncateCells("abc", 5))
 	assert.Equal(t, "ab…", truncateCells("abcdef", 3))
 	assert.Equal(t, "…", truncateCells("abcdef", 1))
-	// A wide rune costs columns, so fewer of them fit.
+	// A wide rune costs two columns, so fewer of them fit.
 	assert.Equal(t, "日…", truncateCells("日本語です", 4))
 }
 

@@ -12,13 +12,15 @@ import (
 	"github.com/wow-look-at-my/go-containers/set"
 )
 
+// reservedMockNames are the keys the engine itself puts on .mock, so an
+// <input> may not take one.
 var reservedMockNames = set.Of("argv", "prog", "cwd", "file", "output", "outputs")
 
 // defaultMockMode is the mode of a mock artifact. A build tool reads the
 // timestamp, so the bytes and the bits both only have to be plausible.
 const defaultMockMode fs.FileMode = 0o644
 
-// mockFile is a single planned write: the path rendered, the body decided, and
+// mockFile is one planned write: the path rendered, the body decided, and
 // nothing touched on disk yet. Planning every output before writing any is what
 // lets a <record> name the files this call is about to produce.
 type mockFile struct {
@@ -47,8 +49,8 @@ func resolveMockInputs(m *Mock, prog string, raw []string, data map[string]any) 
 		return fmt.Errorf("mock: working directory: %w", err)
 	}
 
-	// .mock.argv is the WHOLE command line, program name earliest. A record is
-	// a compile_commands.json entry, and a consumer of a single replays those
+	// .mock.argv is the WHOLE command line, program name first. A record is a
+	// compile_commands.json entry, and a consumer of one replays those
 	// arguments: the leftovers alone are missing every flag the leaf declared.
 	argv := make([]string, 0, len(raw)+1)
 	if prog != "" {
@@ -95,7 +97,7 @@ func resolveMockInputs(m *Mock, prog string, raw []string, data map[string]any) 
 			return fmt.Errorf("mock: input %q matched nothing in %v (match=%q)", in.Name, leftovers, in.Match)
 		case in.Default != "":
 			// The default renders against .mock as it stands, so a later input
-			// can fall back to a single resolved before it.
+			// can fall back to one resolved before it.
 			if value, err = renderString(in.Default, data); err != nil {
 				return fmt.Errorf("mock: input %q: render default: %w", in.Name, err)
 			}
@@ -106,8 +108,8 @@ func resolveMockInputs(m *Mock, prog string, raw []string, data map[string]any) 
 		}
 	}
 
-	// .mock.file is the earliest input that resolved to something, which is
-	// the source file in every compile-tool shape this exists for.
+	// .mock.file is the first input that resolved to something, which is the
+	// source file in every compile-tool shape this exists for.
 	mock["file"] = first
 	logVerbose("mock: inputs %s", jsonCompact(mock))
 	return nil
@@ -138,9 +140,9 @@ func planMockOutputs(m *Mock, data map[string]any) ([]mockFile, error) {
 			if err != nil {
 				return nil, err
 			}
-			// Records rendering a single path is an over= whose path
-			// template forgot to vary. Caught here, rather than after N
-			// writes have landed on top of each other.
+			// Two records rendering one path is an over= whose path template
+			// forgot to vary. Caught here, rather than after N writes have
+			// landed on top of each other.
 			if !f.append {
 				if claimed[f.path] {
 					return nil, fmt.Errorf("mock: output[%d]: two records both write %s; give path= something that varies per record", i, f.path)
@@ -205,7 +207,7 @@ func planMockOutput(o *MockOutput, ctx map[string]any, idx int) (mockFile, error
 }
 
 // writeMockFiles performs the planned writes. A parent directory is created,
-// because a real compiler writing into an existing build tree finds a single there.
+// because a real compiler writing into an existing build tree finds one there.
 func writeMockFiles(files []mockFile) error {
 	for _, f := range files {
 		if dir := filepath.Dir(f.path); dir != "" && dir != "." {
@@ -277,9 +279,9 @@ func copyMockFile(f mockFile) error {
 	return nil
 }
 
-// appendMockRecords writes a single line per <record>. The append is the whole
-// point: every tool in a parallel build points at a single file, and each call
-// adds its own line without reading what is already there.
+// appendMockRecords writes one line per <record>. The append is the whole
+// point: every tool in a parallel build points at one file, and each call adds
+// its own line without reading what is already there.
 func appendMockRecords(m *Mock, data map[string]any) error {
 	for i := range m.Records {
 		r := &m.Records[i]
@@ -335,9 +337,9 @@ func runMock(m *Mock, prog string, raw []string, data map[string]any, out, errw 
 	if err != nil {
 		return 1, err
 	}
-	// The records go earliest: a wrapper around a real tool must log the call
-	// even when the tool that follows fails, because a failed compile is
-	// exactly the a single somebody wants the command line of.
+	// The records go first: a wrapper around a real tool must log the call even
+	// when the tool that follows fails, because a failed compile is exactly the
+	// one somebody wants the command line of.
 	if err := appendMockRecords(m, data); err != nil {
 		return 1, err
 	}
@@ -384,8 +386,8 @@ func mockExitCode(m *Mock, data map[string]any) (int, error) {
 	return code, nil
 }
 
-// mockWhen renders a predicate. An empty a single holds, as it does everywhere
-// else in this config language.
+// mockWhen renders a predicate. An empty one holds, as it does everywhere else
+// in this config language.
 func mockWhen(when string, data map[string]any) (bool, error) {
 	if when == "" {
 		return true, nil
@@ -397,7 +399,7 @@ func mockWhen(when string, data map[string]any) (bool, error) {
 	return isTruthy(out), nil
 }
 
-// mockRecordsOf expands an over= into a single context per element, the same
+// mockRecordsOf expands an over= into one context per element, the same
 // contract a <download over=> carries: the element's keys are promoted and the
 // element itself is .item.
 func mockRecordsOf(over string, data map[string]any, idx int) ([]map[string]any, error) {
@@ -423,7 +425,8 @@ func mockRecordsOf(over string, data map[string]any, idx int) ([]map[string]any,
 	return out, nil
 }
 
-// parseFileMode reads an octal mode.
+// parseFileMode reads an octal mode. A leading 0 is optional, because 644 is
+// how a Makefile author writes it.
 func parseFileMode(s string) (fs.FileMode, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {

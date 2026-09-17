@@ -1,11 +1,11 @@
 package main
 
-// A runnable parent: a node that has subcommands and also executes, so a single
-// name serves `tool [id]` and `tool sub`. Cobra decides between both by reading
-// the earliest positional as a subcommand name, so the split is only
-// unambiguous when no argument value can spell a subcommand. That is what
-// `pattern=` buys: the loader rejects a pattern that matches any of the node's
-// own subcommand names, and the run rejects a value the pattern does not match.
+// A runnable parent: a node that has subcommands and also executes, so one name
+// serves `tool [id]` and `tool sub`. Cobra decides between the two by reading
+// the first positional as a subcommand name, so the split is only unambiguous
+// when no argument value can spell a subcommand. That is what `pattern=` buys:
+// the loader rejects a pattern that matches one of the node's own subcommand
+// names, and the run rejects a value the pattern does not match.
 
 import (
 	"fmt"
@@ -41,8 +41,8 @@ func validateRunnable(c *Command, where string) error {
 		return fmt.Errorf("%s: runnable= and passthrough= cannot both hold: passthrough takes every argument, which leaves nothing to name a subcommand", where)
 	}
 
-	// The node's own subcommands in declaration order, then the names cobra
-	// owns. A config author reads the earliest match, so it must be the name
+	// The node's own subcommands first, in declaration order, then the names
+	// cobra owns. A config author reads the first match, so it must be the name
 	// they are most likely to have meant.
 	names := make([]string, 0, len(c.Commands)+reservedCommandNames.Len())
 	for _, sub := range c.Commands {
@@ -76,8 +76,8 @@ func validateRunnable(c *Command, where string) error {
 	return nil
 }
 
-// argPatterns compiles the declared patterns a single time per node, for the
-// validator the cobra command carries. validateRunnable already proved each a single compiles.
+// argPatterns compiles the declared patterns once per node, for the validator
+// the cobra command carries. validateRunnable already proved each one compiles.
 func argPatterns(node Command) []*regexp.Regexp {
 	out := make([]*regexp.Regexp, len(node.Args))
 	for i, a := range node.Args {
@@ -90,7 +90,7 @@ func argPatterns(node Command) []*regexp.Regexp {
 }
 
 // matchArgPatterns checks each supplied value against its arg's pattern. The
-// error names both things the value could have been, because a user who
+// error names the two things the value could have been, because a user who
 // mistypes a subcommand lands here.
 func matchArgPatterns(node Command, res []*regexp.Regexp) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {

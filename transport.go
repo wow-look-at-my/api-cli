@@ -14,16 +14,16 @@ import (
 const builtinTransportName = "http"
 
 // The active transport registry. Config data rather than state, but a process
-// loads exactly a single config, so this mirrors how httpClient and execStdout
-// are held — and spares every call site between runLeaf and runRequest a
-// parameter it would only pass along.
+// loads exactly one config, so this mirrors how httpClient and execStdout are
+// held — and spares every call site between runLeaf and runRequest a parameter
+// it would only pass along.
 var (
 	transports       = map[string]*Transport{}
 	defaultTransport string
 )
 
 // buildTransports parses the <transports> registry. Kept here rather than in
-// xmlsource.go so the whole transport feature reads in a single place.
+// xmlsource.go so the whole transport feature reads in one place.
 func buildTransports(n *xnode) (map[string]*Transport, error) {
 	if err := checkAttrs(n); err != nil {
 		return nil, err
@@ -133,10 +133,10 @@ func resolveTransportNamed(name string) (*Transport, error) {
 	return t, nil
 }
 
-// downloadTransport is a transport resolved for a single download: the
-// program's argv with every template already rendered, plus where to run it.
-// The queue executes this on a worker long after the leaf's data context is
-// gone, so nothing here may still need rendering.
+// downloadTransport is a transport resolved for one download: the program's
+// argv with every template already rendered, plus where to run it. The queue
+// executes this on a worker long after the leaf's data context is gone, so
+// nothing here may still need rendering.
 type downloadTransport struct {
 	Name  string
 	Argv  []string
@@ -145,10 +145,10 @@ type downloadTransport struct {
 }
 
 // prepareDownloadTransport picks the transport for a download and renders its
-// command now.
+// command now. A nil return means the built-in client carries this one.
 //
 // The program sees the same `.request` context a request-form transport sees —
-// method, url, headers, header_lines — so a single program serves both. The
+// method, url, headers, header_lines — so one program serves both. The
 // difference is on the way back: a download's stdout is streamed to the file
 // rather than buffered as a response body, because the whole point of the file
 // is that it need not fit in memory.
@@ -191,7 +191,8 @@ func knownTransports() string {
 }
 
 // runViaTransport hands a prepared request to the transport program and
-// returns its stdout as the response body.
+// returns its stdout as the response body. A non-zero exit is a failed
+// request: the program's own stderr has already reached the user.
 func runViaTransport(t *Transport, p *preparedRequest, data map[string]any, errOut io.Writer) (string, int) {
 	ctx := p.context(data)
 

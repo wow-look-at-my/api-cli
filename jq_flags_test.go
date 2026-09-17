@@ -59,7 +59,9 @@ func TestJQProgram_LiteralProgram(t *testing.T) {
 
 // --- the flag-dependent jq program, end to end ---
 
-// jqPostsServer serves posts, of whose titles contain "qui".
+// jqPostsServer serves eight posts, six of whose titles contain "qui". Six is
+// past the default limit of 5, so a run that omits --limit proves the declared
+// default reached the program.
 func jqPostsServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	posts := []map[string]any{
@@ -81,7 +83,7 @@ func jqPostsServer(t *testing.T) *httptest.Server {
 	return srv
 }
 
-// jqPostsConfig declares the same leaf again: `inline` writes the jq program in
+// jqPostsConfig declares the same leaf twice: `inline` writes the jq program in
 // the attribute, `viavar` keeps it in a <var> and points jq= at that path. Both
 // forms must see this invocation's flags.
 func jqPostsConfig(url string) *Config {
@@ -109,6 +111,8 @@ func jqPostsConfig(url string) *Config {
 }
 
 // jqTitles runs a leaf with --format=raw and decodes the titles it printed.
+// --format=raw is the jq-shaped body, not the pre-jq one, which is what makes
+// the shaping observable without a <fields> declaration.
 func jqTitles(t *testing.T, cfg *Config, argv ...string) []string {
 	t.Helper()
 	code, out, errOut := execCmdFull(t, cfg, append(argv, "--format=raw")...)
@@ -135,6 +139,7 @@ func TestIntegration_JQSeesFlags(t *testing.T) {
 			assert.Equal(t, []string{"qui-1", "qui-2"},
 				jqTitles(t, cfg, leaf, "--limit", "2", "--contains", "qui"))
 
+			// No --limit: the flag's declared default of 5 caps the six matches.
 			assert.Equal(t, []string{"qui-1", "qui-2", "qui-3", "qui-4", "qui-5"},
 				jqTitles(t, cfg, leaf, "--contains", "qui"))
 
@@ -217,8 +222,8 @@ func TestIntegration_VarSeesFlag(t *testing.T) {
 }
 
 // A templated flag default reads .var, and a var reads .flag. Both hold at
-// the same time: the default renders against the flag-blind pass, the var
-// against the finished flag map.
+// once: the default renders against the flag-blind pass, the var against the
+// finished flag map.
 func TestIntegration_TemplatedFlagDefaultAndVarFlagReference(t *testing.T) {
 	cfg := &Config{
 		Name:    "t",

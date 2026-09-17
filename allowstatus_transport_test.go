@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A named transport plus allow-status is a load error, because both cannot
-// both hold. The error names both ways out.
+// A named transport plus allow-status is a load error, because the two cannot
+// both hold. The error names the two ways out.
 func TestValidate_AllowStatusWithANamedTransport(t *testing.T) {
 	_, err := loadStr(t, `<config name="x">
 	<transports><transport name="corp"><run>corp-http</run></transport></transports>

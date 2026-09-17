@@ -27,8 +27,8 @@ func TestMCPGatherArgs_OmittedOptionalIsTheZeroValue(t *testing.T) {
 	assert.Equal(t, map[string]any{"id": "", "count": 0, "rest": []string{}}, got)
 }
 
-// TestOptionalArg_UrlpathOnAnOmittedArg is the failure this unset value
-// removes: urlpath takes a string, and the omitted arg used to reach it as nil.
+// TestOptionalArg_UrlpathOnAnOmittedArg is the failure this zero value removes:
+// urlpath takes a string, and the omitted arg used to reach it as nil.
 func TestOptionalArg_UrlpathOnAnOmittedArg(t *testing.T) {
 	var seen []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

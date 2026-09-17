@@ -15,10 +15,11 @@ import (
 )
 
 // The README and the XSD ship inside the binary (`api-cli docs`), and both
-// restate lists the code owns. Nothing else compares both, so a new sink or a
-// new flag stays undocumented until a user finds the gap. These tests fail
+// restate lists the code owns. Nothing else compares the two, so a new sink or
+// a new flag stays undocumented until a user finds the gap. These tests fail
 // instead.
 
+// readmeSection returns the body of one "## " section of the README.
 func readmeSection(t *testing.T, heading string) string {
 	t.Helper()
 	i := strings.Index(readmeDoc, heading+"\n")
@@ -30,7 +31,7 @@ func readmeSection(t *testing.T, heading string) string {
 	return body
 }
 
-// readmeLine returns the a single README line that contains marker.
+// readmeLine returns the one README line that contains marker.
 func readmeLine(t *testing.T, marker string) string {
 	t.Helper()
 	var found []string

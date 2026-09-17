@@ -14,9 +14,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// A frame is a single whole run of the leaf -- steps, entry, request and
-// formatter -- captured into a buffer instead of the terminal, then painted
-// over the frame before it.
+// The watch loop: re-run a leaf on an interval and repaint its output in place,
+// the way watch(1) does. A frame is one whole run of the leaf -- steps, entry,
+// request and formatter -- captured into a buffer instead of the terminal, then
+// painted over the frame before it.
 //
 // The repaint uses the same ANSI sequences as the download display. It needs no
 // terminal library, because a frame is a fixed-height block of plain lines.
@@ -25,7 +26,8 @@ import (
 // than a terminal can draw, and it hammers whatever the leaf calls.
 const watchMinInterval = 100 * time.Millisecond
 
-// parseWatchInterval reads the --watch value. Anything else is a Go
+// parseWatchInterval reads the --watch value. A bare number is seconds, so
+// `--watch 2` reads the way watch(1)'s `-n 2` does. Anything else is a Go
 // duration.
 func parseWatchInterval(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
@@ -46,8 +48,8 @@ func parseWatchInterval(s string) (time.Duration, error) {
 	return d, nil
 }
 
-// watchInterval reports the interval this invocation asked for. empty means
-// the leaf runs a single time.
+// watchInterval reports the interval this invocation asked for. Zero means the
+// leaf runs one time.
 func watchInterval(c *cobra.Command) (time.Duration, error) {
 	v, _ := c.Root().PersistentFlags().GetString("watch")
 	return parseWatchInterval(v)
@@ -57,8 +59,8 @@ func watchInterval(c *cobra.Command) (time.Duration, error) {
 // title heads each frame, next to the interval and the time of the frame.
 //
 // The leaf writes to the terminal through execStdout and execStderr. A frame
-// swaps both for a single buffer, so a step's diagnostic lands in the frame
-// beside the output it explains rather than scrolling the display away.
+// swaps both for one buffer, so a step's diagnostic lands in the frame beside
+// the output it explains rather than scrolling the display away.
 func runWatch(title string, every time.Duration, body func() error) error {
 	tty, width, height := stdoutSize()
 	out := execStdout
@@ -106,7 +108,7 @@ func watchLoop(p *watchPainter, title string, every time.Duration, stop <-chan s
 	}
 }
 
-// captureInto points the leaf's output channels at w for a single frame.
+// captureInto points the leaf's output channels at w for one frame.
 func captureInto(w io.Writer, body func() error) error {
 	prevOut, prevErr := execStdout, execStderr
 	execStdout, execStderr = w, w
@@ -114,14 +116,15 @@ func captureInto(w io.Writer, body func() error) error {
 	return body()
 }
 
-// watchHeader is the frame's earliest line: what is running, how often, and
-// when this frame was drawn.
+// watchHeader is the frame's first line: what is running, how often, and when
+// this frame was drawn.
 func watchHeader(title string, every time.Duration, now time.Time) string {
 	return fmt.Sprintf("every %s: %s    %s", every, title, now.Format("15:04:05"))
 }
 
-// Without a terminal it appends frames instead, so a redirected watch reads as
-// a log rather than a pile of escape sequences.
+// watchPainter draws one frame over the last one. Without a terminal it appends
+// frames instead, so a redirected watch reads as a log rather than a pile of
+// escape sequences.
 type watchPainter struct {
 	out     io.Writer
 	width   int
@@ -149,8 +152,8 @@ func (p *watchPainter) paint(header, bodyText string) {
 		b.WriteString(clipDisplay(line, p.width))
 		b.WriteByte('\n')
 	}
-	// A shorter frame than the last a single leaves stale rows below it. Clear
-	// them, then come back up so the next repaint still starts at the frame's top.
+	// A shorter frame than the last one leaves stale rows below it. Clear them,
+	// then come back up so the next repaint still starts at the frame's top.
 	if extra := p.painted - len(lines); extra > 0 {
 		for range extra {
 			b.WriteString(ansiClearLine)
@@ -162,9 +165,9 @@ func (p *watchPainter) paint(header, bodyText string) {
 	fmt.Fprint(p.out, b.String())
 }
 
-// frame assembles the lines of a single frame, clipped to the terminal
-// height. A clipped frame says how many lines it dropped, because a table
-// that silently loses its tail reads as an API that returned fewer records.
+// frame assembles the lines of one frame, clipped to the terminal height. A
+// clipped frame says how many lines it dropped, because a table that silently
+// loses its tail reads as an API that returned fewer records.
 func (p *watchPainter) frame(header, bodyText string) []string {
 	lines := []string{header, ""}
 	body := strings.Split(strings.TrimRight(bodyText, "\n"), "\n")

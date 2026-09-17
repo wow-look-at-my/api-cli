@@ -17,11 +17,15 @@ const (
 	// CorsDisabled is wide open: Access-Control-Allow-Origin: *, all
 	// methods, all headers, preflight always succeeds. No protection.
 	CorsDisabled CorsLevel = iota
-	// Useful for browser dev tools.
+	// CorsPermissive allows localhost-style origins (localhost, 127.0.0.1,
+	// ::1, any port) plus same-origin. Useful for browser dev tools.
 	CorsPermissive
 	// CorsStrict only allows requests whose Origin matches the server's
-	// bound host:port.
+	// bound host:port. When the server binds to 0.0.0.0/::, any host with
+	// the matching port is accepted.
 	CorsStrict
+	// CorsEnabled fully locks down: no Access-Control-Allow-Origin is ever
+	// emitted, and preflight (OPTIONS) requests are answered with 403.
 	CorsEnabled
 )
 
@@ -157,7 +161,10 @@ func localhostOrigin(origin string) bool {
 	return false
 }
 
-// sameOrigin reports whether origin matches listenAddr's host:port.
+// sameOrigin reports whether origin matches listenAddr's host:port. When
+// the listen host is unspecified (0.0.0.0/::/empty), any host with the
+// matching port is accepted, since the server is reachable on any
+// interface.
 func sameOrigin(origin, listenAddr string) bool {
 	u, err := url.Parse(origin)
 	if err != nil || u.Host == "" {

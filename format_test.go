@@ -90,10 +90,10 @@ func TestRenderPredicate_EmptyDefaultsToTTY(t *testing.T) {
 }
 
 func TestRenderPredicate_CacheHits(t *testing.T) {
-	// When the same (tmpl, ctx) is queried again, the next call should hit
+	// When the same (tmpl, ctx) is queried twice, the second call should hit
 	// the cache and return the same bool. We can't easily count template
 	// renders without instrumentation, so we settle for a behavioural check:
-	// mutating the source after earliest call doesn't affect cached result.
+	// mutating the source after first call doesn't affect cached result.
 	ctx := map[string]any{"tty": true}
 	cache := map[predicateKey]bool{}
 	got1, err := renderPredicate("{{.tty}}", ctx, cache)
@@ -235,10 +235,12 @@ func TestCappedTee_UnderCapBuffers(t *testing.T) {
 func TestCappedTee_OverflowFlushesPrefixThenStreams(t *testing.T) {
 	var sink bytes.Buffer
 	tee := &cappedTee{buf: &bytes.Buffer{}, out: &sink, max: 5}
-	// Earliest write fits.
+	// First write fits.
 	_, err := tee.Write([]byte("abc"))
 	require.NoError(t, err)
 	assert.False(t, tee.overflowed)
+	// Second write exceeds the cap; expect prefix flushed and second write
+	// passes straight through.
 	_, err = tee.Write([]byte("XYZQ"))
 	require.NoError(t, err)
 	assert.True(t, tee.overflowed)

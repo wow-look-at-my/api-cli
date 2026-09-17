@@ -11,10 +11,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// runMCP starts an MCP server using the given transport spec. transport
-// is any of: - "stdio" MCP over stdin/stdout - "http://host:port" MCP
-// over Streamable HTTP (POST /) - "sse://host:port" MCP over HTTP+SSE
-// (GET /sse + POST /message)
+// runMCP starts an MCP server using the given transport spec.
+// transport is one of:
+//   - "stdio"              MCP over stdin/stdout
+//   - "http://host:port"   MCP over Streamable HTTP (POST /)
+//   - "sse://host:port"    MCP over HTTP+SSE (GET /sse + POST /message)
 //
 // corsLevel controls cross-origin handling for the HTTP and SSE
 // transports; it is ignored for stdio.
@@ -91,7 +92,7 @@ type mcpLeaf struct {
 	formats   map[string]*Format
 }
 
-// buildMCPServer creates an MCP server with a single tool per leaf command.
+// buildMCPServer creates an MCP server with one tool per leaf command.
 func buildMCPServer(cfg *Config) *mcp.Server {
 	installTransports(cfg) // see newRoot: every activation path publishes it
 	installConfigDir(cfg)
@@ -137,6 +138,7 @@ func buildMCPServer(cfg *Config) *mcp.Server {
 }
 
 // withHealthEndpoint wraps an HTTP handler to also serve GET /health.
+// The health response is always 200 OK with {"status":"ok"}.
 func withHealthEndpoint(h http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -186,7 +188,7 @@ func collectMCPLeaves(cmds []Command, inh mcpInherit) []mcpLeaf {
 			child.format = c.Format
 		}
 		// A runnable parent is a tool of its own, next to the tools its children
-		// become. Its name is its own path, so both never collide.
+		// become. Its name is its own path, so the two never collide.
 		if c.executes() {
 			out = append(out, mcpLeaf{
 				name:      name,

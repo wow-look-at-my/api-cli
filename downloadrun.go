@@ -11,8 +11,8 @@ import (
 	"golang.org/x/term"
 )
 
-// downloadSession is a single invocation's use of the shared downloader: the
-// batch it enqueues into, and the display it runs while that batch drains.
+// downloadSession is one invocation's use of the shared downloader: the batch
+// it enqueues into, and the display it runs while that batch drains.
 //
 // The session opens before the leaf's steps run, not after, because the steps
 // are what work the URL out — their output belongs in the same log region as
@@ -72,7 +72,7 @@ func (s *downloadSession) close() {
 }
 
 // run plans the leaf's declarations, hands them to the queue, and waits for the
-// queue to drain.
+// queue to drain. Returns the leaf's exit code: non-zero if any file failed.
 func (s *downloadSession) run(dls []Download, data map[string]any) int {
 	specs, err := planDownloads(dls, data, s.settings.Dir)
 	if err != nil {
@@ -101,7 +101,9 @@ func (s *downloadSession) run(dls []Download, data map[string]any) int {
 	return reportJoins(joinErrs, code)
 }
 
-// reportJoins writes what the joiner could not write.
+// reportJoins writes what the joiner could not write. A failed join is the
+// run's outcome even when every transfer succeeded: the caller asked for one
+// file per group, and a group short a part never became one.
 func reportJoins(errs []error, code int) int {
 	for _, err := range errs {
 		fmt.Fprintln(execStderr, "error:", err)
@@ -114,7 +116,7 @@ func reportJoins(errs []error, code int) int {
 
 // reportDownloads writes the run's outcome. On a terminal the display already
 // showed each file, so only the summary follows it; through a pipe the
-// destination paths go to stdout, a single per line, for whatever reads them next.
+// destination paths go to stdout, one per line, for whatever reads them next.
 func reportDownloads(items []*downloadItem, elapsed time.Duration, tty bool) int {
 	var bytes int64
 	ok, failed := 0, 0
