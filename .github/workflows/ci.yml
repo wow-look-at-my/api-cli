@@ -18,10 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: wow-look-at-my/actions@ste-lint#latest
-      # tidy confines a dependency's generate directives in bubblewrap, and it
-      # refuses them without it. go-toolchain#502 provisions the backend for a
-      # repo like this one, which has no dats/ suites. This step is what the
-      # action does once that lands, and it costs a cached apt hit until then.
+      # tidy confines a dependency's generate directives here, and refuses them without a backend.
       - name: Provision the sandbox backend (bubblewrap)
         run: |
           sudo apt-get install -y bubblewrap
