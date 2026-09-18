@@ -8,19 +8,19 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
-	github.com/wow-look-at-my/api-cli-spec v0.0.0-20260906001851-e7078d0e94a6 // go-toolchain:auto-branch
-	github.com/wow-look-at-my/api-dsl v0.0.0-20260823132545-703875e77856 // go-toolchain:auto-branch
-	github.com/wow-look-at-my/ascii-timeline v0.0.0-20260918064607-0889e1479b9e // go-toolchain:auto-branch
+	github.com/wow-look-at-my/api-cli-spec v0.0.0
+	github.com/wow-look-at-my/api-dsl v0.0.0
+	github.com/wow-look-at-my/ascii-timeline v0.0.0
 	golang.org/x/term v0.43.0
 	golang.org/x/text v0.37.0
 )
 
-require github.com/wow-look-at-my/go-containers v0.0.0-20260826161058-40a3d1ef3d41 // go-toolchain:auto-branch
+require github.com/wow-look-at-my/go-containers v0.0.0
 
 require (
 	charm.land/bubbletea/v2 v2.0.9
 	github.com/spf13/pflag v1.0.9
-	github.com/wow-look-at-my/tml v0.0.0-20260905025106-7f78f9582290 // go-toolchain:auto-branch
+	github.com/wow-look-at-my/tml v0.0.0
 )
 
 require (
@@ -51,8 +51,8 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
-	github.com/wow-look-at-my/xml-validator/reader v0.0.0-20260905064311-b54c8b4b3c13 // indirect; go-toolchain:auto-branch
-	github.com/wow-look-at-my/xml-validator/validator v0.0.0-20260905064311-b54c8b4b3c13 // go-toolchain:auto-branch
+	github.com/wow-look-at-my/xml-validator/reader v0.0.0 // indirect
+	github.com/wow-look-at-my/xml-validator/validator v0.0.0
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
