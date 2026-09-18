@@ -159,8 +159,8 @@ func TestIntegration_StreamLineModePerChunkStepCountsLines(t *testing.T) {
 }
 
 // chunkMarks reads the per-chunk timestamps a marking step left behind. Each
-// line is one chunk, in nanoseconds since the epoch, so a test can see when the
-// chunker handed each chunk over rather than only that it finished.
+// line is a single chunk, in nanoseconds since the epoch, so a test can see
+// when the chunker handed each chunk over rather than only that it finished.
 func chunkMarks(t *testing.T, path string) []int64 {
 	t.Helper()
 	raw, err := os.ReadFile(path)
@@ -181,9 +181,9 @@ func markingStream(attrs, marksPath string) *Stream {
 }
 
 func TestIntegration_StreamFirstChunkArrivesBeforeTheSourceEnds(t *testing.T) {
-	// The source emits one chunk, pauses two seconds, then emits the second.
-	// The first chunk must be handed over during that pause, which is what
-	// makes this incremental rather than a buffer-everything implementation.
+	// The source emits a single chunk, pauses seconds, then emits the next.
+	// the earliest chunk must be handed over during that pause, which is
+	// what makes this incremental rather than a buffer-everything implementation.
 	t.Serial()
 
 	marks := filepath.Join(t.TempDir(), "chunks.marks")
@@ -206,7 +206,7 @@ func TestIntegration_StreamFirstChunkArrivesBeforeTheSourceEnds(t *testing.T) {
 
 func TestIntegration_StreamNeverBuffersTheWholeSource(t *testing.T) {
 	// A source much larger than any internal buffer streams through as many
-	// chunks, so the run proves the whole output was never captured first.
+	// chunks, so the run proves the whole output was never captured earliest.
 	t.Serial()
 
 	const (
