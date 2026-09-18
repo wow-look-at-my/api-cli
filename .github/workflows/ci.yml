@@ -18,6 +18,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: wow-look-at-my/actions@ste-lint#latest
+      # tidy confines a dependency's generate directives in bubblewrap, and it
+      # refuses them without it. go-toolchain#502 provisions the backend for a
+      # repo like this one, which has no dats/ suites. This step is what the
+      # action does once that lands, and it costs a cached apt hit until then.
+      - name: Provision the sandbox backend (bubblewrap)
+        run: |
+          sudo apt-get install -y bubblewrap
+          # Ubuntu 24.04 refuses an unprivileged user namespace unless this is off.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - uses: wow-look-at-my/go-toolchain@master
         with:
           autorelease: 'true'
