@@ -191,7 +191,6 @@ func pumpChunks(chunks *chunker, st *Stream, data map[string]any) int {
 // applyStreamStep runs the per-chunk step on a single chunk. The chunk arrives
 // on the step's stdin and the step's stdout replaces it, so a chunk is
 // transformed without the source being held in memory.
-//
 func applyStreamStep(step *StreamStep, chunk []byte, index, offset int, data map[string]any) ([]byte, error) {
 	ctx := streamCtx(data, index, offset, len(chunk))
 

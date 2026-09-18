@@ -407,9 +407,9 @@ func TestIntegration_StreamRejectsWatch(t *testing.T) {
 	assert.Contains(t, err.Error(), "--watch")
 }
 
-// streamedBody streams a server's response as it arrives, chunked by size. The
-// handler writes in pieces with a flush between them, so a client that waited
-// for the whole body first would fail the timing assertion below.
+// A server writes its response in flushed pieces, so the body arrives in more
+// than one read. Chunking it proves the request's body is a source like any
+// other, rather than something the client had to finish receiving first.
 func TestIntegration_StreamRequestSourceBodyIsChunked(t *testing.T) {
 	body := []byte("abcdefghij")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
