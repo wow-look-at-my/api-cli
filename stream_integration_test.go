@@ -3,6 +3,8 @@ package main
 import (
 	"crypto/sha256"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -403,4 +405,74 @@ func TestIntegration_StreamRejectsWatch(t *testing.T) {
 	err := watchable(watchRoot(t), cfg.Commands[0], "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--watch")
+}
+
+// streamedBody streams a server's response as it arrives, chunked by size. The
+// handler writes in pieces with a flush between them, so a client that waited
+// for the whole body first would fail the timing assertion below.
+func TestIntegration_StreamRequestSourceBodyIsChunked(t *testing.T) {
+	body := []byte("abcdefghij")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(body[:4])
+		w.(http.Flusher).Flush()
+		_, _ = w.Write(body[4:])
+	}))
+	defer srv.Close()
+	swapHTTPClient(t, srv)
+
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:    "feed",
+			Stream:  mustBuildStream(`chunk="4"`),
+			Request: &Request{Method: "GET", URL: srv.URL + "/feed"},
+		}},
+	}
+	code, out, errOut := execCmdFull(t, cfg, "feed")
+	require.Equal(t, 0, code, errOut)
+	assert.Equal(t, string(body), out, "the response body concatenates to the source")
+}
+
+func TestIntegration_StreamRequestSourceWithAPerChunkStep(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("alpha\nbeta\ngamma\n"))
+	}))
+	defer srv.Close()
+	swapHTTPClient(t, srv)
+
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:    "feed",
+			Stream:  mustBuildStreamWith(`mode="lines"`, `<run>sed 's/a/A/g'</run>`),
+			Request: &Request{Method: "GET", URL: srv.URL + "/feed"},
+		}},
+	}
+	code, out, errOut := execCmdFull(t, cfg, "feed")
+	require.Equal(t, 0, code, errOut)
+	assert.Equal(t, "AlphA\nbetA\ngAmmA\n", out, "the step ran per line off the response body")
+}
+
+func TestIntegration_StreamRequestErrorStatusFailsTheRun(t *testing.T) {
+	// A 4xx is the answer rather than the source, so the leaf fails instead of
+	// streaming an error page.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("not found\n"))
+	}))
+	defer srv.Close()
+	swapHTTPClient(t, srv)
+
+	cfg := &Config{
+		Name: "t",
+		Commands: []Command{{
+			Name:    "feed",
+			Stream:  mustBuildStream(`mode="lines"`),
+			Request: &Request{Method: "GET", URL: srv.URL + "/missing"},
+		}},
+	}
+	code, out, errOut := execCmdFull(t, cfg, "feed")
+	assert.NotEqual(t, 0, code)
+	assert.Empty(t, out, "an error status is not streamed as if it were the source")
+	assert.Contains(t, errOut, "404")
 }
