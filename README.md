@@ -349,6 +349,7 @@ api-cli pull https://example.test/feed | sha256sum
 
 - **`<stream>` is the leaf's output shape.** It therefore takes no `<fields>`, no `<format>` and no `<tml>`. The bytes are not records for a formatter to shape, and there is no whole body to render.
 - **`--watch` does not apply**, because the stream already runs until its source ends.
+- **`<download>` and `<stream>` cannot share a leaf.** Both are the leaf's action, and a run performs one action.
 - **A `<transport>` program cannot carry it.** That path buffers the program's stdout. A request that travels over one therefore fails to load. Write `transport="http"` on that request, or drop `<stream>`.
 - **`<response jq=>` cannot shape it either**, because that shapes a whole body at once. Leave `<response>` out so the body arrives as it is.
 

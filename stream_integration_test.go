@@ -273,6 +273,16 @@ func TestIntegration_StreamWithoutARunIsALoadError(t *testing.T) {
 	assert.Contains(t, err.Error(), "needs a <run>")
 }
 
+func TestIntegration_StreamRejectsADownloadOnTheSameLeaf(t *testing.T) {
+	// Both are the leaf's action, and accepting the pair would silently drop
+	// the stream while the files transferred.
+	cfg := streamConfig(`mode="lines"`, `printf 'x'`)
+	cfg.Commands[0].Downloads = []Download{{URL: "https://example.test/f.bin", To: "f.bin"}}
+	err := validate(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "<download>")
+}
+
 func TestIntegration_StreamRejectsFieldsAndFormatAndTML(t *testing.T) {
 	base := func() *Config {
 		return streamConfig(`chunk="4"`, `printf 'x'`)

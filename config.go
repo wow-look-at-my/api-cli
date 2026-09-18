@@ -679,6 +679,11 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		if len(c.Fields) > 0 || c.Format.Defined() || c.TML != nil {
 			return fmt.Errorf("%s: <stream> emits bytes as they arrive, so <fields>, <format> and <tml> cannot shape them; drop one of the two", where)
 		}
+		// Both are the leaf's action, and a run performs one action. Accepting
+		// the pair would silently drop the stream and transfer the files.
+		if len(c.Downloads) > 0 {
+			return fmt.Errorf("%s: <stream> and <download> are both the leaf's action, so a run takes one; move them to two leaves", where)
+		}
 		if !c.executes() {
 			return fmt.Errorf("%s: <stream> needs a node that runs (a leaf, or a parent with runnable=)", where)
 		}
