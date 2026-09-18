@@ -93,8 +93,7 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 		return mcpCombine(out, errBuf.String()), true
 	}
 
-	// The <fields> auto-formatter takes precedence. MCP behaves like
-	// --format=always: .tty is true, .width is 80, no width-based dropping.
+	// The <fields> auto-formatter takes precedence.
 	if len(leaf.node.Fields) > 0 {
 		parsed := parseInput(out, "json")
 		ctx := formatContext(parsed, data, true, 80)
@@ -127,8 +126,8 @@ func mcpCombine(stdout, stderr string) string {
 	}
 }
 
-// mcpGatherArgs converts the JSON-decoded arguments map to a typed arg map.
-// An omitted arg holds the zero value of its type, exactly as on the CLI side.
+// mcpGatherArgs converts the JSON-decoded arguments map to a typed arg map. An
+// omitted arg holds an unset value of its type, exactly as on the CLI side.
 func mcpGatherArgs(node Command, arguments map[string]any) (map[string]any, error) {
 	out := make(map[string]any, len(node.Args))
 	for _, a := range node.Args {

@@ -57,7 +57,6 @@ func TestTransport_BodyOnStdinByDefault(t *testing.T) {
 	assert.JSONEq(t, `{"name":"ada"}`, out)
 }
 
-// An explicit <stdin> wins over the body default, including an empty one.
 func TestTransport_ExplicitStdinOverridesBody(t *testing.T) {
 	tr := shellTransport("fake", `cat; printf 'end'`, true)
 	tr.Stdin, tr.StdinSet = "override", true
@@ -153,8 +152,8 @@ func TestTransport_PerRequestSelection(t *testing.T) {
 	assert.Equal(t, "from-b", out)
 }
 
-// transport="http" opts one request out of the config's default transport —
-// the public endpoint in an otherwise internal API.
+// transport="http" opts a single request out of the config's default
+// transport — the public endpoint in an otherwise internal API.
 func TestTransport_RequestOptsOutToBuiltinClient(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`from-http`))
@@ -183,11 +182,11 @@ func TestTransport_RequestOptsOutToBuiltinClient(t *testing.T) {
 // Nothing can select a transport at runtime: how a request reaches its
 // endpoint is fixed by the config.
 func TestTransport_NoRuntimeOverrideFlag(t *testing.T) {
-	// newRoot PUBLISHES this config's registry process-wide, and this one holds
-	// a default transport. Left installed, it takes over every request the rest
-	// of the suite makes, which lands as a body of "x" in a test that never
-	// asked for a transport at all. This test owns that registry state while it
-	// runs and puts it back after.
+	// newRoot PUBLISHES this config's registry process-wide, and this a single
+	// holds a default transport. Left installed, it takes over every request
+	// the rest of the suite makes, which lands as a body of "x" in a test that
+	// never asked for a transport at all. This test owns that registry state
+	// while it runs and puts it back after.
 	t.Serial()
 	prevTransports, prevDefault := transports, defaultTransport
 	t.Cleanup(func() { transports, defaultTransport = prevTransports, prevDefault })

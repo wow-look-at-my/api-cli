@@ -9,8 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Tests for the post-1.0 feature additions: variadic args, preconditions,
-// templated flag defaults, bool-default-true negation, and flag conflicts.
 // These live in their own file to keep integration_test.go focused on the
 // original integration scenarios.
 
