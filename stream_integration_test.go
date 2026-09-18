@@ -418,8 +418,8 @@ func TestIntegration_StreamRejectsWatch(t *testing.T) {
 }
 
 // A server writes its response in flushed pieces, so the body arrives in more
-// than one read. Chunking it proves the request's body is a source like any
-// other, rather than something the client had to finish receiving first.
+// than a single read. Chunking it proves the request's body is a source like
+// any other, rather than something the client had to receive whole beforehand.
 func TestIntegration_StreamRequestSourceBodyIsChunked(t *testing.T) {
 	body := []byte("abcdefghij")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
