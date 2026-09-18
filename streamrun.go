@@ -193,21 +193,25 @@ func pumpChunks(chunks *chunker, st *Stream, data map[string]any) int {
 // transformed without the source being held in memory.
 //
 func applyStreamStep(step *StreamStep, chunk []byte, index, offset int, data map[string]any) ([]byte, error) {
+	ctx := streamCtx(data, index, offset, len(chunk))
+
 	stdin := string(chunk)
 	if step.Stdin != "" {
-		rendered, err := renderString(step.Stdin, streamCtx(data, index, offset, len(chunk)))
+		rendered, err := renderString(step.Stdin, ctx)
 		if err != nil {
 			return nil, fmt.Errorf("stream step: render stdin: %w", err)
 		}
 		stdin = rendered
 	}
 
-	cwd, err := renderCwd(step.Cwd, data)
+	cwd, err := renderCwd(step.Cwd, ctx)
 	if err != nil {
 		return nil, fmt.Errorf("stream step: render cwd: %w", err)
 	}
 
-	argv, err := resolveArgv(step.Command, data)
+	// The step's own command sees where the chunk sits, so a step can name its
+	// position as well as transform the bytes.
+	argv, err := resolveArgv(step.Command, ctx)
 	if err != nil {
 		return nil, fmt.Errorf("stream step: %w", err)
 	}

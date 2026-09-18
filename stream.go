@@ -56,8 +56,10 @@ var streamModes = set.Of(streamModeBytes, streamModeLines)
 const streamReadBlock = 32 << 10
 
 // chunkSizeUnits maps a <stream chunk=> suffix to its multiplier. Both the
-// short and the long spelling are accepted, in any capitalization.
+// short and the long spelling are accepted, in any capitalization. An absent
+// suffix is a plain byte count.
 var chunkSizeUnits = map[string]int{
+	"":   1,
 	"b":  1,
 	"k":  1 << 10,
 	"kb": 1 << 10,

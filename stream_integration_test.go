@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -151,73 +152,79 @@ func TestIntegration_StreamLineModePerChunkStepCountsLines(t *testing.T) {
 	// A filter over lines is the log case: the step sees a single line
 	// and its output replaces that line.
 	cfg := streamConfig(`mode="lines"`, `printf 'keep me\ndrop me\nkeep me too\n'`)
-	cfg.Commands[0].Stream = mustBuildStreamWith(`mode="lines"`, `<run>grep -v drop</run>`)
+	cfg.Commands[0].Stream = mustBuildStreamWith(`mode="lines"`, `<run>sed '/drop/d'</run>`)
 	code, out := execCmd(t, cfg, "log")
 	require.Equal(t, 0, code)
 	assert.Equal(t, "keep me\nkeep me too\n", out)
 }
 
-// streamingWriter records the time each write reaches the leaf's stdout, so a
-// test can prove that the earliest chunk landed while the source was still
-// running rather than after it finished.
-type streamingWriter struct {
-	start  time.Time
-	writes []writeStamp
+// chunkMarks reads the per-chunk timestamps a marking step left behind. Each
+// line is one chunk, in nanoseconds since the epoch, so a test can see when the
+// chunker handed each chunk over rather than only that it finished.
+func chunkMarks(t *testing.T, path string) []int64 {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var out []int64
+	for _, line := range strings.Fields(string(raw)) {
+		n, err := strconv.ParseInt(line, 10, 64)
+		require.NoError(t, err)
+		out = append(out, n)
+	}
+	return out
 }
 
-type writeStamp struct {
-	at    time.Duration
-	bytes int
-}
-
-func (w *streamingWriter) Write(p []byte) (int, error) {
-	w.writes = append(w.writes, writeStamp{at: time.Since(w.start), bytes: len(p)})
-	return len(p), nil
+// markingStream builds a <stream> whose per-chunk step records the wall clock
+// for every chunk and passes it through unchanged.
+func markingStream(attrs, marksPath string) *Stream {
+	return mustBuildStreamWith(attrs, `<run>date +%s%N >> `+shellQuote(marksPath)+`; cat</run>`)
 }
 
 func TestIntegration_StreamFirstChunkArrivesBeforeTheSourceEnds(t *testing.T) {
+	// The source emits one chunk, pauses two seconds, then emits the second.
+	// The first chunk must be handed over during that pause, which is what
+	// makes this incremental rather than a buffer-everything implementation.
 	t.Serial()
 
-	sink := &streamingWriter{start: time.Now()}
-	prevOut := execStdout
-	execStdout = sink
-	t.Cleanup(func() { execStdout = prevOut })
-
+	marks := filepath.Join(t.TempDir(), "chunks.marks")
 	cfg := streamConfig(`chunk="2"`, `printf aa; sleep 2; printf bb`)
-	code, _, errOut := execCmdFull(t, cfg, "log")
-	require.Equal(t, 0, code, errOut)
+	cfg.Commands[0].Stream = markingStream(`chunk="2"`, marks)
 
-	require.Len(t, sink.writes, 2, "each chunk is written as it is produced")
-	assert.Equal(t, 2, sink.writes[0].bytes)
-	assert.Equal(t, 2, sink.writes[1].bytes)
-	assert.Less(t, sink.writes[0].at, 1500*time.Millisecond,
-		"the first chunk reached stdout before the source's later bytes existed")
-	assert.Greater(t, sink.writes[1].at, sink.writes[0].at,
-		"the second chunk followed the pause")
+	ended := time.Now()
+	code, out, errOut := execCmdFull(t, cfg, "log")
+	ended = time.Now()
+	require.Equal(t, 0, code, errOut)
+	assert.Equal(t, "aabb", out, "the marking step passed both chunks through unchanged")
+
+	stamps := chunkMarks(t, marks)
+	require.Len(t, stamps, 2, "one mark per chunk")
+	assert.Greater(t, ended.UnixNano()-stamps[0], int64(1500*time.Millisecond),
+		"the first chunk was transformed and emitted about two seconds before the source finished, so it left while the source was paused")
+	assert.Greater(t, stamps[1]-stamps[0], int64(1500*time.Millisecond),
+		"the second chunk followed the source's pause")
 }
 
 func TestIntegration_StreamNeverBuffersTheWholeSource(t *testing.T) {
-	// A source far larger than any internal buffer streams through with peak
-	// memory bounded by the chunk size. The source bytes are generated, so the
-	// run proves streaming rather than a captured string.
+	// A source much larger than any internal buffer streams through as many
+	// chunks, so the run proves the whole output was never captured first.
 	t.Serial()
 
-	const total = 8 << 20
-	sink := &streamingWriter{start: time.Now()}
-	prevOut := execStdout
-	execStdout = sink
-	t.Cleanup(func() { execStdout = prevOut })
-
+	const (
+		total = 8 << 20
+		chunk = 64 << 10
+	)
+	marks := filepath.Join(t.TempDir(), "chunks.marks")
 	cfg := streamConfig(`chunk="64kb"`, fmt.Sprintf(`head -c %d /dev/zero | tr '\0' 'y'`, total))
-	code, _, errOut := execCmdFull(t, cfg, "log")
-	require.Equal(t, 0, code, errOut)
+	cfg.Commands[0].Stream = markingStream(`chunk="64kb"`, marks)
 
-	written := 0
-	for _, w := range sink.writes {
-		written += w.bytes
-	}
-	assert.Equal(t, total, written, "every source byte reached stdout")
-	assert.Greater(t, len(sink.writes), 1, "the source arrived in many chunks, not one buffer")
+	code, out, errOut := execCmdFull(t, cfg, "log")
+	require.Equal(t, 0, code, errOut)
+	assert.Len(t, out, total, "every source byte reached stdout")
+	assert.Equal(t, strings.Repeat("y", 128), out[:128], "the source bytes are unaltered")
+
+	stamps := chunkMarks(t, marks)
+	assert.Equal(t, total/chunk, len(stamps),
+		"the source arrived as %d chunks of %d bytes, not one captured buffer", total/chunk, chunk)
 }
 
 func TestIntegration_StreamUnusableChunkSizeIsALoadError(t *testing.T) {
@@ -250,11 +257,13 @@ func TestIntegration_StreamChunkSizeWithLineModeIsALoadError(t *testing.T) {
 }
 
 func TestIntegration_StreamWithoutARunIsALoadError(t *testing.T) {
+	// A <stream> has no source of its own: unlike a <download>, which carries
+	// a URL, the bytes are the leaf's run.
 	cfg := &Config{
 		Name: "t",
 		Commands: []Command{{
 			Name:   "log",
-			Stream: mustBuildStream(`chunk="4"`),
+			Stream: mustBuildStream(`mode="lines"`),
 		}},
 	}
 	err := validate(cfg)
@@ -387,8 +396,11 @@ func TestParseConfigXML_StreamRequiresChunkInByteMode(t *testing.T) {
 }
 
 func TestIntegration_StreamRejectsWatch(t *testing.T) {
+	// The guard itself is what decides, so it is called directly: the stream
+	// already runs until its source ends, and a watch frame would have to
+	// capture the whole thing.
 	cfg := streamConfig(`mode="lines"`, `printf 'x'`)
-	code, _, errOut := execCmdFull(t, cfg, "--watch", "1s", "log")
-	assert.NotEqual(t, 0, code)
-	assert.Contains(t, errOut, "--watch")
+	err := watchable(watchRoot(t), cfg.Commands[0], "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--watch")
 }
