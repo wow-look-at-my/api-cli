@@ -289,6 +289,7 @@ func TestIntegration_DownloadStepFailureSkipsTheQueue(t *testing.T) {
 }
 
 func TestMCP_DownloadLeafReportsWhatLanded(t *testing.T) {
+	t.Serial()
 	srv, _ := assetServer(t)
 	swapDownloadClient(t, srv)
 	dir := t.TempDir()
@@ -309,6 +310,7 @@ func TestMCP_DownloadLeafReportsWhatLanded(t *testing.T) {
 }
 
 func TestMCP_DownloadLeafWithNothingToDo(t *testing.T) {
+	t.Serial()
 	prev := downloadDefaults
 	t.Cleanup(func() { downloadDefaults = prev })
 	installDownloads(nil)

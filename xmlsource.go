@@ -392,6 +392,15 @@ func addCommandChild(c *Command, child *xnode) error {
 			return err
 		}
 		c.Downloads = append(c.Downloads, d)
+	case "stream":
+		s, err := buildStream(child)
+		if err != nil {
+			return err
+		}
+		if c.Stream != nil {
+			return fmt.Errorf("<command %q>: <stream> is declared once; give one leaf one boundary", c.Name)
+		}
+		c.Stream = s
 	case "command":
 		sub, err := buildCommandNode(child)
 		if err != nil {

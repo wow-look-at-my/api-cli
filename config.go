@@ -88,6 +88,7 @@ type Command struct {
 	Fields        []FieldsBlock   `json:"fields,omitempty"`
 	TML           *TML            `json:"tml,omitempty"`
 	Downloads     []Download      `json:"downloads,omitempty"`
+	Stream        *Stream         `json:"stream,omitempty"`
 	Commands      []Command       `json:"commands,omitempty"`
 }
 
@@ -673,6 +674,18 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	}
 
 	haveRun := inheritedRun || c.Command.Defined() || c.Request.Defined()
+
+	if c.Stream != nil {
+		if len(c.Fields) > 0 || c.Format.Defined() || c.TML != nil {
+			return fmt.Errorf("%s: <stream> emits bytes as they arrive, so <fields>, <format> and <tml> cannot shape them; drop one of the two", where)
+		}
+		if !c.executes() {
+			return fmt.Errorf("%s: <stream> needs a node that runs (a leaf, or a parent with runnable=)", where)
+		}
+		if err := validateStream(c.Stream, where+".stream", haveRun, c.Request, transports); err != nil {
+			return err
+		}
+	}
 
 	// A node that runs must have something to do. A <download> is that something —
 	// the hand-off is the action, so it needs no run of its own.
