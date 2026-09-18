@@ -22,9 +22,9 @@ import (
 const spreadSentinel = "\x00"
 const spreadEndSentinel = "\x01"
 
-// cliFuncs are the template functions this CLI adds to the shared set. Each one
-// serves a shell, a file path, or a terminal column, which is vocabulary the
-// shared language does not carry.
+// cliFuncs are the template functions this CLI adds to the shared set. Each a
+// single serves a shell, a file path, or a terminal column, which is vocabulary
+// the shared language does not carry.
 func cliFuncs() template.FuncMap {
 	return template.FuncMap{
 		"shellquote":   shellQuote,
@@ -72,8 +72,8 @@ func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width 
 // result is a []any and a variadic arg is a []string, so both `over=` sites
 // accept either rather than only the JSON shape.
 //
-// A string is not a list. Iterating one gives a record per byte, which is never
-// what a config meant by over=.
+// A string is not a list. Iterating a single gives a record per byte, which is
+// never what a config meant by over=.
 func asList(v any) ([]any, bool) {
 	switch t := v.(type) {
 	case nil:
@@ -94,15 +94,15 @@ func asList(v any) ([]any, bool) {
 	return out, true
 }
 
-// collectPath gathers one path out of every element of a list and flattens the
-// values that are lists themselves. A step that fanned out over N items holds N
-// responses, each carrying its own parts, and one queue wants every part of
-// every item as one list:
+// collectPath gathers a single path out of every element of a list and flattens
+// the values that are lists themselves. A step that fanned out over N items
+// holds N responses, each carrying its own parts, and a single queue wants
+// every part of every item as a single list:
 //
 //	over="{{ toJson (collect &quot;result.parts&quot; .result.listing) }}"
 //
 // A path that is missing from an element is an error rather than a skip. The
-// alternative is a queue quietly short one item's files.
+// alternative is a queue quietly short a single item's files.
 func collectPath(path string, v any) ([]any, error) {
 	list, ok := asList(v)
 	if !ok {
@@ -132,7 +132,7 @@ func collectPath(path string, v any) ([]any, error) {
 // which is how a config reshapes a fan-out result without leaving the config:
 // `over="{{ toJson (collect "result.parts" .result.listing) }}"`.
 //
-// The second return is false when the path is not there at all. The caller
+// The next return is false when the path is not there at all. The caller
 // decides what that means, because a missing path and an empty list are
 // different mistakes.
 func overSource(data map[string]any, expr string) (any, bool, error) {
@@ -150,9 +150,9 @@ func overSource(data map[string]any, expr string) (any, bool, error) {
 	return parseResult(out), true, nil
 }
 
-// promoteCtx copies data and lays one record over it: a map's keys reach the
-// top level, and the record itself takes the given name. This is how a
-// per-record template reads `.sequence` and `.item` alike.
+// promoteCtx copies data and lays a single record over it: a map's keys
+// reach the top level, and the record itself takes the given name. This is
+// how a per-record template reads `.sequence` and `.item` alike.
 func promoteCtx(data map[string]any, rec any, name string) map[string]any {
 	ctx := make(map[string]any, len(data)+8)
 	for k, v := range data {
@@ -172,11 +172,11 @@ func renderString(tmpl string, data any) (string, error) {
 }
 
 // tabwriter formats rows with columns aligned by displayWidth. Accepts:
-//   - []string: one row per element, tab-separated columns.
-//   - [][]string or [][]any: explicit cells per row.
-//   - []any: each element is a row; either a string or a []any of cells.
+//   - []string: a single row per element, tab-separated columns. -
+//   [][]string or [][]any: explicit cells per row. - []any: each element
+//   is a row; either a string or a []any of cells.
 //
-// Default padding between columns is 2 spaces. ANSI escapes pass through.
+// ANSI escapes pass through.
 func tabwriter(v any) (string, error) {
 	rows, err := toRows(v)
 	if err != nil {
@@ -299,8 +299,8 @@ func dirExists(path string) bool {
 	return info.IsDir()
 }
 
-// filterSuffix returns elements from list that end with the given suffix.
-// Used in passthrough mode to locate specific files: {{.rest | filterSuffix ".cpp1.ii" | first}}.
+// filterSuffix returns elements from list that end with the given suffix. Used in passthrough
+// mode to locate specific files: {{.rest | filterSuffix ".cpp1.ii" | earliest}}.
 func filterSuffix(suffix string, list any) ([]string, error) {
 	items, err := toStringSlice(list)
 	if err != nil {
@@ -330,9 +330,9 @@ func filterPrefix(prefix string, list any) ([]string, error) {
 	return out, nil
 }
 
-// addQueryValue adds one declared parameter to values, per its Go type. A
-// nested slice repeats the key. An empty string is dropped, so an unset
-// optional parameter does not clutter the URL.
+// addQueryValue adds a single declared parameter to values, per its Go
+// type. A nested slice repeats the key. An empty string is dropped, so an
+// unset optional parameter does not clutter the URL.
 func addQueryValue(values url.Values, key string, v any) error {
 	switch val := v.(type) {
 	case nil:

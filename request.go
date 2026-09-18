@@ -20,7 +20,7 @@ var httpClient = &http.Client{Timeout: 60 * time.Second}
 
 // preparedRequest is a request with every template rendered — what actually
 // goes on the wire. Both the built-in client and a <transport> program consume
-// this, so the two see an identical request.
+// this, so both see an identical request.
 type preparedRequest struct {
 	Method  string
 	URL     string // includes the query string
@@ -30,7 +30,7 @@ type preparedRequest struct {
 	AllowStatus []int
 }
 
-// allows reports whether status is one the request asked to keep.
+// allows reports whether status is a single the request asked to keep.
 func (p *preparedRequest) allows(status int) bool {
 	for _, s := range p.AllowStatus {
 		if s == status {
@@ -42,10 +42,6 @@ func (p *preparedRequest) allows(status int) bool {
 
 type renderedHeader struct{ Name, Value string }
 
-// runRequest performs a first-class HTTP request and returns its output as a
-// string plus an exit code (0 on success). On an HTTP error status or a
-// transport error it writes a diagnostic to errOut and returns a non-zero
-// code with empty output, mirroring `curl -f`.
 //
 // The request travels over the built-in net/http client, or over the
 // <transport> program the config selects for it (see transport.go).
@@ -241,15 +237,15 @@ func renderHeaders(headers []Header, data map[string]any) ([]renderedHeader, err
 // contextPath matches a bare dotted name — the `var.filter` form of a jq=
 // attribute. A jq program almost always opens with `.`, `$`, `[`, `{`, a
 // digit, or an operator, none of which start a path. A bare builtin like
-// `length` is the one collision, and it reads as the path.
+// `length` is the a single collision, and it reads as the path.
 var contextPath = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+)*$`)
 
 // jqProgram resolves a <response jq=> attribute to the program this invocation
-// runs. The attribute is a template, like <url> and <body>: one that carries a
-// placeholder renders against the leaf context, so the program can depend on
-// this run's args and flags. A bare dotted name is a context path instead,
-// which is how a config keeps its program in a <var>. Anything else is the
-// program itself.
+// runs. The attribute is a template, like <url> and <body>: a single that
+// carries a placeholder renders against the leaf context, so the program can
+// depend on this run's args and flags. A bare dotted name is a context path
+// instead, which is how a config keeps its program in a <var>. Anything else
+// is the program itself.
 func jqProgram(spec string, data map[string]any) (string, error) {
 	spec = strings.TrimSpace(spec)
 	switch {

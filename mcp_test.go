@@ -163,8 +163,6 @@ func TestMcpGatherArgs_StringAndInt(t *testing.T) {
 	assert.Equal(t, "alice", got["name"])
 }
 
-// An omitted arg is present and empty, so a template helper that takes a string
-// gets one.
 func TestMcpGatherArgs_Missing(t *testing.T) {
 	node := Command{Args: []Arg{{Name: "name"}}}
 	got, err := mcpGatherArgs(node, map[string]any{})
@@ -513,9 +511,6 @@ func TestBuildMCPServer_ToolCount(t *testing.T) {
 		},
 	}
 	srv := buildMCPServer(cfg)
-	// The SDK server should have 3 tools: a, b_c, b_d
-	// We can't inspect the server directly, but buildMCPServer not panicking
-	// and returning a non-nil server is the key assertion.
 	assert.NotNil(t, srv)
 }
 

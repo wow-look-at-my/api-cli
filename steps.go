@@ -6,20 +6,19 @@ import (
 	"time"
 )
 
-// Defaults for a polling step. One second between attempts, for a minute: an
-// async job that answers in that window needs no attributes of its own.
+// Defaults for a polling step.
 const (
 	defaultPollInterval = time.Second
 	defaultPollAttempts = 60
 )
 
-// pollSleep waits between two attempts of a polling step. A var so a test of
-// the loop costs no real seconds.
+// pollSleep waits between attempts of a polling step. A var so a test of the
+// loop costs no real seconds.
 var pollSleep = time.Sleep
 
-// stepCapture runs one step's command and returns its stdout and exit code.
-// The CLI and MCP paths differ in where stderr goes and whether the child may
-// inherit the process's stdin, so each supplies its own.
+// stepCapture runs a single step's command and returns its stdout and exit
+// code. The CLI and MCP paths differ in where stderr goes and whether the
+// child may inherit the process's stdin, so each supplies its own.
 type stepCapture func(c *Cmd, cwd, stdin string, data any) (string, int)
 
 // stepOutcome reports how a run of steps ended. output carries the failing
@@ -39,8 +38,6 @@ type stepOutcome struct {
 // <request> with nothing but a different <entry>. cwdTmpl/stdinTmpl are the
 // leaf's, likewise overridable per step.
 //
-// A non-zero step aborts the run: the outcome carries that step's code, and
-// the leaf's own run never happens.
 func runSteps(steps []Step, data map[string]any, results map[string]any, cmdTmpl *Cmd, request *Request, cwdTmpl, stdinTmpl string, capture stepCapture, errOut io.Writer) (stepOutcome, error) {
 	var oc stepOutcome
 	for _, step := range steps {
@@ -91,13 +88,11 @@ func runSteps(steps []Step, data map[string]any, results map[string]any, cmdTmpl
 	return oc, nil
 }
 
-// runStepAction performs one step's action and counts it. Without `until=` that
-// is a single run. With it, the step repeats until the predicate holds: an
+// runStepAction performs a single step's action and counts it. Without `until=`
+// that is a single run. With it, the step repeats until the predicate holds: an
 // async job that answers "pending" is polled here rather than in a shell loop
 // around the whole program.
 //
-// A non-zero exit ends the poll immediately. A job that reports a failure is an
-// answer, and asking the same endpoint 59 more times cannot change it.
 func runStepAction(step Step, data map[string]any, stepCmd *Cmd, stepReq *Request, cwdTmpl, stdinTmpl string, capture stepCapture, errOut io.Writer, oc *stepOutcome) (string, int, error) {
 	if step.Until == "" {
 		out, code, err := runStepOnce(step, data, stepCmd, stepReq, cwdTmpl, stdinTmpl, capture, errOut)
@@ -150,7 +145,6 @@ func pollContext(data map[string]any, body any) map[string]any {
 	return promoteCtx(data, body, "body")
 }
 
-// pollInterval reads a step's interval=, defaulting to one second.
 func pollInterval(s Step) (time.Duration, error) {
 	if s.Interval == "" {
 		return defaultPollInterval, nil
@@ -166,7 +160,7 @@ func pollInterval(s Step) (time.Duration, error) {
 }
 
 // validatePoll checks a step's polling attributes at load time, so a bad
-// duration is a config error rather than a surprise on the first poll.
+// duration is a config error rather than a surprise on the earliest poll.
 func validatePoll(s Step, where string) error {
 	if s.Until == "" {
 		if s.Interval != "" || s.Attempts != 0 {
@@ -183,7 +177,7 @@ func validatePoll(s Step, where string) error {
 	return nil
 }
 
-// runStepOnce renders a step's entry and runs it one time.
+// runStepOnce renders a step's entry and runs it a single time.
 func runStepOnce(step Step, data map[string]any, stepCmd *Cmd, stepReq *Request, cwdTmpl, stdinTmpl string, capture stepCapture, errOut io.Writer) (string, int, error) {
 	stepEntry, err := renderEntry(step.Entry, data)
 	if err != nil {
@@ -224,13 +218,13 @@ func runStepOnce(step Step, data map[string]any, stepCmd *Cmd, stepReq *Request,
 	return out, code, nil
 }
 
-// runStepOver repeats a step once per element of the list at step.Over. The
-// element rides in the data context as `.item`, so the step's own entry names
-// the part of it that says what to fetch.
+// runStepOver repeats a step a single time per element of the list at
+// step.Over. The element rides in the data context as `.item`, so the step's
+// own entry names the part of it that says what to fetch.
 //
-// The result pairs each element with its own response. A screen that draws one
-// card per build then walks ONE list, rather than reaching across two by
-// position, which is the shape a data template can actually take.
+// The result pairs each element with its own response. A screen that draws a
+// single card per build then walks a single list, rather than reaching across
+// by position, which is the shape a data template can actually take.
 //
 // A failing element fails the whole step: half a screen of builds, with the
 // rest silently missing, reads as a shorter queue rather than as a broken run.
