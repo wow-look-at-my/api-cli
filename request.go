@@ -81,6 +81,7 @@ func doHTTPStream(p *preparedRequest, errOut io.Writer) (io.ReadCloser, int) {
 	return resp.Body, 0
 }
 
+
 // The request travels over the built-in net/http client, or over the
 // <transport> program the config selects for it (see transport.go).
 //

@@ -233,7 +233,7 @@ func TestTUI_ARetiredDisplayIgnoresTheSignal(t *testing.T) {
 func TestProgressLine_DropsColumnsAsTheTerminalNarrows(t *testing.T) {
 	p := itemProgress{Done: 512, Total: 2048, Fraction: 0.25, Speed: 1024, ETA: 3 * time.Second, HasETA: true}
 
-	wide := progressLine("archive.tar.gz", p, planProgressLayout(100))
+	wide := progressLine("archive.tar.gz", p, planProgressLayout(100, true))
 	assert.Contains(t, wide, "archive.tar.gz")
 	assert.Contains(t, wide, " 25%")
 	assert.Contains(t, wide, "512 B / 2.0 KiB")
@@ -242,45 +242,61 @@ func TestProgressLine_DropsColumnsAsTheTerminalNarrows(t *testing.T) {
 	assert.Contains(t, wide, "[===")
 	assert.LessOrEqual(t, displayWidth(wide), 100)
 
-	at80 := progressLine("archive.tar.gz", p, planProgressLayout(78))
+	at80 := progressLine("archive.tar.gz", p, planProgressLayout(78, true))
 	assert.NotContains(t, at80, "[=", "at 80 columns the bar yields to the numbers it duplicates")
 	assert.Contains(t, at80, "1.0 KiB/s")
 	assert.Contains(t, at80, "ETA 00:03")
 
-	narrow := progressLine("archive.tar.gz", p, planProgressLayout(30))
+	narrow := progressLine("archive.tar.gz", p, planProgressLayout(30, true))
 	assert.LessOrEqual(t, displayWidth(narrow), 30)
 	assert.Contains(t, narrow, "25%", "the percentage is never dropped")
 	assert.NotContains(t, narrow, "KiB/s", "the rate goes once the bar is already gone")
 
-	tiny := progressLine("archive.tar.gz", p, planProgressLayout(12))
+	tiny := progressLine("archive.tar.gz", p, planProgressLayout(12, true))
 	assert.Contains(t, tiny, "25%")
 
 	assert.NotEmpty(t, progressLine("x", p, progressLayout{}), "an unset layout still renders")
 
-	assert.Equal(t, maxLabelWidth, planProgressLayout(300).label, "a wide terminal does not strand the numbers")
-	assert.Equal(t, minLabelWidth, planProgressLayout(4).label)
+	assert.Equal(t, maxLabelWidth, planProgressLayout(300, true).label, "a wide terminal does not strand the numbers")
+	assert.Equal(t, minLabelWidth, planProgressLayout(4, true).label)
 }
 
 func TestProgressLine_ColumnsAlignAcrossRows(t *testing.T) {
-	lay := planProgressLayout(98)
+	lay := planProgressLayout(98, true)
 	rows := []string{
 		progressLine("ubuntu-25.04.iso", itemProgress{Done: 1258291, Total: 6291456, Fraction: 0.2, Speed: 921600, ETA: 5 * time.Second, HasETA: true}, lay),
 		progressLine("dataset-a.parquet", itemProgress{Done: 1887436, Total: 8388608, Fraction: 0.22, Speed: 1400000, ETA: 4 * time.Second, HasETA: true}, lay),
 		progressLine("waiting.bin", itemProgress{Done: 0, Total: -1, Fraction: -1}, lay),
 	}
+	assert.Equal(t, strings.Index(rows[0], "["), strings.Index(rows[1], "["),
+		"every row's bar starts in the same column: %q", rows[1])
+	assert.NotContains(t, rows[2], "[", "a row without a length draws no bar")
+	assert.Equal(t, strings.Index(rows[0], " / "), strings.Index(rows[2], " / "),
+		"and its remaining columns still line up: %q", rows[2])
 	for _, row := range rows {
-		assert.Equal(t, strings.Index(rows[0], "["), strings.Index(row, "["),
-			"every row's bar starts in the same column: %q", row)
 		assert.LessOrEqual(t, displayWidth(row), 98)
 	}
 	assert.Contains(t, rows[0], "900.0 KiB/s", "a wide rate keeps its own cell")
 	assert.Contains(t, rows[1], "1.3 MiB/s", "and does not reshape its neighbour")
 }
 
+// A length the server never reported has no percentage to state. The row drops
+// the bar and the percentage, and reports what it does know.
 func TestProgressLine_UnknownTotal(t *testing.T) {
-	line := progressLine("stream.bin", itemProgress{Done: 10, Total: -1, Fraction: -1}, planProgressLayout(90))
-	assert.Contains(t, line, "?%")
+	p := itemProgress{Done: 10, Total: -1, Fraction: -1, Speed: 1024}
+	line := progressLine("stream.bin", p, planProgressLayout(90, false))
+	assert.NotContains(t, line, "%")
+	assert.NotContains(t, line, "[")
 	assert.Contains(t, line, "10 B / ?")
+	assert.Contains(t, line, "1.0 KiB/s")
+
+	lay := planProgressLayout(90, false)
+	assert.Greater(t, lay.label, planProgressLayout(90, true).label,
+		"the dropped columns give their room to the names")
+
+	mixed := progressLine("stream.bin", p, planProgressLayout(90, true))
+	assert.NotContains(t, mixed, "%", "an unknown row stays blank beside rows that do have a percentage")
+	assert.Contains(t, mixed, "10 B / ?")
 }
 
 func TestAggregateProgress_FloorTotalStillShowsAPercentage(t *testing.T) {
@@ -298,6 +314,10 @@ func TestAggregateProgress_FloorTotalStillShowsAPercentage(t *testing.T) {
 	idle := aggregateProgress(downloadTotals{TotalKnown: true})
 	assert.Equal(t, float64(-1), idle.Fraction)
 	assert.Zero(t, idle.Speed)
+
+	blind := aggregateProgress(downloadTotals{Bytes: 2048, Total: 2048, Queued: 9, Elapsed: 2 * time.Second})
+	assert.Equal(t, float64(-1), blind.Fraction)
+	assert.InDelta(t, 1024.0, blind.Speed, 1, "the rate is still a fact")
 }
 
 func TestProgressBar(t *testing.T) {
