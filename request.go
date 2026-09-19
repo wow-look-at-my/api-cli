@@ -42,6 +42,46 @@ func (p *preparedRequest) allows(status int) bool {
 
 type renderedHeader struct{ Name, Value string }
 
+// doHTTPStream performs a prepared request with the built-in client and returns
+// the response body as a stream rather than as a captured string. The caller
+// closes it.
+//
+// This is the <stream> source: the body is what the chunker cuts, so reading it
+// whole earliest would defeat the feature on the a single input it exists for.
+// The status check is the a single doHTTP makes, and it happens before the
+// earliest byte is handed over, so an error status fails the run instead of
+// streaming an error page as though it were the source.
+func doHTTPStream(p *preparedRequest, errOut io.Writer) (io.ReadCloser, int) {
+	var body io.Reader
+	if p.Body != "" {
+		body = strings.NewReader(p.Body)
+	}
+	httpReq, err := http.NewRequest(p.Method, p.URL, body)
+	if err != nil {
+		fmt.Fprintln(errOut, "error: build request:", err)
+		return nil, 1
+	}
+	for _, h := range p.Headers {
+		httpReq.Header.Set(h.Name, h.Value)
+	}
+
+	logVerbose("stream: request: %s %s", p.Method, p.URL)
+	resp, err := httpClient.Do(httpReq)
+	if err != nil {
+		fmt.Fprintln(errOut, "error: request failed:", err)
+		return nil, 1
+	}
+
+	if resp.StatusCode >= 400 && !p.allows(resp.StatusCode) {
+		defer resp.Body.Close()
+		fmt.Fprintf(errOut, "error: HTTP %d %s\n", resp.StatusCode, strings.TrimSpace(resp.Status))
+		return nil, 1
+	}
+	logVerbose("stream: request: status %d, streaming the body", resp.StatusCode)
+	return resp.Body, 0
+}
+
+
 // The request travels over the built-in net/http client, or over the
 // <transport> program the config selects for it (see transport.go).
 //
