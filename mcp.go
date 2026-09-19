@@ -23,7 +23,7 @@ func runMCP(transport string, cfg *Config, corsLevel CorsLevel) int {
 	ctx := context.Background()
 	switch {
 	case transport == "stdio":
-		if err := srv.Run(ctx, &mcp.StdioTransport{}); err != nil {
+		if err := srv.Run(ctx, stdioTransport(execStdin, execStdout)); err != nil {
 			fmt.Fprintln(execStderr, "error:", err)
 			return 1
 		}
@@ -217,14 +217,25 @@ func buildToolInputSchema(node Command) map[string]any {
 			if a.Type == "int" {
 				itemType = "integer"
 			}
+			item := map[string]any{"type": itemType}
+			// A variadic arg holds the pattern per element, the same way the CLI
+			// validator applies it to each supplied value.
+			if a.Pattern != "" && a.Type != "int" {
+				item["pattern"] = a.Pattern
+			}
 			prop = map[string]any{
 				"type":  "array",
-				"items": map[string]any{"type": itemType},
+				"items": item,
 			}
 		} else if a.Type == "int" {
 			prop = map[string]any{"type": "integer"}
 		} else {
 			prop = map[string]any{"type": "string"}
+			// JSON Schema states the constraint the tool enforces, so a caller
+			// sees the shape of a legal value instead of guessing at it.
+			if a.Pattern != "" {
+				prop["pattern"] = a.Pattern
+			}
 		}
 		if a.Description != "" {
 			prop["description"] = a.Description

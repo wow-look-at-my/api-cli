@@ -129,6 +129,9 @@ func mcpCombine(stdout, stderr string) string {
 // mcpGatherArgs converts the JSON-decoded arguments map to a typed arg map. An
 // omitted arg holds an unset value of its type, exactly as on the CLI side.
 func mcpGatherArgs(node Command, arguments map[string]any) (map[string]any, error) {
+	if err := matchToolArgs(node, arguments); err != nil {
+		return nil, err
+	}
 	out := make(map[string]any, len(node.Args))
 	for _, a := range node.Args {
 		val, provided := arguments[a.Name]
