@@ -37,7 +37,7 @@ var isInteractive = func() bool {
 // inheritedFormat is the closest-ancestor format reference; the node's own
 // format, if set, overrides it. formats is the top-level format registry used
 // to resolve named references.
-func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd, inheritedRequest *Request, inheritedCwd, inheritedStdin, inheritedConfirm string, inheritedFormat *FormatRef, formats map[string]*Format) *cobra.Command {
+func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []string, inheritedCmd *Cmd, inheritedRequest *Request, inheritedCwd, inheritedStdin, inheritedConfirm string, inheritedFormat *FormatRef, formats map[string]*Format) *cobra.Command {
 	useStr := node.Name
 	requiredArgs := 0
 	hasVariadic := false
@@ -94,6 +94,9 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 	// kind: defining a command clears an inherited request and vice versa, so
 	// the closest ancestor with any <run> wins.
 	effectiveVars := mergeVars(inheritedVars, node.Vars)
+	// Preconditions accumulate rather than override: a guard an ancestor declared
+	// applies to every run under it, and this node's own guards follow it.
+	effectivePre := inheritedPreconditions(inheritedPre, node.Preconditions)
 	effectiveCmd := inheritedCmd
 	effectiveRequest := inheritedRequest
 	if node.Request.Defined() {
@@ -124,6 +127,7 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 	// this node the invocation only when no subcommand name matched.
 	if node.executes() {
 		nodeCopy := node
+		nodeCopy.Preconditions = effectivePre
 		leafVars := effectiveVars
 		leafCmd := effectiveCmd
 		leafRequest := effectiveRequest
@@ -138,7 +142,7 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 	}
 
 	for _, child := range node.Commands {
-		cmd.AddCommand(buildCommand(child, effectiveVars, effectiveCmd, effectiveRequest, effectiveCwd, effectiveStdin, effectiveConfirm, effectiveFormat, formats))
+		cmd.AddCommand(buildCommand(child, effectiveVars, effectivePre, effectiveCmd, effectiveRequest, effectiveCwd, effectiveStdin, effectiveConfirm, effectiveFormat, formats))
 	}
 
 	return cmd

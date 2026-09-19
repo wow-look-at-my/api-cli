@@ -602,6 +602,41 @@ A runnable parent is a full node. `<arg>`, `<flag>`, `<steps>`, `<entry>`, `<fie
 
 `pattern=` works on a leaf too, where it is plain validation with no dispatch to disambiguate. `<arg name="sha" pattern="^[0-9a-f]{7,40}$"/>` rejects a bad value before the request goes out.
 
+### `pattern=` is validation, on every path
+
+A pattern is a rule about the value, not help text for the CLI. It applies wherever a value arrives.
+
+- **An MCP tool call is checked against it too.** A value the CLI rejects never reaches a run over MCP either. The tool's `inputSchema` states the pattern as well. A caller therefore reads the shape of a legal value.
+- **Each element of a variadic arg carries the pattern.** One bad element fails the invocation.
+- **An omitted optional arg is not checked.** It holds the unset value of its type, and no pattern applies to an absent value.
+
+### `pattern=` can name a `<var>`
+
+A pattern is a template. It renders once at load time, against the vars in scope at that node plus `.env`. So one rule lives in one place, and every arg names it.
+
+```xml
+<vars><var name="segment">^[A-Za-z0-9_.-]+$</var></vars>
+...
+<arg name="owner" pattern="{{ .var.segment }}"/>
+<arg name="repo" pattern="{{ .var.segment }}"/>
+```
+
+A pattern has to be known before any value arrives, so `.arg` and `.flag` are empty here. A pattern that renders empty, or that names a var the node does not have, is a load error.
+
+### The built-in path-segment rule
+
+`{{ segmentPattern }}` is the rule a traversal argument needs: one path component, made of unreserved characters, and never `.` or `..`. It rejects a slash, a backslash, a space and a percent escape. A value that matches it can neither split a path nor climb out of one.
+
+```xml
+<arg name="owner" pattern="{{ segmentPattern }}"/>
+```
+
+`safeSegments` is the same rule as a predicate, for a `<precondition>` or an `<if>`. It reads several values. A value that is a list contributes each element. An empty value is an absent one. A guard written over a whole tree therefore stays quiet on a leaf that declares no such arg.
+
+```xml
+<precondition>{{ if not (safeSegments .arg.owner .arg.repo) }}owner and repo must each be one path segment{{ end }}</precondition>
+```
+
 ## Passthrough mode
 
 A leaf that sets `passthrough="true"` accepts arbitrary positional args, which is everything after `--` in the wrapper script. It then does its own minimal flag extraction.
@@ -755,6 +790,28 @@ Mix the two freely. A `<step><run>` can be a shell command while the leaf makes 
 - A step's `when` is evaluated **before** the step renders anything. A step that must not run therefore cannot fail on a value it never had.
 - `<preconditions>` run before the first step, so `.result` is empty there. A precondition that reads it is a load error, not a surprise at run time. Put the check in a `<step when=>` instead.
 
+### One guard for a whole subtree
+
+`<preconditions>` is the one setting that accumulates instead of overriding. Declare it on `<config>` and every run in the tree carries it. Declare it on a group node and its subtree carries it.
+
+```xml
+<config name="github">
+	<preconditions>
+		<precondition>{{ if not (safeSegments .arg.owner .arg.repo) }}owner and repo must each be one path segment{{ end }}</precondition>
+	</preconditions>
+	<command name="repo" description="Show a repository.">
+		<arg name="owner" required="true"/>
+		<arg name="repo" required="true"/>
+		...
+	</command>
+</config>
+```
+
+- **A node runs the ancestors' guards first, then its own.** A broader rule therefore reports before a narrower one.
+- **A group node holds a guard without running itself.** The guard belongs to the nodes below it.
+- **The MCP path carries the same guards.** A tool call is gated exactly as the CLI invocation is.
+- **An arg the leaf never declares reads as absent.** Pair the guard with a helper that skips an absent value.
+
 ### One call per element: `<step over=>`
 
 A step with `over="result.builds"` runs once per element of that list. The element rides in the context as `.item`, and its position as `.index`. The step's own `entry` then names the part of it that says what to fetch.
@@ -839,6 +896,8 @@ Every [sprig v3](https://masterminds.github.io/sprig/) helper is available: `toJ
 | `urlpath`     | URL-escape a single path segment.                                                         |
 | `spread`      | Splat a slice into multiple argv slots (or shell-quoted words). Works with `[]string`/`[]int`/`[]any`. |
 | `fileExists` / `dirExists` | Path predicates, useful in `<preconditions>`.                              |
+| `segmentPattern` | The built-in path-segment regular expression, for an `<arg pattern=>`.                 |
+| `safeSegments` | The same rule as a predicate over one or more values. An absent value passes.             |
 | `tabwriter`   | Align rows of tab-separated cells (display-width aware).                                  |
 | `padRight` / `padLeft` / `displayWidth` / `stripANSI` | Width-aware string helpers.                  |
 | `filterSuffix` / `filterPrefix` | Filter a `[]string` (used with `.rest`).                            |
@@ -894,6 +953,7 @@ Each row is something the grammar does not do, and the shape to write instead. E
 | **A leaf takes `<fields>` or `<format>`, never both.** | Keep `<format>` for a leaf that needs full control of the template. Everything else belongs in `<fields>`, which the sinks and `--as` understand. |
 | **A record key named `item` is shadowed.** `over=` promotes a record's keys and then puts the record itself at `.item`, so the record wins that name. | Name the field something else in the response, or reach it as `.item.item`. The `<field expr=>` form has the same rule. |
 | **`<join contiguous=>` cannot see a missing last part.** It reads the whole numbers between the lowest and the highest order in the group. | Check the count yourself in a `<step when=>` against whatever the listing says it holds. A hole in the middle is what this attribute reports. |
+| **An `<arg pattern=>` cannot read `.arg` or `.flag`.** A pattern has to be known before any value arrives, so it renders once at load time against the vars and `.env` only. | Put the rule in a `<var>` and name it, or use `{{ segmentPattern }}`. A check that depends on another value belongs in a `<precondition>`, which runs per invocation. |
 | **Nothing selects a transport at run time.** There is no `--transport` flag, by design: how a request reaches its endpoint is a property of the endpoint. | Name the transport in the config, on the `<request>` or as the registry `default="true"`. `transport="http"` is the per-request way back to the built-in client. |
 
 ## Config schema
@@ -909,6 +969,7 @@ The grammar is an XSD that [api-cli-spec](https://github.com/wow-look-at-my/api-
 | `<vars><var name="...">...</var></vars>` | Shared variables (inherited, fixpoint-resolved). |
 | `<run>` | Default executable (request / argv / shell). Inherited. |
 | `<cwd>` / `<stdin>` | Default working directory / stdin templates. Inherited. |
+| `<preconditions><precondition>` | Guards every run in the tree. They accumulate rather than override. See [One guard for a whole subtree](#one-guard-for-a-whole-subtree). |
 | `<formats>` | Named, reusable legacy formats. |
 | `<transports>` | Named programs that perform requests. See [Transports](#transports). |
 | `<downloads concurrency= retries= dir=/>` | Settings for the shared download queue. See [Downloads](#downloads). |
@@ -928,7 +989,7 @@ The grammar is an XSD that [api-cli-spec](https://github.com/wow-look-at-my/api-
 | `<run>` / `<cwd>` / `<stdin>` | Override the inherited executable / cwd / stdin. |
 | `<steps>` | Leaf-only. Pre-execution stages, each a command or a request. |
 | `<entry>` | Leaf-only. `<path>`, `<query>`, or user-defined keys -> `.entry`. |
-| `<preconditions><precondition>` | Leaf-only. A non-empty render is a fatal error message (exit 1). It runs before `<steps>`, so `.result` holds nothing. A config that reads `.result` there fails to load. |
+| `<preconditions><precondition>` | A non-empty render is a fatal error message (exit 1). It runs before `<steps>`, so `.result` holds nothing. A config that reads `.result` there fails to load. Declared on any node, and the whole subtree runs it. |
 | `<fields when=>` / `<format>` | The automatic output shape, or a legacy format. Leaf-only, and never both. `<fields>` repeats: every block whose `when=` holds renders. |
 | `<download over= when= transport= group= order=>` | Leaf-only, repeatable. Hands URLs to the download queue. A `<join>` child concatenates a group. See [Downloads](#downloads). |
 | `<mock exit=>` | Leaf-only. Stands in for a program. `<input>`, `<output>`, `<record>`, `<stdout>`, `<stderr>`. See [Mock executables](#mock-executables). |
@@ -936,7 +997,7 @@ The grammar is an XSD that [api-cli-spec](https://github.com/wow-look-at-my/api-
 
 ### `<arg>` and `<flag>`
 
-`<arg name= type="string|int" required= variadic= pattern= description=/>`. A `variadic` arg comes last, and it collects the rest into a typed slice. Pair it with `spread`. A required arg cannot follow an optional one, because cobra counts positions and nothing can fill the gap. `pattern=` is a Go regular expression every supplied value must match, and a [runnable parent](#a-parent-that-also-runs) requires one on each arg.
+`<arg name= type="string|int" required= variadic= pattern= description=/>`. A `variadic` arg comes last, and it collects the rest into a typed slice. Pair it with `spread`. A required arg cannot follow an optional one, because cobra counts positions and nothing can fill the gap. `pattern=` is a Go regular expression every supplied value must match, and a [runnable parent](#a-parent-that-also-runs) requires one on each arg. It is also a template. It can name a `<var>` or the built-in `{{ segmentPattern }}`. An MCP tool call is checked against it too, and the tool's `inputSchema` states it.
 
 **Every declared arg is present.** An omitted optional arg holds the zero value of its type. That is `""` for a string, `0` for an int, and an empty slice for a variadic. A string reaches `urlpath .arg.id`, and every other helper that takes a string, with no guard around it. The same holds on the MCP side for a tool argument the caller leaves out.
 
@@ -963,7 +1024,7 @@ One predicate covers both cases. `{{ .arg.id }}` is truthy when the arg is prese
 |-------------------|-------|---------|-------|
 | `--config <path>` |       |         | Config file (XML). Falls back to `./api.xml`. |
 | `--version`       |       |         | Print the binary's version. Needs no config. |
-| `--mcp <transport>` |     |         | Run the config as an MCP server: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes a tool named for its command path, with underscores (`users_get`). The HTTP and SSE servers also answer `GET /health`. The server behaves as `--format=always` does, with `.tty` true and width 80. |
+| `--mcp <transport>` |     |         | Run the config as an MCP server: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes a tool named for its command path, with underscores (`users_get`). The HTTP and SSE servers also answer `GET /health`. The server behaves as `--format=always` does, with `.tty` true and width 80. A tool's `inputSchema` carries each arg's `pattern=`, and a call is checked against it. Over stdio, a client that closes stdin right after its last request still gets that request's answer. |
 | `--cors <level>`  |       | `strict`| CORS for the MCP HTTP/SSE server. See [CORS levels](#cors-levels). |
 | `--install-mocks <dir>` | |        | Write one wrapper script per `<mock>` leaf into the directory, then exit. See [Mock executables](#mock-executables). |
 | `--quiet`         | `-q`  | false   | Suppress the `N executions` line. |
