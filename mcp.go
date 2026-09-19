@@ -23,7 +23,7 @@ func runMCP(transport string, cfg *Config, corsLevel CorsLevel) int {
 	ctx := context.Background()
 	switch {
 	case transport == "stdio":
-		if err := srv.Run(ctx, &mcp.StdioTransport{}); err != nil {
+		if err := srv.Run(ctx, stdioTransport(execStdin, execStdout)); err != nil {
 			fmt.Fprintln(execStderr, "error:", err)
 			return 1
 		}
@@ -67,8 +67,11 @@ func runMCP(transport string, cfg *Config, corsLevel CorsLevel) int {
 // mcpInherit is the inherited context threaded down the command tree during
 // MCP leaf collection. Mirrors the inherited* parameters in buildCommand.
 type mcpInherit struct {
-	prefix  string
-	vars    map[string]any
+	prefix string
+	vars   map[string]any
+	// pre accumulates down the tree rather than overriding, exactly as it does in
+	// buildCommand.
+	pre     []string
 	cmd     *Cmd
 	request *Request
 	cwd     string
@@ -99,6 +102,7 @@ func buildMCPServer(cfg *Config) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: cfg.Name, Version: "1.0.0"}, nil)
 	for _, leaf := range collectMCPLeaves(cfg.Commands, mcpInherit{
 		vars:    cfg.Vars,
+		pre:     cfg.Preconditions,
 		cmd:     cfg.Command,
 		request: cfg.Request,
 		cwd:     cfg.Cwd,
@@ -162,6 +166,7 @@ func collectMCPLeaves(cmds []Command, inh mcpInherit) []mcpLeaf {
 		child := mcpInherit{
 			prefix:  name,
 			vars:    mergeVars(inh.vars, c.Vars),
+			pre:     inheritedPreconditions(inh.pre, c.Preconditions),
 			cmd:     inh.cmd,
 			request: inh.request,
 			cwd:     inh.cwd,
@@ -188,9 +193,11 @@ func collectMCPLeaves(cmds []Command, inh mcpInherit) []mcpLeaf {
 		// A runnable parent is a tool of its own, next to the tools its children
 		// become. Its name is its own path, so both never collide.
 		if c.executes() {
+			node := c
+			node.Preconditions = child.pre
 			out = append(out, mcpLeaf{
 				name:      name,
-				node:      c,
+				node:      node,
 				vars:      child.vars,
 				cmdTmpl:   child.cmd,
 				request:   child.request,
@@ -217,14 +224,25 @@ func buildToolInputSchema(node Command) map[string]any {
 			if a.Type == "int" {
 				itemType = "integer"
 			}
+			item := map[string]any{"type": itemType}
+			// A variadic arg holds the pattern per element, the same way the CLI
+			// validator applies it to each supplied value.
+			if a.Pattern != "" && a.Type != "int" {
+				item["pattern"] = a.Pattern
+			}
 			prop = map[string]any{
 				"type":  "array",
-				"items": map[string]any{"type": itemType},
+				"items": item,
 			}
 		} else if a.Type == "int" {
 			prop = map[string]any{"type": "integer"}
 		} else {
 			prop = map[string]any{"type": "string"}
+			// JSON Schema states the constraint the tool enforces, so a caller
+			// sees the shape of a legal value instead of guessing at it.
+			if a.Pattern != "" {
+				prop["pattern"] = a.Pattern
+			}
 		}
 		if a.Description != "" {
 			prop["description"] = a.Description
