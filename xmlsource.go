@@ -405,7 +405,7 @@ func addCommandChild(c *Command, child *xnode) error {
 	return nil
 }
 
-// buildPreconditions reads one <preconditions> block. The config and every
+// buildPreconditions reads a <preconditions> block. The config and every
 // <command> declare the same element, so both read it through here.
 func buildPreconditions(n *xnode) ([]string, error) {
 	if err := checkAttrs(n); err != nil {

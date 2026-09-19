@@ -11,17 +11,18 @@ import (
 	"strings"
 )
 
-// A path segment is one component of a path: unreserved characters only, and
-// never "." or "..". A value that satisfies it cannot split a path and cannot
-// climb out of one, which is the whole guard a traversal argument needs.
+// A path segment is a single component of a path: unreserved characters only,
+// and never "." or "..". A value that matches can neither split a path nor climb
+// out of it, which is the guard a traversal argument needs.
 const (
 	segmentChars = `A-Za-z0-9._~-`
 	segmentSafe  = `A-Za-z0-9_~-` // the same set without the dot
 )
 
 // segmentPatternText spells that rule as an anchored RE2 expression. RE2 has no
-// lookahead, so "never . or .." is a length split: one character that is not a
-// dot, two that are not both dots, or three and more of anything in the set.
+// lookahead, so the ban on "." and ".." becomes a split by length: a lone
+// character that is not a dot, a pair that is not both dots, and any longer run
+// of the set.
 var segmentPatternText = `^(?:[` + segmentSafe + `]|[` + segmentSafe + `][` + segmentChars + `]|\.[` + segmentSafe + `]|[` + segmentChars + `]{3,})$`
 
 var segmentRe = regexp.MustCompile(segmentPatternText)
@@ -32,9 +33,9 @@ func segmentPattern() string { return segmentPatternText }
 
 // safeSegments is the same rule as a predicate, for a <precondition> or an <if>.
 // It reads several values, and a value that is a list contributes each element.
-// An empty value is an absent one, and an absent value has nothing to check, so
-// a guard written over the whole tree does not fire on a leaf that declares no
-// such arg.
+// An empty value is an absent value, and an absent value has nothing to check. A
+// guard written over a whole tree therefore stays quiet on a leaf that declares
+// no such arg.
 func safeSegments(values ...any) bool {
 	for _, v := range values {
 		if list, ok := asList(v); ok {
@@ -70,8 +71,8 @@ func validatePreconditions(pre []string, where string) error {
 }
 
 // inheritedPreconditions is what a node runs: the guards it inherited, then its
-// own. Ancestors come first, so a config-level rule decides before a leaf's own
-// check and a reader gets the broader message.
+// own. The ancestors' guards lead, so a config-level rule decides before a
+// leaf's own check and a reader gets the broader message.
 func inheritedPreconditions(inherited, own []string) []string {
 	if len(inherited) == 0 {
 		return own
@@ -85,9 +86,9 @@ func inheritedPreconditions(inherited, own []string) []string {
 }
 
 // resolveArgPatterns renders every pattern= that carries a template, against the
-// vars in scope at that node plus the environment. A pattern has to be known
-// before any value arrives, so this runs at load time and a var that needs an
-// arg or a flag cannot feed one.
+// vars in scope at that node plus the environment. A pattern must be known
+// before any value arrives, so this runs at load time. A var that needs an arg
+// or a flag cannot feed it.
 func resolveArgPatterns(cfg *Config) error {
 	base := map[string]any{"arg": map[string]any{}, "flag": map[string]any{}, "env": envMap()}
 	for i := range cfg.Commands {
@@ -109,7 +110,7 @@ func resolveNodePatterns(c *Command, inheritedVars, base map[string]any, where s
 		if err != nil {
 			return fmt.Errorf("%s.args[%d]: pattern: %w", where, i, err)
 		}
-		// A pattern that resolved to nothing matches everything, and one that
+		// A pattern that resolved to nothing matches everything. A pattern that
 		// resolved to the missing-key marker matches nothing a caller can send.
 		// Either way the config named a var it does not have.
 		if rendered == "" || strings.Contains(rendered, "<no value>") {

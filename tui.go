@@ -223,13 +223,8 @@ func (t *tui) paint() {
 	for _, line := range lines {
 		writeRow(&b, line, t.width)
 	}
-<<<<<<< HEAD
-	// A block shorter than the last a single leaves stale rows below; clear
-	// them, then come back up so the next repaint still starts at the block's top.
-=======
 	// A block shorter than its predecessor leaves stale rows below. Clear them,
 	// then come back up so the next repaint still starts at the block's top.
->>>>>>> origin/master
 	if extra := t.painted - len(t.pending) - len(lines); extra > 0 {
 		for i := 0; i < extra; i++ {
 			b.WriteString(ansiClearLine)
@@ -249,8 +244,6 @@ func writeRow(b *strings.Builder, line string, width int) {
 	b.WriteByte('\n')
 }
 
-<<<<<<< HEAD
-=======
 // progressRow is a single line of the block before it is laid out. The frame
 // holds every row because the columns it keeps depend on all of them.
 type progressRow struct {
@@ -258,7 +251,6 @@ type progressRow struct {
 	p     itemProgress
 }
 
->>>>>>> origin/master
 // frame renders the block: the counts header, a single slot per in-flight
 // download, and the aggregate line.
 func (t *tui) frame(now time.Time) []string {

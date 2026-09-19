@@ -4,10 +4,10 @@ package main
 // wants that request's answer, so this file holds the EOF back until every
 // request it read has a response on the way out.
 //
-// The reason it has to: the jsonrpc2 layer under the SDK refuses every write
-// once the reader reports EOF. A client that writes its calls and closes in one
-// breath therefore loses the answers, and the server reports "server is closing:
-// EOF" and exits 1.
+// The reason it has to: the jsonrpc2 layer under the SDK refuses every write as
+// soon as the reader reports EOF. A client that writes its calls and closes in
+// the same breath therefore loses the answers, and the server reports "server is
+// closing: EOF" and exits 1.
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// stdioTransport wires the two halves of the stdio stream to one pending-call
+// stdioTransport wires both halves of the stdio stream to a single pending-call
 // ledger. The reader fills it, the writer empties it, and the reader waits on it
 // at EOF.
 func stdioTransport(in io.Reader, out io.Writer) *mcp.IOTransport {
@@ -137,7 +137,7 @@ func (w *answerWriter) Close() error {
 
 // ndjsonLines splits a byte stream into the newline-delimited messages the
 // protocol is made of. A raw newline cannot appear inside an encoded JSON value,
-// so a line is one whole message.
+// so a line is a single whole message.
 type ndjsonLines struct {
 	buf []byte
 }
@@ -158,7 +158,7 @@ func (s *ndjsonLines) feed(p []byte, fn func(rpcMessage)) {
 }
 
 // rpcMessage is the part of a JSON-RPC message that decides what it is. An id
-// with a method is a call, and an id without one is that call's answer.
+// beside a method is a call. An id with no method is that call's answer.
 type rpcMessage struct {
 	ID     json.RawMessage `json:"id"`
 	Method string          `json:"method"`
@@ -168,8 +168,8 @@ func (m rpcMessage) id() string       { return string(bytes.TrimSpace(m.ID)) }
 func (m rpcMessage) isCall() bool     { return len(m.ID) > 0 && m.Method != "" }
 func (m rpcMessage) isResponse() bool { return len(m.ID) > 0 && m.Method == "" }
 
-// rpcMessages reads one line as a message or as a batch of them. A line this
-// cannot parse is left to the SDK, which reports it.
+// rpcMessages reads a single line as a message or as a batch of them. A line
+// this cannot parse is left to the SDK, which reports it.
 func rpcMessages(line []byte) []rpcMessage {
 	line = bytes.TrimSpace(line)
 	if len(line) == 0 {

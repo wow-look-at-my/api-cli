@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// rpcLines frames a JSON-RPC conversation the way a stdio client writes it: one
-// message per line, and nothing after the last newline.
+// rpcLines frames a JSON-RPC conversation the way a stdio client writes it: a
+// single message per line, and nothing after the last newline.
 func rpcLines(msgs ...string) string {
 	return strings.Join(msgs, "\n") + "\n"
 }
@@ -20,8 +20,8 @@ const (
 	rpcInitialized = `{"jsonrpc":"2.0","method":"notifications/initialized"}`
 )
 
-// serveStdio runs one stdio session over the given request stream and returns the
-// exit code and everything the server wrote.
+// serveStdio runs a single stdio session over the given request stream and
+// returns the exit code and everything the server wrote.
 func serveStdio(t *testing.T, cfg *Config, requests string) (int, string) {
 	t.Helper()
 	t.Serial()
@@ -57,7 +57,7 @@ func TestMCPStdio_AnswersTheLastCallWhenStdinClosesAtOnce(t *testing.T) {
 }
 
 // Several calls back to back land the same way, so the hold-back waits for the
-// whole batch rather than for whichever answer happens to be first.
+// whole batch rather than for whichever answer happens to be earliest.
 func TestMCPStdio_AnswersEveryCallWhenStdinClosesAtOnce(t *testing.T) {
 	cfg, err := parseConfigXML([]byte(`<config name="t">
 		<command name="ping" description="p"><run>printf pong</run></command>
@@ -79,7 +79,7 @@ func TestMCPStdio_AnswersEveryCallWhenStdinClosesAtOnce(t *testing.T) {
 	}
 }
 
-// --- the ledger the two halves share ---
+// --- the ledger both halves share ---
 
 func TestNdjsonLines_SplitsAndBuffersAPartialLine(t *testing.T) {
 	var got []rpcMessage

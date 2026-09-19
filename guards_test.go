@@ -27,8 +27,8 @@ func TestSafeSegments_AcceptsOneSegmentAndRefusesAnEscape(t *testing.T) {
 	assert.False(t, safeSegments("ok", ".."), "one bad value spoils the set")
 }
 
-// An absent value has nothing to check, which is what lets one guard cover a
-// whole tree of leaves that declare different args.
+// An absent value has nothing to check, which is what lets a single guard
+// cover a whole tree of leaves that declare different args.
 func TestSafeSegments_TreatsAnAbsentValueAsNothingToCheck(t *testing.T) {
 	assert.True(t, safeSegments())
 	assert.True(t, safeSegments(nil))
@@ -38,7 +38,7 @@ func TestSafeSegments_TreatsAnAbsentValueAsNothingToCheck(t *testing.T) {
 }
 
 // A list contributes every element, so a variadic arg is covered by the same
-// call as a scalar one.
+// call as a scalar value.
 func TestSafeSegments_ReadsEveryElementOfAList(t *testing.T) {
 	assert.True(t, safeSegments([]string{"a", "b"}))
 	assert.False(t, safeSegments([]string{"a", "../b"}))
@@ -94,7 +94,7 @@ func TestResolveArgPatterns_ReadsTheSegmentHelper(t *testing.T) {
 	assert.Contains(t, err.Error(), "does not match <owner>")
 }
 
-// A var in scope at the node wins over the one above it, the same way any other
+// A var in scope at the node wins over an ancestor's, the same way any other
 // var does.
 func TestResolveArgPatterns_TakesTheNearestVar(t *testing.T) {
 	cfg := loadConfigFile(t, `<config name="t">
@@ -111,7 +111,7 @@ func TestResolveArgPatterns_TakesTheNearestVar(t *testing.T) {
 }
 
 // A pattern that resolves to nothing matches everything, which is never what a
-// config that declared one meant.
+// config that declared a pattern meant.
 func TestResolveArgPatterns_RefusesAnEmptyResult(t *testing.T) {
 	_, err := loadConfigFileErr(t, `<config name="t">
 		<command name="show" description="s">
@@ -125,8 +125,8 @@ func TestResolveArgPatterns_RefusesAnEmptyResult(t *testing.T) {
 
 // --- inherited preconditions ---
 
-// One guard at the top of the config runs on every leaf under it, so no leaf
-// repeats it.
+// A single guard at the top of the config runs on every leaf under it, so no
+// leaf repeats it.
 func TestPreconditions_ConfigLevelGuardsEveryLeaf(t *testing.T) {
 	cfg := loadConfigFile(t, `<config name="t">
 		<preconditions>
@@ -193,7 +193,7 @@ func TestPreconditions_GroupGuardCoversItsSubtreeOnly(t *testing.T) {
 }
 
 // The ancestors' guards run before the node's own, so the broader message is the
-// one a reader gets first.
+// thing a reader gets earliest.
 func TestPreconditions_AncestorsRunFirst(t *testing.T) {
 	cfg := loadConfigFile(t, `<config name="t">
 		<preconditions><precondition>from the config</precondition></preconditions>

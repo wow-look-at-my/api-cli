@@ -27,7 +27,7 @@ type Config struct {
 	Cwd         string         `json:"cwd,omitempty"`
 	Stdin       string         `json:"stdin,omitempty"`
 	// Preconditions gate every node under the config. A guard written here runs
-	// on each run in the tree, which is what keeps one rule out of every leaf.
+	// on each run in the tree, which is what keeps a single rule out of every leaf.
 	Preconditions []string              `json:"preconditions,omitempty"`
 	Formats       map[string]*Format    `json:"formats,omitempty"`
 	Transports    map[string]*Transport `json:"transports,omitempty"`
