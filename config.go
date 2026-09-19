@@ -58,10 +58,10 @@ type Config struct {
 // the child inherits the parent process's stdin.
 //
 // `runnable` makes a node with subcommands execute in its own right, which is
-// how one name is both `tool [id]` and `tool sub`. Cobra reads the first
-// positional as a subcommand name, so every arg of a runnable node needs a
-// `pattern` that matches none of its subcommand names. `--` ends the subcommand
-// lookup, for a value that starts with a dash.
+// how a single name is both `tool [id]` and `tool sub`. Cobra reads the
+// earliest positional as a subcommand name, so every arg of a runnable node
+// needs a `pattern` that matches none of its subcommand names. `--` ends the
+// subcommand lookup, for a value that starts with a dash.
 //
 // `steps` run sequentially before the leaf's own run. A step runs a command or
 // a request — the same fork as `<run>` — and defaults to the leaf's effective
@@ -104,18 +104,18 @@ type Command struct {
 // predicate is truthy AND the user has not opted out (--no-format,
 // --format=raw, NO_FORMAT=1).
 //
-// `Views` are alternative renderings; selectView decides which one applies.
+// `Views` are alternative renderings; selectView decides which a single applies.
 type Format struct {
 	Input string `json:"input,omitempty"`
 	When  string `json:"when,omitempty"`
 	Views []View `json:"views"`
 }
 
-// View is one alternative rendering inside a Format. Selection rules:
-//  1. --view=<name> from the user wins if set.
-//  2. Else first view whose `When` predicate renders truthy wins.
-//  3. Else first view with `Default: true`.
-//  4. Else first view in the slice.
+// View is a single alternative rendering inside a Format.
+//
+//	--view=<name> from the user wins if set. Else earliest view whose
+//	`When` predicate renders truthy wins. Else earliest view with
+//	`Default: true`. Else earliest view in the slice.
 type View struct {
 	Name     string `json:"name"`
 	When     string `json:"when,omitempty"`
@@ -186,11 +186,11 @@ func (r *FormatRef) Defined() bool {
 type Step struct {
 	Name string `json:"name"`
 	When string `json:"when,omitempty"`
-	// Over repeats the step once per element of a list an earlier result
-	// holds. The step sees the element as `.item` and its position as
-	// `.index`, and the result is a list of {"item": element, "result":
-	// response} in the source order. So one screen can show a row per build
-	// AND what a second call says about each of them.
+	// Over repeats the step a single time per element of a list an earlier
+	// result holds. The step sees the element as `.item` and its position
+	// as `.index`, and the result is a list of {"item": element, "result":
+	// response} in the source order. So a single screen can show a row per
+	// build AND what another call says about each of them.
 	Over string `json:"over,omitempty"`
 	// Until makes the step poll: it repeats its own run until this predicate
 	// renders truthy. The predicate sees the last body promoted to the top
@@ -209,12 +209,12 @@ type Step struct {
 //
 // If Variadic is true, the arg consumes all remaining positional values into a
 // []string (or []int) and must be the last entry in the args list. A required
-// variadic arg requires at least one value; an optional variadic arg accepts
-// zero or more.
-// Pattern is a regular expression every supplied value must match. It is
-// validation on a leaf, and it is what makes a runnable parent unambiguous: the
-// loader rejects a pattern that matches one of the node's own subcommand names,
-// so a value cobra reads as an argument can never be a subcommand.
+// variadic arg requires at least a single value; an optional variadic arg
+// accepts empty or more. Pattern is a regular expression every supplied value
+// must match. It is validation on a leaf, and it is what makes a runnable
+// parent unambiguous: the loader rejects a pattern that matches any of the
+// node's own subcommand names, so a value cobra reads as an argument can never
+// be a subcommand.
 type Arg struct {
 	Name        string `json:"name"`
 	Type        string `json:"type,omitempty"`
@@ -232,7 +232,7 @@ type Arg struct {
 // "string" type.
 //
 // `Conflicts` lists sibling flag names that may not be set together; the CLI
-// rejects the invocation if more than one is supplied.
+// rejects the invocation if more than a single is supplied.
 type Flag struct {
 	Name        string   `json:"name"`
 	Short       string   `json:"short,omitempty"`
@@ -304,9 +304,9 @@ func (c *Cmd) Defined() bool {
 	return c.Shell || len(c.Argv) > 0
 }
 
-// Request is a first-class HTTP request, the alternative to a shell/argv Cmd as
-// a leaf's executable. It is built from a <run><request> element. Like Cmd it
-// inherits down the command tree: the closest ancestor that defines a <run>
+// Request is a earliest-class HTTP request, the alternative to a shell/argv Cmd
+// as a leaf's executable. It is built from a <run><request> element. Like Cmd
+// it inherits down the command tree: the closest ancestor that defines a <run>
 // (whether request or command) wins for a subtree.
 //
 // Every string field is a Go template rendered against the leaf's data context
@@ -322,9 +322,7 @@ type Request struct {
 	Transport string    `json:"transport,omitempty"` // registry name; empty means the config default
 
 	// AllowStatus lists the 4xx/5xx statuses that are an answer rather than a
-	// failure ("404" on a lookup that may miss). The body of one of these
-	// reaches the caller with exit code 0, so a step stores it on
-	// .result.<name> and a later step branches on what it holds.
+	// failure ("404" on a lookup that may miss).
 	AllowStatus []int `json:"allowStatus,omitempty"`
 }
 
@@ -334,13 +332,9 @@ type Request struct {
 //
 // The program receives the fully-rendered request at `.request` (method, url,
 // body, headers, header_lines) on top of the leaf's own data context, so its
-// argv is written with the same placeholders as any other command. Its stdout
-// is the response body and feeds `<response jq=>` exactly like a built-in
-// response; a non-zero exit fails the request.
+// argv is written with the same placeholders as any other command.
 //
 // Stdin is the request body unless the transport declares its own `<stdin>`.
-// Either way it is explicit: a transport never inherits the user's terminal,
-// so a program that reads stdin cannot hang waiting for one.
 type Transport struct {
 	Name     string `json:"name"`
 	Command  *Cmd   `json:"command,omitempty"`
@@ -355,7 +349,7 @@ func (r *Request) Defined() bool {
 	return r != nil && strings.TrimSpace(r.URL) != ""
 }
 
-// Param is one query parameter. Name and Value are templates. When, if
+// Param is a single query parameter. Name and Value are templates. When, if
 // non-empty, is a context path: the param is included only when it is truthy
 // (set by an enclosing <if test=>).
 type Param struct {
@@ -364,17 +358,16 @@ type Param struct {
 	When  string `json:"when,omitempty"`
 }
 
-// Header is one request header. Name and Value are templates. When mirrors
-// Param.When for headers wrapped in <if test=>.
+// Header is a single request header. Name and Value are templates. When
+// mirrors Param.When for headers wrapped in <if test=>.
 type Header struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 	When  string `json:"when,omitempty"`
 }
 
-// Response shapes a JSON response body before output. JQ is the jq program, as
-// a template, or a bare dotted context path naming one (e.g. "var.filter") —
-// see jqProgram. The program runs over the decoded body and the result(s) are
+// Response shapes a JSON response body before output. "var.filter") — see
+// jqProgram. The program runs over the decoded body and the result(s) are
 // emitted as JSON.
 type Response struct {
 	JQ string `json:"jq,omitempty"`
@@ -388,18 +381,16 @@ type (
 	Field  = fields.Field
 )
 
-// FieldsBlock is one <fields> declaration on a leaf. When is a template
-// predicate over the format context (.data, .tty, .width, .arg, .flag, .result,
-// ...); an empty When always renders. A leaf may declare several blocks, and
-// every block whose predicate holds renders, in document order. That is how one
-// leaf presents a list for a no-id call and a detail view for an id, and how a
-// dashboard puts a second table over .result.<step> under the first one.
+// When is a template predicate over the format context (.data, .tty, .width,
+// .arg, .flag, .result, ...); an empty When always renders. A leaf may declare
+// several blocks, and every block whose predicate holds renders, in document
+// order.
 type FieldsBlock struct {
 	When   string  `json:"when,omitempty"`
 	Fields *Fields `json:"fields"`
 }
 
-// reservedCommandNames are the names cobra owns. A config cannot declare one.
+// reservedCommandNames are the names cobra owns.
 var reservedCommandNames = set.Of("help", "completion", "__complete", "docs")
 
 // validFlagTypes are the accepted <flag type=> values. The empty string
@@ -471,7 +462,7 @@ func validate(cfg *Config) error {
 }
 
 // validateTransports checks the transport registry: every entry needs a
-// command to run, and at most one may claim the default.
+// command to run, and at most a single may claim the default.
 func validateTransports(transports map[string]*Transport) error {
 	names := make([]string, 0, len(transports))
 	for name := range transports {
@@ -553,9 +544,9 @@ func validateFormat(f *Format, where string) error {
 }
 
 // validateCommand enforces schema invariants. inheritedCmd indicates whether
-// an ancestor has a command template available (we need at least one to reach
-// a leaf). formats is the top-level format registry; named refs resolve into
-// it.
+// an ancestor has a command template available (we need at least a single to
+// reach a leaf). formats is the top-level format registry; named refs resolve
+// into it.
 func validateCommand(c *Command, where string, siblings map[string]bool, inheritedRun bool, formats map[string]*Format, transports map[string]*Transport) error {
 	if strings.TrimSpace(c.Name) == "" {
 		return fmt.Errorf("%s: \"name\" is required", where)
@@ -694,8 +685,6 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		return fmt.Errorf("%s: %s has no command/request/download/mock and no ancestor defines one", where, nodeKind(c))
 	}
 
-	// `entry`, `steps` and `preconditions` belong to the run, so they need a
-	// node that has one.
 	if len(c.Entry) > 0 && !c.executes() {
 		return fmt.Errorf("%s: `entry` needs a node that runs (a leaf, or a parent with runnable=)", where)
 	}

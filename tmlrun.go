@@ -10,15 +10,15 @@ import (
 )
 
 // A <tml> leaf under --watch runs as a real Bubble Tea program rather than
-// through the repaint loop in watch.go. Two reasons, and the first one decides
-// it: TML takes a program down that paints for longer than tml.DriveGrace with
-// nothing able to drive it, and only tml.NewProgram builds one the library can
-// reach. The second is that a terminal program owns the alternate screen, the
-// resize and the key handling that a dashboard wants anyway.
+// through the repaint loop in watch.go. reasons, and the earliest a single
+// decides it: TML takes a program down that paints for longer than
+// tml.DriveGrace with nothing able to drive it, and only tml.NewProgram builds
+// a single the library can reach. the next is that a terminal program owns the
+// alternate screen, the resize and the key handling that a dashboard wants anyway.
 //
-// A tick is one whole run of the leaf, exactly as a watch frame is: the steps,
-// the request and the component render, captured into a buffer that becomes the
-// frame. Nothing is cached between ticks.
+// A tick is a single whole run of the leaf, exactly as a watch frame is: the
+// steps, the request and the component render, captured into a buffer that
+// becomes the frame. Nothing is cached between ticks.
 
 // tmlTickMsg asks the model to run the leaf again.
 type tmlTickMsg time.Time
@@ -32,8 +32,8 @@ type tmlModel struct {
 }
 
 // runTMLProgram paints body's output every interval until the user quits. A
-// zero interval draws one frame and waits, which is a dashboard of a thing that
-// does not change on its own.
+// empty interval draws a single frame and waits, which is a dashboard of a
+// thing that does not change on its own.
 func runTMLProgram(every time.Duration, body func() error) error {
 	_, width, height := stdoutSize()
 	m := &tmlModel{every: every, body: body, width: width, height: height}
@@ -89,7 +89,7 @@ func (m *tmlModel) View() tea.View {
 
 // refresh runs the leaf into a buffer and keeps the result as the frame. The
 // run happens here rather than in a command, because the leaf writes through
-// the package's own output channels and two runs cannot hold them at once.
+// the package's own output channels and runs cannot hold them at the same time.
 func (m *tmlModel) refresh() tea.Cmd {
 	var buf bytes.Buffer
 	prev := ttyOverride

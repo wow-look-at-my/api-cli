@@ -11,14 +11,14 @@ import (
 	"time"
 )
 
-// The download TUI: a block of slots pinned to the bottom of the screen, one
-// per in-flight transfer plus a totals line, each repainted over its own
-// previous line.
+// The download TUI: a block of slots pinned to the bottom of the screen, a
+// single per in-flight transfer plus a totals line, each repainted over its
+// own previous line.
 //
 // Everything else -- a finished transfer, a step's output, a transport's stderr
-// -- is written once, above the block, and scrolls away into the terminal's own
-// scrollback. So a run reads as a growing list of what landed, with the live
-// slots always at the bottom.
+// -- is written a single time, above the block, and scrolls away into the
+// terminal's own scrollback. So a run reads as a growing list of what landed,
+// with the live slots always at the bottom.
 //
 // It repaints with a handful of ANSI sequences rather than a terminal library,
 // because the block is a few plain lines and the cursor never leaves it.
@@ -67,8 +67,8 @@ func newTUI(out io.Writer, width int, snapshot func() []*downloadItem) *tui {
 	}
 }
 
-// Start begins repainting until Stop. Painting from one goroutine keeps the
-// frame consistent while workers mutate progress underneath it.
+// Start begins repainting until Stop. Painting from a single goroutine
+// keeps the frame consistent while workers mutate progress underneath it.
 func (t *tui) Start() {
 	t.mu.Lock()
 	t.started = true
@@ -95,8 +95,6 @@ func (t *tui) Start() {
 // testable without taking the test binary down with it.
 var tuiExit = os.Exit
 
-// interruptExitCode is the conventional 128+SIGINT status for a run the user
-// cut short.
 const interruptExitCode = 130
 
 // watchInterrupt puts the terminal back if the run is cut short. Without it a
@@ -188,7 +186,7 @@ func (t *tui) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// logf adds one preformatted line. The queue's log hook points here.
+// logf adds a single preformatted line. The queue's log hook points here.
 func (t *tui) logf(format string, args ...any) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -205,8 +203,8 @@ func (t *tui) appendLog(line string) {
 //
 // The queued lines land on rows the old block occupied, so they cost no extra
 // scrolling, and the block that follows pushes them up into the scrollback for
-// good. That is the whole trick: one cursor movement per frame, and a finished
-// transfer is written exactly once.
+// good. That is the whole trick: a single cursor movement per frame, and a
+// finished transfer is written exactly a single time.
 func (t *tui) paint() {
 	lines := t.frame(time.Now())
 
@@ -225,7 +223,7 @@ func (t *tui) paint() {
 	for _, line := range lines {
 		writeRow(&b, line, t.width)
 	}
-	// A block shorter than the last one leaves stale rows below; clear them,
+	// A block shorter than its predecessor leaves stale rows below. Clear them,
 	// then come back up so the next repaint still starts at the block's top.
 	if extra := t.painted - len(t.pending) - len(lines); extra > 0 {
 		for i := 0; i < extra; i++ {
@@ -239,15 +237,22 @@ func (t *tui) paint() {
 	fmt.Fprint(t.out, b.String())
 }
 
-// writeRow emits one line over whatever the row held before.
+// writeRow emits a single line over whatever the row held before.
 func writeRow(b *strings.Builder, line string, width int) {
 	b.WriteString(ansiClearLine)
 	b.WriteString(clipDisplay(line, width))
 	b.WriteByte('\n')
 }
 
-// frame renders the block: the counts header, one slot per in-flight download,
-// and the aggregate line.
+// progressRow is a single line of the block before it is laid out. The frame
+// holds every row because the columns it keeps depend on all of them.
+type progressRow struct {
+	label string
+	p     itemProgress
+}
+
+// frame renders the block: the counts header, a single slot per in-flight
+// download, and the aggregate line.
 func (t *tui) frame(now time.Time) []string {
 	items := t.snapshot()
 	totals := tallyDownloads(items, now)
@@ -256,26 +261,35 @@ func (t *tui) frame(now time.Time) []string {
 	if totals.Failed > 0 {
 		head += fmt.Sprintf(", %d failed", totals.Failed)
 	}
-	lines := []string{head}
-	lay := planProgressLayout(t.width - 2)
-
+	var rows []progressRow
 	for _, item := range items {
 		if item.state.Load() != dlActive {
 			continue
 		}
 		p := progressOf(item.done.Load(), item.total.Load(), time.Unix(0, item.start.Load()), now)
-		lines = append(lines, "  "+progressLine(item.label(), p, lay))
+		rows = append(rows, progressRow{item.label(), p})
 	}
+	rows = append(rows, progressRow{"TOTAL", aggregateProgress(totals)})
 
-	return append(lines, "  "+progressLine("TOTAL", aggregateProgress(totals), lay))
+	fractions := false
+	for _, r := range rows {
+		fractions = fractions || r.p.Fraction >= 0
+	}
+	lay := planProgressLayout(t.width-2, fractions)
+
+	lines := []string{head}
+	for _, r := range rows {
+		lines = append(lines, "  "+progressLine(r.label, r.p, lay))
+	}
+	return lines
 }
 
-// aggregateProgress turns a tally into the TOTAL row's numbers. The percentage
-// is always shown: an unreported length makes the denominator a floor, which
-// the row marks with a "+" rather than replacing the whole reading with "?".
+// aggregateProgress turns a tally into the TOTAL row's numbers. An unreported
+// length makes the denominator a floor, which the row marks with a "+" beside a
+// percentage the known lengths still support.
 func aggregateProgress(t downloadTotals) itemProgress {
 	p := itemProgress{Done: t.Bytes, Total: t.Total, Fraction: -1, TotalIsFloor: !t.TotalKnown}
-	if t.Total > 0 {
+	if t.Total > 0 && (t.TotalKnown || t.Total > t.Bytes) {
 		p.Fraction = float64(t.Bytes) / float64(t.Total)
 	}
 	if t.Elapsed <= 0 || t.Bytes <= 0 {
@@ -289,16 +303,11 @@ func aggregateProgress(t downloadTotals) itemProgress {
 	return p
 }
 
-// The progress columns, each sized for its widest legal value: a bar, the
-// percentage, the size pair ("1023.9 KiB / 1023.9 KiB+"), the rate
-// ("999.9 KiB/s"), and the ETA. Every column has a fixed width so the rows form
-// real columns.
+// Every column has a fixed width so the rows form real columns.
 //
 // prio orders what goes when the terminal cannot fit them all. The bar goes
-// first despite being the eye-catching column: it is the one thing here the
-// percentage beside it already says. At 80 columns that leaves name, percent,
-// sizes, rate, and ETA — the numbers — and spends the recovered room on the
-// file name.
+// earliest despite being the eye-catching column: it is the a single thing here
+// the percentage beside it already says.
 const (
 	colBar = iota
 	colPct
@@ -323,20 +332,26 @@ const (
 	maxLabelWidth = 32
 )
 
-// progressLayout is the column arrangement for one frame. It is computed once
-// and used for every row, because a layout decided per row would let one wide
-// value knock that row's columns out of line with its neighbours'.
+// progressLayout is the column arrangement for a single frame. It is computed
+// a single time and used for every row, because a layout decided per row
+// would let a single wide value knock that row's columns out of line with its neighbours'.
 type progressLayout struct {
 	label int
 	keep  []int
 }
 
-func planProgressLayout(width int) progressLayout {
+// planProgressLayout picks the columns for a single frame. A frame where no
+// row has a known length drops the bar and the percentage outright: a column
+// of empty cells is room the file names can use.
+func planProgressLayout(width int, fractions bool) progressLayout {
 	if width < minLabelWidth+2 {
 		width = minLabelWidth + 2
 	}
 	keep := make([]int, 0, len(progressColumns))
-	for i := range progressColumns {
+	for i, col := range progressColumns {
+		if !fractions && (col.kind == colBar || col.kind == colPct) {
+			continue
+		}
 		keep = append(keep, i)
 	}
 	tail := func() int {
@@ -359,12 +374,12 @@ func planProgressLayout(width int) progressLayout {
 	return progressLayout{label: label, keep: keep}
 }
 
-// progressLine renders one row into the frame's layout. Each column is clipped
-// and padded to its declared width, so an unexpectedly wide value costs its own
-// cell and never the alignment.
+// progressLine renders a single row into the frame's layout. Each column is
+// clipped and padded to its declared width, so an unexpectedly wide value costs
+// its own cell and never the alignment.
 func progressLine(label string, p itemProgress, lay progressLayout) string {
 	if lay.label == 0 {
-		lay = planProgressLayout(80)
+		lay = planProgressLayout(80, p.Fraction >= 0)
 	}
 	parts := make([]string, 0, len(lay.keep)+1)
 	parts = append(parts, padRight(lay.label, clipDisplay(label, lay.label)))
@@ -376,6 +391,11 @@ func progressLine(label string, p itemProgress, lay progressLayout) string {
 }
 
 func columnText(kind int, p itemProgress) string {
+	// A transfer the server gave no length for has no fraction to draw. The bar
+	// and the percentage stay empty, and the row still reports bytes and rate.
+	if p.Fraction < 0 && (kind == colBar || kind == colPct) {
+		return ""
+	}
 	switch kind {
 	case colBar:
 		return progressBar(p.Fraction, 14)
@@ -404,9 +424,6 @@ func progressBar(fraction float64, width int) string {
 }
 
 func percentText(fraction float64) string {
-	if fraction < 0 {
-		return "  ?%"
-	}
 	return fmt.Sprintf("%3.0f%%", fraction*100)
 }
 
@@ -453,7 +470,7 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTP"[exp])
 }
 
-// shortDuration renders an ETA as mm:ss, or h:mm:ss once it passes an hour.
+// shortDuration renders an ETA as mm:ss, or h:mm:ss a single time it passes an hour.
 func shortDuration(d time.Duration) string {
 	if d < 0 {
 		d = 0

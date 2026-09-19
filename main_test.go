@@ -108,6 +108,7 @@ func TestRun_HappyPath(t *testing.T) {
 }
 
 func TestRun_PicksUpCwdAPIXml(t *testing.T) {
+	t.Serial()
 	dir := t.TempDir()
 	cfg := `<config name="t">
 	<run>true</run>
