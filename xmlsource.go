@@ -328,6 +328,12 @@ func addCommandChild(c *Command, child *xnode) error {
 			return err
 		}
 		c.Command, c.Request = cmd, req
+	case "mock":
+		m, err := buildMock(child)
+		if err != nil {
+			return err
+		}
+		c.Mock = m
 	case "cwd":
 		s, err := compileTextElem(child)
 		if err != nil {

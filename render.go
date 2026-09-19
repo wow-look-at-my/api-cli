@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
@@ -39,11 +40,20 @@ func cliFuncs() template.FuncMap {
 		"filterSuffix": filterSuffix,
 		"filterPrefix": filterPrefix,
 		"collect":      collectPath,
+		"stem":         stem,
 		// The path-segment rule, as a pattern= a config names and as a predicate
 		// a <precondition> reads. See guards.go.
 		"segmentPattern": segmentPattern,
 		"safeSegments":   safeSegments,
 	}
+}
+
+// stem is a path without its directory and without its extension: the piece a
+// build tool names an artifact after. "src/foo/bar.cpp" becomes "bar", so an
+// output path reads {{ stem .mock.file }}.o.
+func stem(p string) string {
+	base := filepath.Base(p)
+	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
 // renderer executes every template this tool renders. It is read-only after
