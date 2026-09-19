@@ -9,8 +9,8 @@ import (
 	"text/template"
 )
 
-// mockWrapper is one script to write: the file name a build tool invokes, and
-// the leaf path that answers for it.
+// mockWrapper is a single script to write: the file name a build tool
+// invokes, and the leaf path that answers for it.
 type mockWrapper struct {
 	name string
 	path []string
@@ -31,10 +31,10 @@ func collectMockWrappers(cmds []Command, path []string) []mockWrapper {
 	return out
 }
 
-// installMockWrappers writes one executable script per <mock> leaf into dir.
-// Putting that directory first on PATH is the whole installation: a build then
-// reaches the stand-in instead of the real tool, and nothing in the build
-// system itself changes.
+// installMockWrappers writes a single executable script per <mock> leaf into
+// dir. Putting that directory earliest on PATH is the whole installation: a
+// build then reaches the stand-in instead of the real tool, and nothing in the
+// build system itself changes.
 func installMockWrappers(cfg *Config, configPath, dir string, out io.Writer) error {
 	if cfg == nil {
 		return fmt.Errorf("--install-mocks needs a config")
@@ -45,8 +45,9 @@ func installMockWrappers(cfg *Config, configPath, dir string, out io.Writer) err
 		return fmt.Errorf("%s declares no <mock> leaf, so there is nothing to install", configPath)
 	}
 
-	// Two leaves of one name install one script, and the second silently wins.
-	// A build that then calls the wrong stand-in is very hard to read back.
+	// Two leaves that share a name install a single script, and the later leaf
+	// silently wins. A build that then calls the wrong stand-in is very hard to
+	// read back.
 	seen := map[string][]string{}
 	for _, w := range wrappers {
 		if prev, dup := seen[w.name]; dup {

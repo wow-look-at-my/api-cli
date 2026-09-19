@@ -326,7 +326,7 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 	logDebug("leaf %q: entry: %s", node.Name, jsonCompact(entry))
 
 	// A <mock> stands in for a program, so it is the leaf's action too. Its own
-	// <run> is the one exception: that shape is a thin wrapper, which records
+	// <run> is the exception: that shape is a thin wrapper, which records
 	// the call and then runs the real tool. An INHERITED run stays where it is,
 	// exactly as it does for a download, so a mock leaf under a parent that
 	// declares a run does not fire that run on the way past.

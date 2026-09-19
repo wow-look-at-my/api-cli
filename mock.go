@@ -11,12 +11,12 @@ import (
 // Mock is the <mock> element on a leaf: a declarative stand-in for a real
 // program. The leaf's argv arrives through passthrough mode, <input> names the
 // parts of it that matter, <output> writes the files the caller expects to find
-// afterwards, and <record> appends one line per invocation to a log.
+// afterwards, and <record> appends a single line per invocation to a log.
 //
 // A build tool decides what to do next from the files on disk and their
 // timestamps. So a mock compiler that writes its declared outputs satisfies
 // make without compiling anything, and a whole toolchain can be stood up this
-// way before one line of the real work exists.
+// way before a single line of the real work exists.
 //
 // A leaf that declares <mock> and a <run> is a thin wrapper instead: the
 // records and outputs happen, then the real program runs. That is how a
@@ -25,8 +25,7 @@ type Mock struct {
 	Inputs  []MockInput  `json:"inputs,omitempty"`
 	Outputs []MockOutput `json:"outputs,omitempty"`
 	Records []MockRecord `json:"records,omitempty"`
-	// Exit is a template for the exit code. Empty means 0, and a leaf with a
-	// <run> ignores it in favour of the program's own code.
+	// Exit is a template for the exit code.
 	Exit string `json:"exit,omitempty"`
 	// Stdout and Stderr are templates written before the outputs land, for a
 	// tool whose callers read its output rather than its files.
@@ -34,12 +33,12 @@ type Mock struct {
 	Stderr string `json:"stderr,omitempty"`
 }
 
-// MockInput names one part of the incoming argv. Match is a Go regular
+// MockInput names a single part of the incoming argv. Match is a Go regular
 // expression tested against each element of .rest in order, so the declaration
 // reads as the shape of the command line rather than as an index into it.
 //
-// The resolved value lands at .mock.<name>: the first match, or every match
-// when variadic= is set.
+// The resolved value lands at .mock.<name>: the earliest match, or every
+// match when variadic= is set.
 type MockInput struct {
 	Name     string `json:"name"`
 	Match    string `json:"match"`
@@ -52,13 +51,13 @@ type MockInput struct {
 	re *regexp.Regexp // compiled at load
 }
 
-// MockOutput is one file the mock writes. Path is a template, and the element's
-// text content is the file's body — also a template, and empty by default,
-// because a build tool reads a mock artifact's timestamp rather than its bytes.
+// MockOutput is a single file the mock writes. Path is a template, and the
+// element's text content is the file's body — also a template, and empty by
+// default, because a build tool reads a mock artifact's timestamp rather than its bytes.
 //
 // With over=, the declaration repeats per element of a list, exactly as a
 // <download over=> does: the element's keys are promoted and the element itself
-// is .item. One <output> therefore covers a compiler invoked with N sources.
+// is .item.
 type MockOutput struct {
 	Over   string `json:"over,omitempty"`
 	When   string `json:"when,omitempty"`
@@ -66,32 +65,31 @@ type MockOutput struct {
 	Text   string `json:"text,omitempty"`
 	From   string `json:"from,omitempty"`
 	Append bool   `json:"append,omitempty"`
-	// Mode is an octal file mode. Empty takes 0644, and a mock that stands in
-	// for a linker wants 0755.
+	// Mode is an octal file mode.
 	Mode string `json:"mode,omitempty"`
 }
 
-// MockRecord appends one line to a file per invocation. The default body is a
-// compile_commands.json entry for this call, which is the reason the element
-// exists: point every tool in a build at one record file, and the build writes
-// its own compilation database on the way past.
+// MockRecord appends a single line to a file per invocation. The default body
+// is a compile_commands.json entry for this call, which is the reason the
+// element exists: point every tool in a build at a single record file, and the
+// build writes its own compilation database on the way past.
 type MockRecord struct {
 	When string `json:"when,omitempty"`
 	Path string `json:"path"`
 	Text string `json:"text,omitempty"`
 }
 
-// defaultRecordText is one compile_commands.json entry. It is the default body
-// of a <record>, so a mock toolchain produces a compilation database with no
-// template written by hand. The JSON is built by the template rather than by
-// Go, so an author who wants a different shape overrides the whole body.
+// defaultRecordText is a single compile_commands.json entry. It is the default
+// body of a <record>, so a mock toolchain produces a compilation database with
+// no template written by hand. The JSON is built by the template rather than
+// by Go, so an author who wants a different shape overrides the whole body.
 const defaultRecordText = `{"directory":{{ .mock.cwd | toJson }},` +
 	`"arguments":{{ .mock.argv | toJson }},` +
 	`"file":{{ .mock.file | toJson }},` +
 	`"output":{{ .mock.output | toJson }}}`
 
 // buildMock reads the <mock> element. The regular expressions compile here, so
-// a bad pattern is a load error rather than a surprise on the first invocation.
+// a bad pattern is a load error rather than a surprise at run time.
 func buildMock(n *xnode) (*Mock, error) {
 	if err := checkAttrs(n, "exit"); err != nil {
 		return nil, err
@@ -211,9 +209,7 @@ func buildMockRecord(n *xnode) (MockRecord, error) {
 	return rec, nil
 }
 
-// checkMockMode rejects a mode that is not octal. A mode is the one attribute
-// here whose typo is silent: 755 without the leading zero still parses, and
-// 0o755 does not parse at all.
+// checkMockMode rejects a mode that is not octal.
 func checkMockMode(mode, path string) error {
 	if mode == "" {
 		return nil

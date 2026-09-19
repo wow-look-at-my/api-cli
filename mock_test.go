@@ -86,14 +86,14 @@ func TestMock_RecordIsACompileCommandsEntry(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(lines[0]), &entry))
 	assert.Equal(t, dir, entry.Directory)
-	// The whole command line, the program first: a consumer replays these, and
-	// the leftovers alone are missing every flag the leaf declared.
+	// The whole command line, with the program at the front: a consumer replays
+	// these, and the leftovers alone are missing every flag the leaf declared.
 	assert.Equal(t, []string{"cc", "-c", "src/foo.c"}, entry.Arguments)
 	assert.Equal(t, "src/foo.c", entry.File)
 	assert.Equal(t, "foo.o", entry.Output)
 }
 
-// Every call appends, so N tools in a parallel build share one record file.
+// Every call appends, so N tools in a parallel build share a single record file.
 func TestMock_RecordAppendsPerCall(t *testing.T) {
 	dir := t.TempDir()
 	chdir(t, dir)
@@ -109,7 +109,7 @@ func TestMock_RecordAppendsPerCall(t *testing.T) {
 }
 
 // A variadic input collects every match, and an <output over=> turns that list
-// into one artifact per element.
+// into a single artifact per element.
 func TestMock_VariadicInputFansOutToOneOutputEach(t *testing.T) {
 	dir := t.TempDir()
 	chdir(t, dir)
