@@ -71,6 +71,12 @@ func buildConfig(root *xnode) (*Config, error) {
 				return nil, err
 			}
 			cfg.Formats = f
+		case "preconditions":
+			p, err := buildPreconditions(child)
+			if err != nil {
+				return nil, err
+			}
+			cfg.Preconditions = p
 		case "transports":
 			t, err := buildTransports(child)
 			if err != nil {
@@ -341,16 +347,11 @@ func addCommandChild(c *Command, child *xnode) error {
 		}
 		c.Confirm = s
 	case "preconditions":
-		for _, p := range child.Children() {
-			if p.Name() != "precondition" {
-				return fmt.Errorf("<preconditions>: unexpected child element <%s>", p.Name())
-			}
-			s, err := compileTextElem(p)
-			if err != nil {
-				return err
-			}
-			c.Preconditions = append(c.Preconditions, s)
+		p, err := buildPreconditions(child)
+		if err != nil {
+			return err
 		}
+		c.Preconditions = append(c.Preconditions, p...)
 	case "steps":
 		for _, s := range child.Children() {
 			if s.Name() != "step" {
@@ -411,6 +412,26 @@ func addCommandChild(c *Command, child *xnode) error {
 		return fmt.Errorf("<command %q>: unexpected child element <%s>", c.Name, child.Name())
 	}
 	return nil
+}
+
+// buildPreconditions reads a <preconditions> block. The config and every
+// <command> declare the same element, so both read it through here.
+func buildPreconditions(n *xnode) ([]string, error) {
+	if err := checkAttrs(n); err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, p := range n.Children() {
+		if p.Name() != "precondition" {
+			return nil, fmt.Errorf("<preconditions>: unexpected child element <%s>", p.Name())
+		}
+		s, err := compileTextElem(p)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, nil
 }
 
 func buildArg(n *xnode) (Arg, error) {
