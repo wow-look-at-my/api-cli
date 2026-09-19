@@ -67,6 +67,7 @@ func TestDocsCommand_Example(t *testing.T) {
 }
 
 func TestDocsCommand_NoConfigRequired(t *testing.T) {
+	t.Serial()
 	chdir(t, t.TempDir())
 
 	var out bytes.Buffer
@@ -83,6 +84,7 @@ func TestDocsCommand_NoConfigRequired(t *testing.T) {
 }
 
 func TestDocsCommand_NoConfigSchema(t *testing.T) {
+	t.Serial()
 	chdir(t, t.TempDir())
 
 	var out bytes.Buffer

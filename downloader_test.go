@@ -21,7 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testQueue builds a queue wired to srv, isolated from the process-wide one.
 func testQueue(t *testing.T, srv *httptest.Server, concurrency, retries int) *downloadQueue {
 	t.Helper()
 	prevDelay := retryDelay

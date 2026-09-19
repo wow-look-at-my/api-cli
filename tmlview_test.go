@@ -168,7 +168,7 @@ func TestRenderTMLFrame(t *testing.T) {
 }
 
 // A component rejects a property it never declared, so a config that hands it
-// one fails the run rather than drawing a screen missing the value.
+// a single fails the run rather than drawing a screen missing the value.
 func TestRenderTMLFrame_UndeclaredProp(t *testing.T) {
 	dir := writeComponent(t)
 	view := &TML{Src: "status.tml", Props: []TMLProp{

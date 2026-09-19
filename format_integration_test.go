@@ -279,11 +279,8 @@ func TestIntegration_OverflowSkipsFormatting(t *testing.T) {
 	t.Cleanup(func() { tmp.Close() })
 	execStdout = tmp
 
-	// Simulate by overriding defaultFormatCap via a one-off call. We can do
-	// this by making the child output more than 32 bytes of JSON-shaped data;
-	// but defaultFormatCap is 32 MiB so we'd need a big payload. Instead, use
-	// captureExecCapped directly to verify the overflow path here, since
-	// that's what runFormatted relies on.
+	// Instead, use captureExecCapped directly to verify the overflow path
+	// here, since that's what runFormatted relies on.
 	bigBody := strings.Repeat("X", 100)
 	out, overflowed, code := captureExecCapped(
 		&Cmd{Shell: true, Template: `printf '%s' '` + bigBody + `'`},

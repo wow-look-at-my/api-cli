@@ -242,7 +242,7 @@ func TestPlanDownloads_Hash(t *testing.T) {
 func TestPlanDownloads_HashNormalization(t *testing.T) {
 	data := planData()
 	digest := strings.Repeat("AB", 32)
-	// The shape `sha256sum` writes: the digest, two spaces, the file name.
+	// The shape `sha256sum` writes: the digest, spaces, the file name.
 	data["result"].(map[string]any)["sumfile"] = "  " + digest + "  archive.tar.gz\n"
 
 	specs, err := planDownloads([]Download{{
@@ -253,9 +253,6 @@ func TestPlanDownloads_HashNormalization(t *testing.T) {
 }
 
 func TestPlanDownloads_MalformedHashIsAnError(t *testing.T) {
-	// The third case is the one that matters: a renamed manifest field renders
-	// as the template engine's placeholder, and must fail loudly rather than
-	// quietly leave the file unverified.
 	cases := map[string]string{
 		"too short":     strings.Repeat("ab", 8),
 		"not hex":       strings.Repeat("zz", 32),
@@ -273,7 +270,7 @@ func TestPlanDownloads_MalformedHashIsAnError(t *testing.T) {
 	}
 
 	// And the placeholder really is what a missing field renders as, so the
-	// case above is the real one and not a straw man.
+	// case above is the real a single and not a straw man.
 	_, err := planDownloads([]Download{{
 		URL: "https://h/f", Hash: "{{.result.list.typo}}", HashAlgo: "sha256",
 	}}, planData(), ".")
@@ -303,7 +300,7 @@ func TestPlanDownloads_HashCanBeEmptyPerRecord(t *testing.T) {
 }
 
 func TestPlanDownloads_ColLidingDestinationsAreAnError(t *testing.T) {
-	// The <to> here forgot to vary, so every record would land on one file.
+	// The <to> here forgot to vary, so every record would land on a single file.
 	_, err := planDownloads([]Download{{
 		Over: "result.list.assets",
 		URL:  "{{.url}}",

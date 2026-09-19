@@ -15,9 +15,8 @@ import (
 )
 
 // pipelineServer stands in for an API whose listing is a job: submit names a
-// job, the job answers "pending" once, and the answer after that carries the
-// parts. The listing of the named item skips part 2, which is the hole the
-// contiguity check exists to report.
+// job, the job answers "pending" a single time, and the answer after that
+// carries the parts.
 func pipelineServer(t *testing.T, missing string) *httptest.Server {
 	t.Helper()
 	var mu sync.Mutex
@@ -69,7 +68,7 @@ func pipelineServer(t *testing.T, missing string) *httptest.Server {
 
 // pipelineConfig is the whole acceptance case: fan out over the arguments,
 // poll each listing to completion, queue every part of every item together,
-// and leave one joined file per item with no parts behind.
+// and leave a single joined file per item with no parts behind.
 func pipelineConfig(srv *httptest.Server, contiguous string) string {
 	return `<config name="pull">
 		<downloads concurrency="2"/>
@@ -105,8 +104,8 @@ func TestIntegration_FanOutPollFetchJoin(t *testing.T) {
 	code, _, errOut := execCmdFull(t, cfg, "pull", "a1", "b2", "--download-dir", out)
 	require.Equal(t, 0, code, "stderr: %s", errOut)
 
-	// One output per item, its parts in numeric order, and nothing else left in
-	// the output directory.
+	// A single output per item, its parts in numeric order, and nothing else
+	// left in the output directory.
 	for _, item := range []string{"a1", "b2"} {
 		body, rerr := os.ReadFile(filepath.Join(out, item+".bin"))
 		require.NoError(t, rerr)
@@ -160,8 +159,7 @@ func TestIntegration_JoinWarnsAboutAGapAndStillWrites(t *testing.T) {
 	assert.Equal(t, "[b2/1][b2/3]", string(body))
 }
 
-// A group short a part is not written at all. Half a capture wearing the real
-// name is indistinguishable from a whole one.
+// A group short a part is not written at all.
 func TestIntegration_JoinSkipsAGroupWithAFailedPart(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/part/2" {
