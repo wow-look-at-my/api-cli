@@ -93,6 +93,7 @@ func TestDoExec_ShellFormHonoursShellQuote(t *testing.T) {
 }
 
 func TestDoExec_StdinPassthrough(t *testing.T) {
+	t.Serial()
 	out, _ := captureExecStreams(t)
 	prevIn := execStdin
 	execStdin = bytes.NewBufferString("piped input\n")

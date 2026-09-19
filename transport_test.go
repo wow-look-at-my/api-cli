@@ -204,6 +204,7 @@ func TestTransport_NoRuntimeOverrideFlag(t *testing.T) {
 // to the built-in client. validate() rejects this at load time, so this covers
 // the guard for a config whose registry was never published.
 func TestTransport_UnregisteredFailsLoud(t *testing.T) {
+	t.Serial()
 	prevTransports, prevDefault := transports, defaultTransport
 	transports, defaultTransport = map[string]*Transport{"fake": shellTransport("fake", `printf 'x'`, false)}, ""
 	t.Cleanup(func() { transports, defaultTransport = prevTransports, prevDefault })
