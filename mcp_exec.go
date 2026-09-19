@@ -72,6 +72,20 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 		return mcpRunDownloads(leaf.node.Downloads, data)
 	}
 
+	// Same rule again for a <mock>, and the same exception: the leaf's own
+	// <run> makes it a thin wrapper, so the real program still runs after the
+	// records and the outputs land.
+	if leaf.node.Mock != nil {
+		var mockOut, mockErr bytes.Buffer
+		code, err := runMock(leaf.node.Mock, leaf.node.Name, nil, data, &mockOut, &mockErr)
+		if err != nil {
+			return "error: " + err.Error(), true
+		}
+		if code != 0 || !leaf.node.Command.Defined() {
+			return mcpCombine(mockOut.String(), mockErr.String()), code != 0
+		}
+	}
+
 	leafCwd, err := renderCwd(leaf.cwdTmpl, data)
 	if err != nil {
 		return fmt.Sprintf("render cwd: %v", err), true
