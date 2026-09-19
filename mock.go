@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 // Mock is the <mock> element on a leaf: a declarative stand-in for a real
@@ -245,12 +247,12 @@ func validateMock(c *Command, where string) error {
 	if len(m.Outputs) == 0 && len(m.Records) == 0 && m.Stdout == "" && m.Stderr == "" {
 		return fmt.Errorf("%s: <mock> declares no <output>, <record>, <stdout> or <stderr>, so it stands in for nothing", where)
 	}
-	names := map[string]bool{}
+	names := set.New[string]()
 	for i, in := range m.Inputs {
-		if names[in.Name] {
+		if names.Contains(in.Name) {
 			return fmt.Errorf("%s.mock.inputs[%d]: duplicate input name %q", where, i, in.Name)
 		}
-		names[in.Name] = true
+		names.Add(in.Name)
 		if reservedMockNames.Contains(in.Name) {
 			return fmt.Errorf("%s.mock.inputs[%d]: name %q is reserved: .mock.%s is what the engine puts there", where, i, in.Name, in.Name)
 		}
