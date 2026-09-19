@@ -71,6 +71,12 @@ func buildConfig(root *xnode) (*Config, error) {
 				return nil, err
 			}
 			cfg.Formats = f
+		case "preconditions":
+			p, err := buildPreconditions(child)
+			if err != nil {
+				return nil, err
+			}
+			cfg.Preconditions = p
 		case "transports":
 			t, err := buildTransports(child)
 			if err != nil {
@@ -341,16 +347,11 @@ func addCommandChild(c *Command, child *xnode) error {
 		}
 		c.Confirm = s
 	case "preconditions":
-		for _, p := range child.Children() {
-			if p.Name() != "precondition" {
-				return fmt.Errorf("<preconditions>: unexpected child element <%s>", p.Name())
-			}
-			s, err := compileTextElem(p)
-			if err != nil {
-				return err
-			}
-			c.Preconditions = append(c.Preconditions, s)
+		p, err := buildPreconditions(child)
+		if err != nil {
+			return err
 		}
+		c.Preconditions = append(c.Preconditions, p...)
 	case "steps":
 		for _, s := range child.Children() {
 			if s.Name() != "step" {
@@ -402,6 +403,26 @@ func addCommandChild(c *Command, child *xnode) error {
 		return fmt.Errorf("<command %q>: unexpected child element <%s>", c.Name, child.Name())
 	}
 	return nil
+}
+
+// buildPreconditions reads one <preconditions> block. The config and every
+// <command> declare the same element, so both read it through here.
+func buildPreconditions(n *xnode) ([]string, error) {
+	if err := checkAttrs(n); err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, p := range n.Children() {
+		if p.Name() != "precondition" {
+			return nil, fmt.Errorf("<preconditions>: unexpected child element <%s>", p.Name())
+		}
+		s, err := compileTextElem(p)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, nil
 }
 
 func buildArg(n *xnode) (Arg, error) {
@@ -553,9 +574,10 @@ func entryObject(n *xnode) (map[string]any, error) {
 }
 
 // entryValue maps a single entry element to a Go value: - children that are
-//   all <param> -> a map (name -> template string) - other structural child
-//   elements -> a nested object - otherwise (text / placeholders) -> a
-//   template string
+//
+//	all <param> -> a map (name -> template string) - other structural child
+//	elements -> a nested object - otherwise (text / placeholders) -> a
+//	template string
 func entryValue(n *xnode) (any, error) {
 	var structural []*xnode
 	for _, c := range n.Children() {

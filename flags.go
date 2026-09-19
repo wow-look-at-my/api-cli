@@ -149,9 +149,10 @@ func zeroArg(a Arg) any {
 // gatherFlags builds the .flag sub-map from the cobra-parsed flag set.
 //
 // Bool flags with default=true register a hidden --no-NAME companion; when
-//  set, it flips the value to false. String flags whose configured default
-//  is itself a template (contains `{{`) are rendered against the current
-//  context — but only when the user did not explicitly set the flag.
+//
+//	set, it flips the value to false. String flags whose configured default
+//	is itself a template (contains `{{`) are rendered against the current
+//	context — but only when the user did not explicitly set the flag.
 func gatherFlags(cmd *cobra.Command, node Command, data any) (map[string]any, error) {
 	out := make(map[string]any, len(node.Flags))
 	for _, f := range node.Flags {

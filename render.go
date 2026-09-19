@@ -39,6 +39,10 @@ func cliFuncs() template.FuncMap {
 		"filterSuffix": filterSuffix,
 		"filterPrefix": filterPrefix,
 		"collect":      collectPath,
+		// The path-segment rule, as a pattern= a config names and as a predicate
+		// a <precondition> reads. See guards.go.
+		"segmentPattern": segmentPattern,
+		"safeSegments":   safeSegments,
 	}
 }
 
@@ -173,8 +177,8 @@ func renderString(tmpl string, data any) (string, error) {
 
 // tabwriter formats rows with columns aligned by displayWidth. Accepts:
 //   - []string: a single row per element, tab-separated columns. -
-//   [][]string or [][]any: explicit cells per row. - []any: each element
-//   is a row; either a string or a []any of cells.
+//     [][]string or [][]any: explicit cells per row. - []any: each element
+//     is a row; either a string or a []any of cells.
 //
 // ANSI escapes pass through.
 func tabwriter(v any) (string, error) {

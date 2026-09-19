@@ -18,18 +18,21 @@ import (
 // context composed of args, flags, environment, vars, and the leaf's entry
 // variables. The rendered command is then executed.
 type Config struct {
-	Schema      string                `json:"$schema,omitempty"`
-	Name        string                `json:"name"`
-	Description string                `json:"description,omitempty"`
-	Vars        map[string]any        `json:"vars,omitempty"`
-	Command     *Cmd                  `json:"command,omitempty"`
-	Request     *Request              `json:"request,omitempty"`
-	Cwd         string                `json:"cwd,omitempty"`
-	Stdin       string                `json:"stdin,omitempty"`
-	Formats     map[string]*Format    `json:"formats,omitempty"`
-	Transports  map[string]*Transport `json:"transports,omitempty"`
-	Downloads   *Downloads            `json:"downloads,omitempty"`
-	Commands    []Command             `json:"commands,omitempty"`
+	Schema      string         `json:"$schema,omitempty"`
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	Vars        map[string]any `json:"vars,omitempty"`
+	Command     *Cmd           `json:"command,omitempty"`
+	Request     *Request       `json:"request,omitempty"`
+	Cwd         string         `json:"cwd,omitempty"`
+	Stdin       string         `json:"stdin,omitempty"`
+	// Preconditions gate every node under the config. A guard written here runs
+	// on each run in the tree, which is what keeps one rule out of every leaf.
+	Preconditions []string              `json:"preconditions,omitempty"`
+	Formats       map[string]*Format    `json:"formats,omitempty"`
+	Transports    map[string]*Transport `json:"transports,omitempty"`
+	Downloads     *Downloads            `json:"downloads,omitempty"`
+	Commands      []Command             `json:"commands,omitempty"`
 	// Dir is the directory the config was read from. A <tml src=> resolves
 	// against it, so a path in the config means what the author sees next to
 	// the file rather than wherever the shell happens to sit.
@@ -111,9 +114,10 @@ type Format struct {
 }
 
 // View is a single alternative rendering inside a Format.
-//  --view=<name> from the user wins if set. Else earliest view whose
-//  `When` predicate renders truthy wins. Else earliest view with
-//  `Default: true`. Else earliest view in the slice.
+//
+//	--view=<name> from the user wins if set. Else earliest view whose
+//	`When` predicate renders truthy wins. Else earliest view with
+//	`Default: true`. Else earliest view in the slice.
 type View struct {
 	Name     string `json:"name"`
 	When     string `json:"when,omitempty"`
@@ -417,6 +421,10 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse config %q: %w", path, err)
 	}
+	// A pattern= may name a <var>, and validate compiles what it resolves to.
+	if err := resolveArgPatterns(cfg); err != nil {
+		return nil, fmt.Errorf("parse config %q: %w", path, err)
+	}
 	if err := validate(cfg); err != nil {
 		return nil, fmt.Errorf("validate config %q: %w", path, err)
 	}
@@ -437,6 +445,9 @@ func validate(cfg *Config) error {
 		}
 	}
 	if err := validateTransports(cfg.Transports); err != nil {
+		return err
+	}
+	if err := validatePreconditions(cfg.Preconditions, "top-level"); err != nil {
 		return err
 	}
 	if err := validateDownloadSettings(cfg.Downloads); err != nil {
@@ -633,13 +644,8 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		}
 	}
 
-	// A precondition gates the leaf before any step runs, so .result holds
-	// nothing there. A config that reads it is asking for data that does not
-	// exist yet, and the template error it gets says nothing about why.
-	for i, p := range c.Preconditions {
-		if strings.Contains(p, ".result") {
-			return fmt.Errorf("%s.preconditions[%d]: a precondition runs before <steps>, so .result is empty; move the check into a <step when=> or into the leaf", where, i)
-		}
+	if err := validatePreconditions(c.Preconditions, where); err != nil {
+		return err
 	}
 
 	if c.Command.Defined() && c.Request.Defined() {
@@ -684,9 +690,6 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	}
 	if len(c.Steps) > 0 && !c.executes() {
 		return fmt.Errorf("%s: `steps` needs a node that runs (a leaf, or a parent with runnable=)", where)
-	}
-	if len(c.Preconditions) > 0 && !c.executes() {
-		return fmt.Errorf("%s: `preconditions` needs a node that runs (a leaf, or a parent with runnable=)", where)
 	}
 	stepNames := set.New[string]()
 	for i, s := range c.Steps {

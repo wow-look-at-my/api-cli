@@ -235,18 +235,18 @@ func TestValidate_FlagNameNoNoPrefix(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestValidate_PreconditionsLeafOnly(t *testing.T) {
+// A group node declares a guard for its subtree.
+func TestValidate_PreconditionsAllowedOnGroup(t *testing.T) {
 	cfg := &Config{
 		Name:    "t",
 		Command: &Cmd{Shell: true, Template: "true"},
 		Commands: []Command{{
 			Name:          "x",
-			Preconditions: []string{"oops"},
+			Preconditions: []string{"{{ if not .arg.id }}id is required{{ end }}"},
 			Commands:      []Command{{Name: "y"}},
 		}},
 	}
-	err := validate(cfg)
-	assert.Error(t, err)
+	assert.NoError(t, validate(cfg))
 }
 
 func TestValidate_ConfirmAllowedOnGroup(t *testing.T) {

@@ -67,8 +67,11 @@ func runMCP(transport string, cfg *Config, corsLevel CorsLevel) int {
 // mcpInherit is the inherited context threaded down the command tree during
 // MCP leaf collection. Mirrors the inherited* parameters in buildCommand.
 type mcpInherit struct {
-	prefix  string
-	vars    map[string]any
+	prefix string
+	vars   map[string]any
+	// pre accumulates down the tree rather than overriding, exactly as it does in
+	// buildCommand.
+	pre     []string
 	cmd     *Cmd
 	request *Request
 	cwd     string
@@ -99,6 +102,7 @@ func buildMCPServer(cfg *Config) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: cfg.Name, Version: "1.0.0"}, nil)
 	for _, leaf := range collectMCPLeaves(cfg.Commands, mcpInherit{
 		vars:    cfg.Vars,
+		pre:     cfg.Preconditions,
 		cmd:     cfg.Command,
 		request: cfg.Request,
 		cwd:     cfg.Cwd,
@@ -162,6 +166,7 @@ func collectMCPLeaves(cmds []Command, inh mcpInherit) []mcpLeaf {
 		child := mcpInherit{
 			prefix:  name,
 			vars:    mergeVars(inh.vars, c.Vars),
+			pre:     inheritedPreconditions(inh.pre, c.Preconditions),
 			cmd:     inh.cmd,
 			request: inh.request,
 			cwd:     inh.cwd,
@@ -188,9 +193,11 @@ func collectMCPLeaves(cmds []Command, inh mcpInherit) []mcpLeaf {
 		// A runnable parent is a tool of its own, next to the tools its children
 		// become. Its name is its own path, so both never collide.
 		if c.executes() {
+			node := c
+			node.Preconditions = child.pre
 			out = append(out, mcpLeaf{
 				name:      name,
-				node:      c,
+				node:      node,
 				vars:      child.vars,
 				cmdTmpl:   child.cmd,
 				request:   child.request,
