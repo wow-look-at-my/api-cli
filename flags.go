@@ -60,7 +60,7 @@ func registerFlag(cmd *cobra.Command, f Flag) {
 }
 
 // registerConflicts wires per-flag `conflicts` lists into cobra's mutual
-// exclusion machinery. Each unordered pair is registered once.
+// exclusion machinery. Each unordered pair is registered a single time.
 func registerConflicts(cmd *cobra.Command, flags []Flag) {
 	type pair struct{ a, b string }
 	seen := set.New[pair]()
@@ -85,10 +85,9 @@ func registerConflicts(cmd *cobra.Command, flags []Flag) {
 // into a typed slice; an unsupplied optional variadic arg yields an empty
 // slice so templates can range over it without nil checks.
 //
-// Every declared arg is present, supplied or not: an omitted optional arg holds
-// the zero value of its type ("" or 0). A template that reads it therefore sees
-// a string, which is what a helper like urlpath needs, instead of the nil that
-// missingkey=zero renders as "<no value>".
+// A template that reads it therefore sees a string, which is what a helper like
+// urlpath needs, instead of the nil that missingkey=empty renders as "<no
+// value>".
 func gatherArgs(node Command, args []string) (map[string]any, error) {
 	out := make(map[string]any, len(node.Args))
 	for _, a := range node.Args {
@@ -149,12 +148,10 @@ func zeroArg(a Arg) any {
 
 // gatherFlags builds the .flag sub-map from the cobra-parsed flag set.
 //
-// Two non-trivial cases:
-//  1. Bool flags with default=true register a hidden --no-NAME companion;
-//     when set, it flips the value to false.
-//  2. String flags whose configured default is itself a template (contains
-//     `{{`) are rendered against the current context — but only when the
-//     user did not explicitly set the flag.
+// Bool flags with default=true register a hidden --no-NAME companion; when
+//  set, it flips the value to false. String flags whose configured default
+//  is itself a template (contains `{{`) are rendered against the current
+//  context — but only when the user did not explicitly set the flag.
 func gatherFlags(cmd *cobra.Command, node Command, data any) (map[string]any, error) {
 	out := make(map[string]any, len(node.Flags))
 	for _, f := range node.Flags {
@@ -197,7 +194,7 @@ func gatherFlags(cmd *cobra.Command, node Command, data any) (map[string]any, er
 
 // passthroughParse extracts known flags from a raw arg list. Everything not
 // recognized as a known flag (or its value) goes into rest. Flags are matched
-// with either one or two leading dashes (to support tools like CUDA's cicc
+// with either a single or leading dashes (to support tools like CUDA's cicc
 // that use single-dash long flags). A flag's short alias is also recognized.
 // A bare "--" in the args is forwarded into rest verbatim (along with
 // everything after it), since it may be meaningful to the wrapped command.

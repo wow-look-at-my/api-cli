@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fieldsBlocks wraps one declaration as the single block a leaf carries. Most
-// tests declare one shape, and this keeps them reading that way.
+// fieldsBlocks wraps a single declaration as the single block a leaf carries.
+// Most tests declare a single shape, and this keeps them reading that way.
 func fieldsBlocks(f *Fields) []FieldsBlock {
 	return []FieldsBlock{{Fields: f}}
 }
@@ -79,7 +79,7 @@ func TestFieldsBlocks_TwoTablesOnOneScreen(t *testing.T) {
 	require.Equal(t, 0, code)
 	assert.Contains(t, out, "primary")
 	assert.Contains(t, out, "extra")
-	assert.Contains(t, out, "\n\n") // the two tables are separated
+	assert.Contains(t, out, "\n\n") // both tables are separated
 	assert.Less(t, strings.Index(out, "primary"), strings.Index(out, "extra"))
 }
 

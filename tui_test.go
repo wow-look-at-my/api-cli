@@ -67,7 +67,7 @@ func TestTUI_FrameIsOnlyTheSlotsAndTotals(t *testing.T) {
 	assert.NotContains(t, joined, "done.iso", "a finished transfer holds no slot")
 	assert.NotContains(t, joined, "downloaded", "a queued line is emitted above the block, never drawn in it")
 
-	// header + the one active slot + TOTAL, and nothing else.
+	// header + the a single active slot + TOTAL, and nothing else.
 	assert.Len(t, lines, 3)
 }
 
@@ -92,9 +92,9 @@ func TestTUI_PaintRewritesInPlace(t *testing.T) {
 	assert.Contains(t, buf.String(), "\x1b["+itoa(painted)+"A", "later frames redraw over the last one")
 }
 
-// The point of the whole design: a finished chunk is written once, above the
-// slots, and the block redraws below it. So the line survives into the
-// terminal's scrollback while the slots keep overwriting themselves.
+// The point of the whole design: a finished chunk is written a single time,
+// above the slots, and the block redraws below it. So the line survives into
+// the terminal's scrollback while the slots keep overwriting themselves.
 func TestTUI_PaintEmitsQueuedLinesAboveTheSlots(t *testing.T) {
 	var buf bytes.Buffer
 	tu := newTUI(&buf, 60, staticItems(mkItem(dlActive, "/d/a", 1, 2, time.Now())))
@@ -192,11 +192,11 @@ func TestTUI_InterruptRestoresTheTerminal(t *testing.T) {
 	assert.Contains(t, out, "left as .part files")
 }
 
-// Notify fans a signal out to every display the process started, and one process
-// runs many in turn (the MCP server serves one per tool call). A retired display
-// that answered would write over the display that replaced it, and would end
-// that run. Driving onSignal directly pins the decision, because reaching it
-// through a real signal depends on which select case the runtime picks.
+// Notify fans a signal out to every display the process started, and a single
+// process runs many in turn (the MCP server serves a single per tool call). A
+// retired display that answered would write over the display that replaced it,
+// and would end that run. Driving onSignal directly pins the decision, because
+// reaching it through a real signal depends on which select case the runtime picks.
 func TestTUI_ARetiredDisplayIgnoresTheSignal(t *testing.T) {
 	// The signal goes to the whole process, and `tuiExit` is a package var.
 	t.Serial()
@@ -261,8 +261,6 @@ func TestProgressLine_DropsColumnsAsTheTerminalNarrows(t *testing.T) {
 	assert.Equal(t, minLabelWidth, planProgressLayout(4).label)
 }
 
-// A KiB-range rate ("900.0 KiB/s") is wider than a MiB-range one, and a value
-// that reshapes its own row would break the frame into ragged columns.
 func TestProgressLine_ColumnsAlignAcrossRows(t *testing.T) {
 	lay := planProgressLayout(98)
 	rows := []string{
