@@ -111,9 +111,10 @@ type Format struct {
 }
 
 // View is a single alternative rendering inside a Format.
-//  --view=<name> from the user wins if set. Else earliest view whose
-//  `When` predicate renders truthy wins. Else earliest view with
-//  `Default: true`. Else earliest view in the slice.
+//
+//	--view=<name> from the user wins if set. Else earliest view whose
+//	`When` predicate renders truthy wins. Else earliest view with
+//	`Default: true`. Else earliest view in the slice.
 type View struct {
 	Name     string `json:"name"`
 	When     string `json:"when,omitempty"`

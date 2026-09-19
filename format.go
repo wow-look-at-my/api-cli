@@ -169,9 +169,10 @@ func parseInput(s, mode string) any {
 }
 
 // selectView picks the view to render. If viewFlag is non-empty,
-//  return the named view (or error). Else earliest view whose
-//  When predicate is truthy. Else earliest view with Default
-//  true.
+//
+//	return the named view (or error). Else earliest view whose
+//	When predicate is truthy. Else earliest view with Default
+//	true.
 func selectView(views []View, ctx map[string]any, viewFlag string, cache map[predicateKey]bool) (*View, error) {
 	if viewFlag != "" {
 		for i := range views {

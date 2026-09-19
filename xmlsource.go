@@ -553,9 +553,10 @@ func entryObject(n *xnode) (map[string]any, error) {
 }
 
 // entryValue maps a single entry element to a Go value: - children that are
-//   all <param> -> a map (name -> template string) - other structural child
-//   elements -> a nested object - otherwise (text / placeholders) -> a
-//   template string
+//
+//	all <param> -> a map (name -> template string) - other structural child
+//	elements -> a nested object - otherwise (text / placeholders) -> a
+//	template string
 func entryValue(n *xnode) (any, error) {
 	var structural []*xnode
 	for _, c := range n.Children() {

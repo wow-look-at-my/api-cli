@@ -147,14 +147,15 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 // runLeaf is the per-invocation body for every leaf.
 //
 // Assemble args, flags, env — the base template context. Render the
-//  merged vars against the base context to produce .var. Execute each step
-//  in order, capturing its stdout into .result.<name>. Each step's entry
-//  template is rendered against the current context (including .result.*
-//  from prior steps) before the step runs. Render the leaf's own entry
-//  against the full context (including .result.*) to produce .entry. Render
-//  the effective command template against the full context and execute it,
-//  streaming output to the user. If more than a single command was executed
-//  and --quiet is not set, print the execution count to stderr.
+//
+//	merged vars against the base context to produce .var. Execute each step
+//	in order, capturing its stdout into .result.<name>. Each step's entry
+//	template is rendered against the current context (including .result.*
+//	from prior steps) before the step runs. Render the leaf's own entry
+//	against the full context (including .result.*) to produce .entry. Render
+//	the effective command template against the full context and execute it,
+//	streaming output to the user. If more than a single command was executed
+//	and --quiet is not set, print the execution count to stderr.
 //
 // cwdTmpl is the effective working-directory template for this leaf; an empty
 // string means "use the calling process's cwd". Each step inherits cwdTmpl

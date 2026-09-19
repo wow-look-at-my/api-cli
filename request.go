@@ -42,7 +42,6 @@ func (p *preparedRequest) allows(status int) bool {
 
 type renderedHeader struct{ Name, Value string }
 
-//
 // The request travels over the built-in net/http client, or over the
 // <transport> program the config selects for it (see transport.go).
 //

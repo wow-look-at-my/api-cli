@@ -37,7 +37,6 @@ type stepOutcome struct {
 // inherits the leaf's effective run, which is how a step reuses the ancestor
 // <request> with nothing but a different <entry>. cwdTmpl/stdinTmpl are the
 // leaf's, likewise overridable per step.
-//
 func runSteps(steps []Step, data map[string]any, results map[string]any, cmdTmpl *Cmd, request *Request, cwdTmpl, stdinTmpl string, capture stepCapture, errOut io.Writer) (stepOutcome, error) {
 	var oc stepOutcome
 	for _, step := range steps {
@@ -92,7 +91,6 @@ func runSteps(steps []Step, data map[string]any, results map[string]any, cmdTmpl
 // that is a single run. With it, the step repeats until the predicate holds: an
 // async job that answers "pending" is polled here rather than in a shell loop
 // around the whole program.
-//
 func runStepAction(step Step, data map[string]any, stepCmd *Cmd, stepReq *Request, cwdTmpl, stdinTmpl string, capture stepCapture, errOut io.Writer, oc *stepOutcome) (string, int, error) {
 	if step.Until == "" {
 		out, code, err := runStepOnce(step, data, stepCmd, stepReq, cwdTmpl, stdinTmpl, capture, errOut)
