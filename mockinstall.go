@@ -45,7 +45,7 @@ func installMockWrappers(cfg *Config, configPath, dir string, out io.Writer) err
 		return fmt.Errorf("%s declares no <mock> leaf, so there is nothing to install", configPath)
 	}
 
-	// Two leaves that share a name install a single script, and the later leaf
+	// Leaves that share a name install a single script, and the later leaf
 	// silently wins. A build that then calls the wrong stand-in is very hard to
 	// read back.
 	seen := map[string][]string{}

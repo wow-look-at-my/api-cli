@@ -80,8 +80,8 @@ func TestInstallMocks_ScriptNamesTheLeafPath(t *testing.T) {
 	assert.Contains(t, script, cfgPath, "the config path is absolute, for a build that runs from anywhere")
 }
 
-// Two leaves that share a name would install a single script, and the later
-// leaf would win in silence. A build then calls a stand-in nobody can trace back.
+// Leaves that share a name would install a single script, and the later leaf
+// would win in silence. A build then calls a stand-in nobody can trace back.
 func TestInstallMocks_DuplicateLeafNameFails(t *testing.T) {
 	cfgPath := writeConfig(t, `<config name="t">
 	<command name="cc" passthrough="true">
