@@ -119,7 +119,7 @@ func buildVars(n *xnode) (map[string]any, error) {
 }
 
 // buildRun parses a <run> element into either a Cmd (shell or argv form) or a
-// Request. Exactly one form applies.
+// Request. Exactly a single form applies.
 func buildRun(n *xnode) (*Cmd, *Request, error) {
 	if err := checkAttrs(n); err != nil {
 		return nil, nil, err
@@ -295,7 +295,7 @@ func buildCommandNode(n *xnode) (*Command, error) {
 	return c, nil
 }
 
-// addCommandChild dispatches one child element of a <command> into the Command.
+// addCommandChild dispatches a single child element of a <command> into the Command.
 func addCommandChild(c *Command, child *xnode) error {
 	switch child.Name() {
 	case "arg":
@@ -552,10 +552,11 @@ func entryObject(n *xnode) (map[string]any, error) {
 	return out, nil
 }
 
-// entryValue maps one entry element to a Go value:
-//   - children that are all <param>      -> a map (name -> template string)
-//   - other structural child elements    -> a nested object
-//   - otherwise (text / placeholders)     -> a template string
+// entryValue maps a single entry element to a Go value: - children that are
+//
+//	all <param> -> a map (name -> template string) - other structural child
+//	elements -> a nested object - otherwise (text / placeholders) -> a
+//	template string
 func entryValue(n *xnode) (any, error) {
 	var structural []*xnode
 	for _, c := range n.Children() {

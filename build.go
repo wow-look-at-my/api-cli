@@ -90,7 +90,7 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 	}
 
 	// Resolve effective vars, run (command or request), cwd, stdin, and format
-	// for this subtree. A node's <run> overrides the inherited one of either
+	// for this subtree. A node's <run> overrides the inherited any of either
 	// kind: defining a command clears an inherited request and vice versa, so
 	// the closest ancestor with any <run> wins.
 	effectiveVars := mergeVars(inheritedVars, node.Vars)
@@ -146,18 +146,16 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedCmd *Cmd,
 
 // runLeaf is the per-invocation body for every leaf.
 //
-// Stages:
-//  1. Assemble args, flags, env — the base template context.
-//  2. Render the merged vars against the base context to produce .var.
-//  3. Execute each step in order, capturing its stdout into .result.<name>.
-//     Each step's entry template is rendered against the current context
-//     (including .result.* from prior steps) before the step runs.
-//  4. Render the leaf's own entry against the full context (including
-//     .result.*) to produce .entry.
-//  5. Render the effective command template against the full context and
-//     execute it, streaming output to the user.
-//  6. If more than one command was executed and --quiet is not set, print
-//     the execution count to stderr.
+// Assemble args, flags, env — the base template context. Render the
+//
+//	merged vars against the base context to produce .var. Execute each step
+//	in order, capturing its stdout into .result.<name>. Each step's entry
+//	template is rendered against the current context (including .result.*
+//	from prior steps) before the step runs. Render the leaf's own entry
+//	against the full context (including .result.*) to produce .entry. Render
+//	the effective command template against the full context and execute it,
+//	streaming output to the user. If more than a single command was executed
+//	and --quiet is not set, print the execution count to stderr.
 //
 // cwdTmpl is the effective working-directory template for this leaf; an empty
 // string means "use the calling process's cwd". Each step inherits cwdTmpl
@@ -199,9 +197,9 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 	return runLeafOnce(c, node, args, vars, cmdTmpl, request, cwdTmpl, stdinTmpl, confirmTmpl, formatRef, formats)
 }
 
-// watchable rejects a leaf that cannot repeat. A download transfers a file one
-// time, and a confirm prompt writes into the frame buffer where nobody can
-// answer it, so both fail here rather than hang or repeat the transfer.
+// watchable rejects a leaf that cannot repeat. A download transfers a file a
+// single time, and a confirm prompt writes into the frame buffer where nobody
+// can answer it, so both fail here rather than hang or repeat the transfer.
 func watchable(c *cobra.Command, node Command, confirmTmpl string) error {
 	if len(node.Downloads) > 0 {
 		return fmt.Errorf("--watch does not apply to a <download> leaf")
@@ -214,7 +212,7 @@ func watchable(c *cobra.Command, node Command, confirmTmpl string) error {
 	return nil
 }
 
-// runLeafOnce is one whole run of a leaf. It is also one watch frame.
+// runLeafOnce is a single whole run of a leaf. It is also a single watch frame.
 func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, request *Request, cwdTmpl, stdinTmpl, confirmTmpl string, formatRef *FormatRef, formats map[string]*Format) error {
 	var data map[string]any
 	var err error
@@ -310,8 +308,8 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 	if oc.code != 0 {
 		exitCode = oc.code
 		// The steps failed, so nothing reaches the queue. Take the display down
-		// first: what follows belongs on the terminal, not in a log region that
-		// has stopped updating.
+		// earliest: what follows belongs on the terminal, not in a log region
+		// that has stopped updating.
 		session.close()
 		reportExecutions(c, executions)
 		return nil
@@ -383,8 +381,6 @@ func renderStdin(tmpl string, data any) (string, error) {
 	return renderString(tmpl, data)
 }
 
-// reportExecutions prints the number of commands run to stderr when n > 1
-// and --quiet is not set.
 func reportExecutions(c *cobra.Command, n int) {
 	if n <= 1 {
 		return
@@ -399,12 +395,12 @@ func reportExecutions(c *cobra.Command, n int) {
 // .arg, .env, and .rest in passthrough mode), the flags this invocation
 // supplies, and the merged vars.
 //
-// Vars resolve twice, because the two halves depend on each other: a templated
-// flag default reads .var, and a var reads .flag. Pass one runs without flags
-// purely to feed those defaults. Pass two runs again over the original
-// templates once gather has produced the whole flag map, cobra's declared
-// defaults included. Everything downstream — a URL, an entry, a jq program
-// kept in a <var> — therefore sees this run's flags.
+// Vars resolve again, because both halves depend on each other: a templated
+// flag default reads .var, and a var reads .flag. Pass a single runs without
+// flags purely to feed those defaults. Pass runs again over the original
+// templates a single time gather has produced the whole flag map, cobra's
+// declared defaults included. Everything downstream — a URL, an entry, a jq
+// program kept in a <var> — therefore sees this run's flags.
 func resolveContext(vars, base map[string]any, gather func(preFlag map[string]any) (map[string]any, error)) (map[string]any, error) {
 	preFlag := maps.Clone(base)
 	preFlag["flag"] = map[string]any{}
@@ -474,7 +470,7 @@ func renderVars(vars map[string]any, data map[string]any) (map[string]any, error
 	return cur, nil
 }
 
-// varsEqual reports whether two rendered var maps are equal by JSON identity.
+// varsEqual reports whether rendered var maps are equal by JSON identity.
 func varsEqual(a, b map[string]any) bool {
 	ba, err1 := json.Marshal(a)
 	bb, err2 := json.Marshal(b)

@@ -286,7 +286,7 @@ A `<download>` reaches its URL as a `<request>` does. It goes over the built-in 
 - **The program gets the same `.request` context** -- `method`, `url`, `headers` and `header_lines` -- so one program serves requests and downloads alike. `method` is `GET`, and there is no body.
 - **Its stdout streams into the file** rather than into a buffered response body. That is the one difference between the two paths. It is also why a file larger than memory is fine. The `.part` sibling, the byte count and the digest check are the same code on both.
 - **A non-zero exit fails the download, and the queue retries it.** A program owns its own exit codes. curl says 22 for a 404 and 7 for a refused connection. This path therefore cannot tell an answer from a hiccup, unlike the built-in client, and it lets the attempt limit end the transfer. Its stderr is emitted above the slots.
-- The size is unknown at the start, because there is no `Content-Length`. The display shows `?%` for that file, and it marks the total as a floor.
+- The size is unknown at the start, because there is no `Content-Length`. That file's row drops the bar and the percentage. It reports the bytes and the rate. A frame where no file reported a length drops both columns outright. The total is marked as a floor.
 
 ### Checking a download against a digest
 
