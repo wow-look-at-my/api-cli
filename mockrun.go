@@ -118,7 +118,7 @@ func resolveMockInputs(m *Mock, prog string, raw []string, data map[string]any) 
 // artifacts of this call without repeating their path templates.
 func planMockOutputs(m *Mock, data map[string]any) ([]mockFile, error) {
 	var files []mockFile
-	claimed := map[string]bool{}
+	claimed := set.New[string]()
 
 	for i := range m.Outputs {
 		o := &m.Outputs[i]
@@ -142,10 +142,10 @@ func planMockOutputs(m *Mock, data map[string]any) ([]mockFile, error) {
 			// template forgot to vary. Caught here, rather than after N
 			// writes have landed on top of each other.
 			if !f.append {
-				if claimed[f.path] {
+				if claimed.Contains(f.path) {
 					return nil, fmt.Errorf("mock: output[%d]: two records both write %s; give path= something that varies per record", i, f.path)
 				}
-				claimed[f.path] = true
+				claimed.Add(f.path)
 			}
 			files = append(files, f)
 		}
