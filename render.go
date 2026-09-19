@@ -41,6 +41,10 @@ func cliFuncs() template.FuncMap {
 		"filterPrefix": filterPrefix,
 		"collect":      collectPath,
 		"stem":         stem,
+		// The path-segment rule, as a pattern= a config names and as a predicate
+		// a <precondition> reads. See guards.go.
+		"segmentPattern": segmentPattern,
+		"safeSegments":   safeSegments,
 	}
 }
 

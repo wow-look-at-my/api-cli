@@ -112,6 +112,45 @@ func matchArgPatterns(node Command, res []*regexp.Regexp) cobra.PositionalArgs {
 	}
 }
 
+// matchToolArgs is the same check on the MCP side, where a call arrives as a
+// map rather than as a list of positionals. A pattern is validation, not CLI
+// help text, so a tool call that skips it would let a value the CLI rejects
+// reach the run.
+func matchToolArgs(node Command, arguments map[string]any) error {
+	res := argPatterns(node)
+	for i, a := range node.Args {
+		re := res[i]
+		if re == nil {
+			continue
+		}
+		val, provided := arguments[a.Name]
+		if !provided {
+			continue
+		}
+		for _, v := range argValueStrings(val) {
+			if re.MatchString(v) {
+				continue
+			}
+			return fmt.Errorf("arg %q: %q does not match pattern %q", a.Name, v, a.Pattern)
+		}
+	}
+	return nil
+}
+
+// argValueStrings reads a JSON-decoded argument as the values a pattern applies
+// to. A variadic arg arrives as a list, and each element carries the pattern.
+func argValueStrings(val any) []string {
+	arr, ok := val.([]any)
+	if !ok {
+		return []string{fmt.Sprintf("%v", val)}
+	}
+	out := make([]string, len(arr))
+	for i, v := range arr {
+		out[i] = fmt.Sprintf("%v", v)
+	}
+	return out
+}
+
 // subcommandHint lists what else the value could have been, for a node that has
 // subcommands. It is empty on a leaf, where there is nothing else to suggest.
 func subcommandHint(cmd *cobra.Command) string {

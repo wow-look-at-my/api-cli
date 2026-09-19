@@ -19,6 +19,17 @@
 	</vars>
 
 	<!--
+		A guard declared here runs before every command in the tree, ahead of the
+		guards a node declares for itself. These two values reach a URL path, and
+		this is the one place the rule about them is written. safeSegments reads an
+		absent value as nothing to check, so a leaf that declares neither arg
+		passes.
+	-->
+	<preconditions>
+		<precondition>{{ if not (safeSegments .arg.id .arg.username) }}id and username must each be one path segment{{ end }}</precondition>
+	</preconditions>
+
+	<!--
 		A transport performs requests in place of the built-in HTTP client, for
 		APIs whose auth or wire format is easier to delegate to a program you
 		already have. This one is not the default, so only the request that
@@ -100,7 +111,12 @@
 			</fields>
 		</command>
 		<command name="show" description="List users, or show one. One leaf, two output shapes.">
-			<arg name="id" description="Numeric user ID. Omit it for the list."/>
+			<!--
+				The pattern is the built-in path-segment rule, so this value can
+				neither split the URL path nor climb out of it. An omitted arg is
+				not checked against a pattern, which leaves the list case alone.
+			-->
+			<arg name="id" pattern="{{ segmentPattern }}" description="Numeric user ID. Omit it for the list."/>
 			<!-- The omitted arg is "", so the path stays /users and the list renders. -->
 			<entry>
 				<path>/users<if test="arg.id">/<value name="arg.id" as="urlpath"/></if></path>
