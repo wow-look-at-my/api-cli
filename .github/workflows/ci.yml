@@ -18,12 +18,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: wow-look-at-my/actions@ste-lint#latest
-      # tidy confines a dependency's generate directives here, and refuses them without a backend.
-      - name: Provision the sandbox backend (bubblewrap)
-        run: |
-          sudo apt-get install -y bubblewrap
-          # Ubuntu 24.04 refuses an unprivileged user namespace unless this is off.
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - uses: wow-look-at-my/go-toolchain@master
         with:
           autorelease: 'true'
