@@ -48,7 +48,7 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
-	github.com/segmentio/encoding v0.5.4 // indirect; go-toolchain:generate=a56533ebb827
+	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/wow-look-at-my/xml-validator/reader v0.0.0-20260905064311-b54c8b4b3c13 // indirect; go-toolchain:auto-branch

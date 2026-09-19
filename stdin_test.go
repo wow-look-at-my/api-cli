@@ -31,6 +31,7 @@ func TestStdin_CaptureExecFeedsInput(t *testing.T) {
 }
 
 func TestStdin_EmptyFallsBackToExecStdin(t *testing.T) {
+	t.Serial()
 	out, _ := captureExecStreams(t)
 	prevIn := execStdin
 	execStdin = bytes.NewBufferString("passthrough\n")
@@ -42,6 +43,7 @@ func TestStdin_EmptyFallsBackToExecStdin(t *testing.T) {
 }
 
 func TestStdin_OverridesExecStdin(t *testing.T) {
+	t.Serial()
 	out, _ := captureExecStreams(t)
 	prevIn := execStdin
 	execStdin = bytes.NewBufferString("should-not-appear\n")
