@@ -48,8 +48,8 @@ func parseWatchInterval(what, s string) (time.Duration, error) {
 }
 
 // validateWatch is the load-time check on a node's own watch=. A <download>
-// leaf transfers one time, so an interval on it is a contradiction rather than
-// a setting to ignore.
+// leaf transfers one time. An interval on it is a contradiction, not a setting
+// to ignore.
 func validateWatch(c *Command, where string) error {
 	if c.Watch == "" {
 		return nil
@@ -64,8 +64,8 @@ func validateWatch(c *Command, where string) error {
 }
 
 // watchInterval reports the interval this invocation runs on, and whether the
-// flag chose it. --watch wins over the config's watch=, and --watch off (or 0)
-// runs the leaf one time whatever the config says. Zero means one run.
+// flag chose it. --watch wins over the config's watch=. The value off (or 0)
+// runs the leaf one time whatever the config says. Zero means a single run.
 func watchInterval(c *cobra.Command, configured string) (time.Duration, bool, error) {
 	v, _ := c.Root().PersistentFlags().GetString("watch")
 	switch strings.TrimSpace(v) {

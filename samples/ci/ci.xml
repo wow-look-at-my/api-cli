@@ -5,8 +5,8 @@
 
      KOMODO_URL, KOMODO_API_KEY and KOMODO_API_SECRET configure it.
 
-         ci builds              a board that keeps itself current
-         ci builds --watch off  one frame -->
+         ci builds                a board that keeps itself current
+         ci builds (watch off)    one frame -->
 <config name="ci">
 	<description>A board of the builds running right now.</description>
 

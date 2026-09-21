@@ -27,8 +27,7 @@ func TestDocsCommand_PrintsReadme(t *testing.T) {
 }
 
 // The binary carries the whole README, so every user-facing feature has to be
-// readable from `docs` with no checkout. The watch feature is the one this
-// pins, by its section, its flag row and its config attribute.
+// readable from `docs` with no checkout.
 func TestDocsCommand_ReadmeDocumentsWatch(t *testing.T) {
 	assert.Contains(t, readmeDoc, "\n## Watch\n")
 	assert.Contains(t, readmeDoc, "| `--watch <every>` |")

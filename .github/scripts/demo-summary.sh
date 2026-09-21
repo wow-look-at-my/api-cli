@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
 # Generates a markdown showcase of samples/github/github.xml into
 # $GITHUB_STEP_SUMMARY. For each public endpoint, the script captures
-# THREE outputs and emits them with byte counts so the savings are
-# obvious:
+# Outputs and emits them with byte counts so the savings are obvious:
 #
-#   1. RAW            — the unfiltered GitHub API response. Bloated with
-#                       `*_url` template links and `url`/`html_url`
-#                       self-links. This is what you get if you `curl`
-#                       the API directly.
-#   2. URL-STRIPPED   — same response after our `jq` walk drops every
-#                       key ending in `url`. Still valid JSON; this is
-#                       what `api-cli ... --no-format` (or piping the
-#                       output) gives you.
-#   3. FORMATTED      — the table/detail view rendered through the
+#   RAW — the unfiltered GitHub API response. Bloated with `*_url`
+#                       template links and `url`/`html_url` self-links.
+#                       This is what you get if you `curl` the API
+#                       directly. URL-STRIPPED — same response after our
+#                       `jq` walk drops every key ending in `url`. Still
+#                       valid JSON; this is what `api-cli ... --no-format`
+#                       (or piping the output) gives you. FORMATTED —
+#                       the table/detail view rendered through the
 #                       format/views system in `api-cli`.
 #
 # CONFIDENTIALITY: every endpoint is a *public* GitHub resource
@@ -32,9 +30,9 @@ if [[ ! -x "$artifact" ]]; then
     exit 1
 fi
 
-# `go-toolchain matrix` builds one fat APE. An APE rewrites its own header on
-# first exec, so the file stops matching its checksum. Run a throwaway copy and
-# leave the artifact pristine.
+# `go-toolchain matrix` builds a single fat APE. An APE rewrites its own header
+# on earliest exec, so the file stops matching its checksum. Run a throwaway
+# copy and leave the artifact pristine.
 bin="$(mktemp -d)/api-cli"
 cp "$artifact" "$bin"
 chmod +x "$bin"
@@ -49,7 +47,7 @@ bytes_of() {
         || wc -c < "$1" | tr -d ' '
 }
 
-# Returns "X% smaller" relative to a baseline; e.g. pct_smaller 6103 2047.
+# Returns "X% smaller" relative to a baseline; e.g.
 pct_smaller() {
     awk -v big="$1" -v small="$2" 'BEGIN {
         if (big <= 0) { print "n/a"; exit }
@@ -57,9 +55,9 @@ pct_smaller() {
     }'
 }
 
-# demo TITLE -- ARGV...
-# Renders one section: header, three output blocks (raw / stripped /
-# formatted), each preceded by a byte count.
+# demo TITLE -- ARGV... Renders a single section: header, output
+# blocks (raw / stripped / formatted), each preceded by a byte
+# count.
 demo() {
     local title="$1"
     shift

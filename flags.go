@@ -216,7 +216,7 @@ func zeroArg(a Arg) any {
 
 // gatherFlags builds the .flag sub-map from the cobra-parsed flag set.
 //
-// Bool flags with default=true register a hidden --no-NAME companion; when
+// Bool flags with default=true register a hidden --no-NAME companion.
 //
 //	set, it flips the value to false. String flags whose configured default
 //	is itself a template (contains `{{`) are rendered against the current

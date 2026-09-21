@@ -10,15 +10,15 @@ import (
 )
 
 // A <tml> leaf under a watch runs as a real Bubble Tea program rather than
-// through the repaint loop in watch.go. TML takes a program down that paints
-// for longer than tml.DriveGrace with nothing able to drive it, and only
+// through the repaint loop in watch.go. TML takes down a program that paints
+// for longer than tml.DriveGrace with nothing able to drive it. Only
 // tml.NewProgram builds one the library can reach. A terminal program also
 // owns the alternate screen, the resize and the key handling that a dashboard
 // wants anyway.
 //
-// A tick is one whole run of the leaf, exactly as a watch frame is: the
-// steps, the request and the component render, captured into a buffer that
-// becomes the frame. Nothing is cached between ticks.
+// A tick is a single whole run of the leaf, exactly as a watch frame is:
+// the steps, the request and the component render, captured into a buffer
+// that becomes the frame. Nothing is cached between ticks.
 
 // tmlTickMsg asks the model to run the leaf again.
 type tmlTickMsg time.Time

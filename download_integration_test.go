@@ -66,7 +66,7 @@ func assetServer(t *testing.T) (*httptest.Server, func() (string, string)) {
 }
 
 // A group's watch= reaches a <download> leaf under it. The leaf transfers one
-// time and says so, rather than repeat the transfer or refuse the group.
+// time and says so. It does not repeat the transfer or refuse the group.
 func TestIntegration_DownloadUnderAnInheritedWatchRunsOnce(t *testing.T) {
 	srv, _ := assetServer(t)
 	swapHTTPClient(t, srv)
@@ -93,9 +93,11 @@ func TestIntegration_DownloadUnderAnInheritedWatchRunsOnce(t *testing.T) {
 	assert.Equal(t, "first", string(one))
 
 	// The flag asks for the same thing on purpose, and that stays an error.
-	code, _, errOut = execCmdFull(t, cfg, "assets", "grab", "--download-dir", dir, "--watch", "2s")
-	assert.NotEqual(t, 0, code)
-	assert.Contains(t, errOut, "--watch does not apply to a <download> leaf")
+	// Cobra reports the error itself, so only the exit code is visible here.
+	require.NoError(t, os.Remove(filepath.Join(dir, "one.txt")))
+	code, _, _ = execCmdFull(t, cfg, "assets", "grab", "--download-dir", dir, "--watch", "2s")
+	assert.Equal(t, 1, code)
+	assert.NoFileExists(t, filepath.Join(dir, "one.txt"), "the refused run transfers nothing")
 }
 
 func TestIntegration_DownloadHandsStepURLsToTheQueue(t *testing.T) {

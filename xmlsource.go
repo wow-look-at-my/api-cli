@@ -580,7 +580,7 @@ func entryObject(n *xnode) (map[string]any, error) {
 	return out, nil
 }
 
-// entryValue maps a single entry element to a Go value: - children that are
+// entryValue maps a single entry element to a Go value.
 //
 //	all <param> -> a map (name -> template string) - other structural child
 //	elements -> a nested object - otherwise (text / placeholders) -> a

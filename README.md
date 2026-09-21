@@ -437,6 +437,17 @@ The output of the leaf and its diagnostics both land in the frame. A failed run 
 
 Two leaves refuse to repeat. A `<download>` leaf transfers a file one time. `--watch` on it is an error. A leaf with a `confirm` prompt needs `--yes`, because the prompt draws into the frame where nobody can answer it.
 
+A config can make the repeat the default. `watch="5s"` on a `<command>` says the node runs on that interval unless the flag says otherwise. It takes the same values as the flag. The loader holds it to the same floor. It inherits like `confirm=`, so one attribute on a group covers every screen under it.
+
+```xml
+<command name="board" watch="5s">
+	<command name="builds">...</command>
+	<command name="queue" watch="500ms">...</command>
+</command>
+```
+
+`--watch <every>` overrides the config's value for one invocation. `--watch off` (or `--watch 0`) runs the leaf one time. A `<download>` leaf cannot declare `watch=`. The loader says so. A `<download>` leaf under a group that declares one runs one time, with a warning on stderr that names the interval it ignored. Over MCP a tool call is one run, and the server ignores the attribute.
+
 ## Screens: `<tml>`
 
 `<fields>` says what the records are, and the renderer picks a table or a list. A screen is the other shape of an answer: several numbers, a heading and one list, laid out at once. `<tml>` gives a leaf that shape. It names a component written in [TML](https://github.com/wow-look-at-my/tml), a declarative language for terminal layout. It then says which part of the response fills each of the component's properties.

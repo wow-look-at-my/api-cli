@@ -156,7 +156,7 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []str
 
 // runLeaf is the per-invocation body for every leaf.
 //
-// Assemble args, flags, env — the base template context. Render the
+// Assemble args, flags, env — the base template context.
 //
 //	merged vars against the base context to produce .var. Execute each step
 //	in order, capturing its stdout into .result.<name>. Each step's entry
@@ -178,8 +178,8 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []str
 // unless the step itself sets `stdin`. The stdin template is rendered fresh
 // per execution against the current data context.
 //
-// watch is the effective watch= interval, the leaf's own or an ancestor's,
-// and empty when none declares one. The --watch flag overrides it.
+// watch is the effective watch= interval. It is the leaf's own or an
+// ancestor's. It is empty when none declares one. The --watch flag overrides it.
 func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, request *Request, cwdTmpl, stdinTmpl, confirmTmpl, watch string, formatRef *FormatRef, formats map[string]*Format) error {
 	verboseMode, _ = c.Root().PersistentFlags().GetBool("verbose")
 	dbg, _ := c.Root().PersistentFlags().GetBool("debug")
@@ -192,9 +192,9 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 	if err != nil {
 		return err
 	}
-	// A group's watch= can reach a <download> leaf. That leaf runs one time
-	// and says so, because the transfer cannot repeat and the group's setting
-	// was never about it. The flag asking the same is still an error.
+	// A group's watch= can reach a <download> leaf. The transfer cannot repeat.
+	// The group's setting was never about that leaf. So the leaf runs one time
+	// and says so. The flag that asks the same is still an error.
 	if every > 0 && !fromFlag && len(node.Downloads) > 0 {
 		fmt.Fprintf(execStderr, "warning: watch=%s ignored: a <download> leaf runs one time\n", watch)
 		every = 0
@@ -218,8 +218,8 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 }
 
 // watchable rejects a leaf that cannot repeat. A download transfers a file one
-// time, and a confirm prompt writes into the frame buffer where nobody can
-// answer it, so both fail here rather than hang or repeat the transfer.
+// time. A confirm prompt writes into the frame buffer, where nobody can answer
+// it. Both fail here rather than hang or repeat the transfer.
 func watchable(c *cobra.Command, node Command, confirmTmpl string) error {
 	if len(node.Downloads) > 0 {
 		return fmt.Errorf("--watch does not apply to a <download> leaf")
