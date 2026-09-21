@@ -12,7 +12,7 @@ import (
 var readmeDoc string
 
 // The grammar comes from the specification module, so this binary prints the
-// a single text rather than a copy of it.
+// specification's own text rather than a copy of it.
 var schemaDoc = spec.Schema
 
 //go:embed api.example.xml

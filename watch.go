@@ -21,13 +21,14 @@ import (
 // The repaint uses the same ANSI sequences as the download display. It needs no
 // terminal library, because a frame is a fixed-height block of plain lines.
 
-// watchMinInterval is the floor on --watch. A shorter interval repaints faster
-// than a terminal can draw, and it hammers whatever the leaf calls.
+// watchMinInterval is the floor on a watch interval. A shorter interval
+// repaints faster than a terminal can draw, and it hammers whatever the leaf
+// calls.
 const watchMinInterval = 100 * time.Millisecond
 
-// parseWatchInterval reads the --watch value. Anything else is a Go
-// duration.
-func parseWatchInterval(s string) (time.Duration, error) {
+// parseWatchInterval reads an interval: a Go duration, or a plain number of
+// seconds. An empty value is no interval. what names the source in an error.
+func parseWatchInterval(what, s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, nil
@@ -36,21 +37,46 @@ func parseWatchInterval(s string) (time.Duration, error) {
 	if err != nil {
 		secs, ferr := strconv.ParseFloat(s, 64)
 		if ferr != nil {
-			return 0, fmt.Errorf("--watch %q: want a duration (2s, 500ms) or a number of seconds", s)
+			return 0, fmt.Errorf("%s %q: want a duration (2s, 500ms) or a number of seconds", what, s)
 		}
 		d = time.Duration(secs * float64(time.Second))
 	}
 	if d < watchMinInterval {
-		return 0, fmt.Errorf("--watch %q: interval must be at least %s", s, watchMinInterval)
+		return 0, fmt.Errorf("%s %q: interval must be at least %s", what, s, watchMinInterval)
 	}
 	return d, nil
 }
 
-// watchInterval reports the interval this invocation asked for. empty means
-// the leaf runs a single time.
-func watchInterval(c *cobra.Command) (time.Duration, error) {
+// validateWatch is the load-time check on a node's own watch=. A <download>
+// leaf transfers one time, so an interval on it is a contradiction rather than
+// a setting to ignore.
+func validateWatch(c *Command, where string) error {
+	if c.Watch == "" {
+		return nil
+	}
+	if _, err := parseWatchInterval(where+": watch=", c.Watch); err != nil {
+		return err
+	}
+	if len(c.Downloads) > 0 {
+		return fmt.Errorf("%s: watch= does not apply to a <download> leaf", where)
+	}
+	return nil
+}
+
+// watchInterval reports the interval this invocation runs on, and whether the
+// flag chose it. --watch wins over the config's watch=, and --watch off (or 0)
+// runs the leaf one time whatever the config says. Zero means one run.
+func watchInterval(c *cobra.Command, configured string) (time.Duration, bool, error) {
 	v, _ := c.Root().PersistentFlags().GetString("watch")
-	return parseWatchInterval(v)
+	switch strings.TrimSpace(v) {
+	case "":
+		d, err := parseWatchInterval("watch=", configured)
+		return d, false, err
+	case "off", "0":
+		return 0, true, nil
+	}
+	d, err := parseWatchInterval("--watch", v)
+	return d, true, err
 }
 
 // runWatch repaints body's output every interval until the user interrupts it.
@@ -149,8 +175,8 @@ func (p *watchPainter) paint(header, bodyText string) {
 		b.WriteString(clipDisplay(line, p.width))
 		b.WriteByte('\n')
 	}
-	// A shorter frame than the last a single leaves stale rows below it. Clear
-	// them, then come back up so the next repaint still starts at the frame's top.
+	// A frame shorter than the last leaves stale rows below it. Clear them,
+	// then come back up so the next repaint still starts at the frame's top.
 	if extra := p.painted - len(lines); extra > 0 {
 		for range extra {
 			b.WriteString(ansiClearLine)

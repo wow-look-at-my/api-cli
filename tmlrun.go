@@ -9,14 +9,14 @@ import (
 	"github.com/wow-look-at-my/tml"
 )
 
-// A <tml> leaf under --watch runs as a real Bubble Tea program rather than
-// through the repaint loop in watch.go. reasons, and the earliest a single
-// decides it: TML takes a program down that paints for longer than
-// tml.DriveGrace with nothing able to drive it, and only tml.NewProgram builds
-// a single the library can reach. the next is that a terminal program owns the
-// alternate screen, the resize and the key handling that a dashboard wants anyway.
+// A <tml> leaf under a watch runs as a real Bubble Tea program rather than
+// through the repaint loop in watch.go. TML takes a program down that paints
+// for longer than tml.DriveGrace with nothing able to drive it, and only
+// tml.NewProgram builds one the library can reach. A terminal program also
+// owns the alternate screen, the resize and the key handling that a dashboard
+// wants anyway.
 //
-// A tick is a single whole run of the leaf, exactly as a watch frame is: the
+// A tick is one whole run of the leaf, exactly as a watch frame is: the
 // steps, the request and the component render, captured into a buffer that
 // becomes the frame. Nothing is cached between ticks.
 
@@ -31,9 +31,7 @@ type tmlModel struct {
 	code          int
 }
 
-// runTMLProgram paints body's output every interval until the user quits. A
-// empty interval draws a single frame and waits, which is a dashboard of a
-// thing that does not change on its own.
+// runTMLProgram paints body's output every interval until the user quits.
 func runTMLProgram(every time.Duration, body func() error) error {
 	_, width, height := stdoutSize()
 	m := &tmlModel{every: every, body: body, width: width, height: height}
@@ -100,8 +98,5 @@ func (m *tmlModel) refresh() tea.Cmd {
 		buf.WriteString("\nerror: " + err.Error() + "\n")
 	}
 	m.frame = buf.String()
-	if m.every <= 0 {
-		return nil
-	}
 	return tea.Tick(m.every, func(t time.Time) tea.Msg { return tmlTickMsg(t) })
 }

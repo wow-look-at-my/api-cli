@@ -984,6 +984,7 @@ The grammar is an XSD that [api-cli-spec](https://github.com/wow-look-at-my/api-
 | `passthrough="true"` | Leaf-only. See [Passthrough mode](#passthrough-mode). |
 | `runnable="true"` | A node with subcommands runs in its own right. Every `<arg>` then needs a `pattern=`. See [A parent that also runs](#a-parent-that-also-runs). |
 | `confirm=` (or `<confirm>`) | Prompt `<msg> [y/N]` before the run. `--yes` bypasses it. Off a terminal the run refuses rather than assume a yes. Inherited. |
+| `watch=` | Repeat on this interval by default (`5s`, `500ms`, or seconds). `--watch` overrides it, and `--watch off` runs once. Inherited. Not on a `<download>` leaf. See [Watch](#watch). |
 | `<arg>` / `<flag>` | Positional args / named flags. |
 | `<vars>` | Merged with ancestor vars (this node wins). |
 | `<run>` / `<cwd>` / `<stdin>` | Override the inherited executable / cwd / stdin. |
@@ -1035,7 +1036,7 @@ One predicate covers both cases. `{{ .arg.id }}` is truthy when the arg is prese
 | `--format <mode>` |       | `auto`  | `raw` / `auto` / `always`. |
 | `--as <sink>`     |       |         | Force a `<fields>` representation: `table|list|lines|raw|json|markdown|csv|timeline`. |
 | `--view <name>`   |       |         | Pick a named legacy view, bypassing predicate selection. |
-| `--watch <every>` |       |         | Re-run on an interval and repaint in place: `2s`, `500ms`, or seconds (`2`). See [Watch](#watch). |
+| `--watch <every>` |       |         | Re-run on an interval and repaint in place: `2s`, `500ms`, or seconds (`2`). Overrides the config's `watch=`, and `off` runs once. See [Watch](#watch). |
 | `--var KEY=VALUE` |       |         | Set an env var before evaluation (so `{{.env.KEY}}` sees it). Repeatable. |
 | `--concurrency <n>` |     | `4`     | Parallel downloads. See [Downloads](#downloads). |
 | `--download-dir <path>` | | `.`     | Base directory for `<download>` destinations. |

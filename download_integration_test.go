@@ -65,6 +65,39 @@ func assetServer(t *testing.T) (*httptest.Server, func() (string, string)) {
 	return srv, func() (string, string) { return auth, cookie }
 }
 
+// A group's watch= reaches a <download> leaf under it. The leaf transfers one
+// time and says so, rather than repeat the transfer or refuse the group.
+func TestIntegration_DownloadUnderAnInheritedWatchRunsOnce(t *testing.T) {
+	srv, _ := assetServer(t)
+	swapHTTPClient(t, srv)
+	swapDownloadClient(t, srv)
+	dir := t.TempDir()
+
+	cfg, err := loadStr(t, `<config name="dl">
+		<command name="assets" watch="5s">
+			<command name="grab">
+				<download>
+					<url>`+srv.URL+`/files/one</url>
+					<to>one.txt</to>
+				</download>
+			</command>
+		</command>
+	</config>`)
+	require.NoError(t, err)
+
+	code, _, errOut := execCmdFull(t, cfg, "assets", "grab", "--download-dir", dir)
+	require.Equal(t, 0, code, "stderr: %s", errOut)
+	assert.Contains(t, errOut, "warning: watch=5s ignored: a <download> leaf runs one time")
+	one, err := os.ReadFile(filepath.Join(dir, "one.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "first", string(one))
+
+	// The flag asks for the same thing on purpose, and that stays an error.
+	code, _, errOut = execCmdFull(t, cfg, "assets", "grab", "--download-dir", dir, "--watch", "2s")
+	assert.NotEqual(t, 0, code)
+	assert.Contains(t, errOut, "--watch does not apply to a <download> leaf")
+}
+
 func TestIntegration_DownloadHandsStepURLsToTheQueue(t *testing.T) {
 	srv, seen := assetServer(t)
 	swapHTTPClient(t, srv)

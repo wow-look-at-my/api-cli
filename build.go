@@ -34,10 +34,11 @@ var isInteractive = func() bool {
 // closest-ancestor stdin template; the node's own stdin, if non-empty,
 // overrides it for this subtree. inheritedConfirm is the closest-ancestor
 // confirm template; the node's own confirm, if non-empty, overrides it.
+// inheritedWatch is the closest-ancestor watch= interval, on the same rule.
 // inheritedFormat is the closest-ancestor format reference; the node's own
 // format, if set, overrides it. formats is the top-level format registry used
 // to resolve named references.
-func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []string, inheritedCmd *Cmd, inheritedRequest *Request, inheritedCwd, inheritedStdin, inheritedConfirm string, inheritedFormat *FormatRef, formats map[string]*Format) *cobra.Command {
+func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []string, inheritedCmd *Cmd, inheritedRequest *Request, inheritedCwd, inheritedStdin, inheritedConfirm, inheritedWatch string, inheritedFormat *FormatRef, formats map[string]*Format) *cobra.Command {
 	useStr := node.Name
 	requiredArgs := 0
 	hasVariadic := false
@@ -118,6 +119,10 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []str
 	if node.Confirm != "" {
 		effectiveConfirm = node.Confirm
 	}
+	effectiveWatch := inheritedWatch
+	if node.Watch != "" {
+		effectiveWatch = node.Watch
+	}
 	effectiveFormat := inheritedFormat
 	if node.Format.Defined() {
 		effectiveFormat = node.Format
@@ -134,15 +139,16 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []str
 		leafCwd := effectiveCwd
 		leafStdin := effectiveStdin
 		leafConfirm := effectiveConfirm
+		leafWatch := effectiveWatch
 		leafFormat := effectiveFormat
 		leafFormats := formats
 		cmd.RunE = func(c *cobra.Command, args []string) error {
-			return runLeaf(c, nodeCopy, args, leafVars, leafCmd, leafRequest, leafCwd, leafStdin, leafConfirm, leafFormat, leafFormats)
+			return runLeaf(c, nodeCopy, args, leafVars, leafCmd, leafRequest, leafCwd, leafStdin, leafConfirm, leafWatch, leafFormat, leafFormats)
 		}
 	}
 
 	for _, child := range node.Commands {
-		cmd.AddCommand(buildCommand(child, effectiveVars, effectivePre, effectiveCmd, effectiveRequest, effectiveCwd, effectiveStdin, effectiveConfirm, effectiveFormat, formats))
+		cmd.AddCommand(buildCommand(child, effectiveVars, effectivePre, effectiveCmd, effectiveRequest, effectiveCwd, effectiveStdin, effectiveConfirm, effectiveWatch, effectiveFormat, formats))
 	}
 
 	return cmd
@@ -171,7 +177,10 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []str
 // means "inherit the parent process's stdin". Each step inherits stdinTmpl
 // unless the step itself sets `stdin`. The stdin template is rendered fresh
 // per execution against the current data context.
-func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, request *Request, cwdTmpl, stdinTmpl, confirmTmpl string, formatRef *FormatRef, formats map[string]*Format) error {
+//
+// watch is the effective watch= interval, the leaf's own or an ancestor's,
+// and empty when none declares one. The --watch flag overrides it.
+func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, request *Request, cwdTmpl, stdinTmpl, confirmTmpl, watch string, formatRef *FormatRef, formats map[string]*Format) error {
 	verboseMode, _ = c.Root().PersistentFlags().GetBool("verbose")
 	dbg, _ := c.Root().PersistentFlags().GetBool("debug")
 	if dbg {
@@ -179,9 +188,16 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		verboseMode = true
 	}
 
-	every, err := watchInterval(c)
+	every, fromFlag, err := watchInterval(c, watch)
 	if err != nil {
 		return err
+	}
+	// A group's watch= can reach a <download> leaf. That leaf runs one time
+	// and says so, because the transfer cannot repeat and the group's setting
+	// was never about it. The flag asking the same is still an error.
+	if every > 0 && !fromFlag && len(node.Downloads) > 0 {
+		fmt.Fprintf(execStderr, "warning: watch=%s ignored: a <download> leaf runs one time\n", watch)
+		every = 0
 	}
 	if every > 0 {
 		if err := watchable(c, node, confirmTmpl); err != nil {
@@ -201,9 +217,9 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 	return runLeafOnce(c, node, args, vars, cmdTmpl, request, cwdTmpl, stdinTmpl, confirmTmpl, formatRef, formats)
 }
 
-// watchable rejects a leaf that cannot repeat. A download transfers a file a
-// single time, and a confirm prompt writes into the frame buffer where nobody
-// can answer it, so both fail here rather than hang or repeat the transfer.
+// watchable rejects a leaf that cannot repeat. A download transfers a file one
+// time, and a confirm prompt writes into the frame buffer where nobody can
+// answer it, so both fail here rather than hang or repeat the transfer.
 func watchable(c *cobra.Command, node Command, confirmTmpl string) error {
 	if len(node.Downloads) > 0 {
 		return fmt.Errorf("--watch does not apply to a <download> leaf")
