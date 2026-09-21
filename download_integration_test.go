@@ -65,8 +65,8 @@ func assetServer(t *testing.T) (*httptest.Server, func() (string, string)) {
 	return srv, func() (string, string) { return auth, cookie }
 }
 
-// A group's watch= reaches a <download> leaf under it. The leaf transfers one
-// time and says so. It does not repeat the transfer or refuse the group.
+// A group's watch= reaches a <download> leaf under it. It does not repeat the
+// transfer or refuse the group.
 func TestIntegration_DownloadUnderAnInheritedWatchRunsOnce(t *testing.T) {
 	srv, _ := assetServer(t)
 	swapHTTPClient(t, srv)
