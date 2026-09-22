@@ -26,6 +26,15 @@ func TestDocsCommand_PrintsReadme(t *testing.T) {
 	assert.Equal(t, readmeDoc, out.String())
 }
 
+// The binary carries the whole README, so every user-facing feature has to be
+// readable from `docs` with no checkout.
+func TestDocsCommand_ReadmeDocumentsWatch(t *testing.T) {
+	assert.Contains(t, readmeDoc, "\n## Watch\n")
+	assert.Contains(t, readmeDoc, "| `--watch <every>` |")
+	assert.Contains(t, readmeDoc, "| `watch=` |")
+	assert.Contains(t, readmeDoc, "--watch off")
+}
+
 func TestDocsCommand_Schema(t *testing.T) {
 	t.Serial()
 	var out bytes.Buffer

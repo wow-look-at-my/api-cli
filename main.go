@@ -121,14 +121,14 @@ func newRoot(cfg *Config) *cobra.Command {
 	root.PersistentFlags().String("format", "auto", "Output formatting mode: raw|auto|always.")
 	root.PersistentFlags().String("view", "", "Select a named view from the active format (overrides selectors).")
 	root.PersistentFlags().String("as", "", "Force a <fields> representation: table|list|lines|raw|json|markdown|csv|timeline (default: auto).")
-	root.PersistentFlags().String("watch", "", "Re-run the command on an interval and repaint in place: a duration (2s) or seconds (2).")
+	root.PersistentFlags().String("watch", "", "Re-run the command on an interval and repaint in place: a duration (2s) or seconds (2). Overrides the config's watch=; \"off\" runs once.")
 	root.PersistentFlags().Int("concurrency", defaultConcurrency, "Parallel downloads for <download> hand-offs.")
 	root.PersistentFlags().String("download-dir", ".", "Base directory for <download> destinations.")
 	root.PersistentFlags().Bool("no-tui", false, "Disable the download TUI; report progress as plain lines.")
 
 	if cfg != nil {
 		for _, c := range cfg.Commands {
-			root.AddCommand(buildCommand(c, cfg.Vars, cfg.Preconditions, cfg.Command, cfg.Request, cfg.Cwd, cfg.Stdin, "", nil, cfg.Formats))
+			root.AddCommand(buildCommand(c, cfg.Vars, cfg.Preconditions, cfg.Command, cfg.Request, cfg.Cwd, cfg.Stdin, "", "", nil, cfg.Formats))
 		}
 	} else {
 		// Cobra's default help template only renders the flags/usage block

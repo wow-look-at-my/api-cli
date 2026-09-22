@@ -5,8 +5,8 @@
 
      KOMODO_URL, KOMODO_API_KEY and KOMODO_API_SECRET configure it.
 
-         ci builds              one frame
-         ci builds (watch 5s)   a board that keeps itself current -->
+         ci builds                a board that keeps itself current
+         ci builds (watch off)    one frame -->
 <config name="ci">
 	<description>A board of the builds running right now.</description>
 
@@ -24,7 +24,7 @@
 		</request>
 	</run>
 
-	<command name="builds" description="The builds running right now, with the tail of each log.">
+	<command name="builds" description="The builds running right now, with the tail of each log." watch="5s">
 		<flag name="lines" short="l" type="int" default="4" description="Log lines to show per build."/>
 		<flag name="width" short="w" type="int" default="96" description="Clip a log line to this many cells."/>
 

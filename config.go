@@ -87,6 +87,7 @@ type Command struct {
 	Entry         json.RawMessage `json:"entry,omitempty"`
 	Preconditions []string        `json:"preconditions,omitempty"`
 	Confirm       string          `json:"confirm,omitempty"`
+	Watch         string          `json:"watch,omitempty"`
 	Format        *FormatRef      `json:"format,omitempty"`
 	Fields        []FieldsBlock   `json:"fields,omitempty"`
 	TML           *TML            `json:"tml,omitempty"`
@@ -586,67 +587,11 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		return err
 	}
 
-	argNames := set.New[string]()
-	requiredAfterOptional := false
-	for i, a := range c.Args {
-		aw := fmt.Sprintf("%s.args[%d]", where, i)
-		if strings.TrimSpace(a.Name) == "" {
-			return fmt.Errorf("%s: name required", aw)
-		}
-		if !validArgTypes.Contains(a.Type) {
-			return fmt.Errorf("%s: type %q must be one of string|int", aw, a.Type)
-		}
-		if argNames.Contains(a.Name) {
-			return fmt.Errorf("%s: duplicate arg name %q", aw, a.Name)
-		}
-		argNames.Add(a.Name)
-		if a.Variadic && i != len(c.Args)-1 {
-			return fmt.Errorf("%s: variadic arg %q must be the last arg", aw, a.Name)
-		}
-		if !a.Required {
-			requiredAfterOptional = true
-		} else if requiredAfterOptional {
-			return fmt.Errorf("%s: required arg %q cannot follow an optional arg", aw, a.Name)
-		}
+	if err := validateArgsAndFlags(c, where); err != nil {
+		return err
 	}
-
-	flagNames := set.New[string]()
-	flagShorts := set.New[string]()
-	for i, fl := range c.Flags {
-		fw := fmt.Sprintf("%s.flags[%d]", where, i)
-		if strings.TrimSpace(fl.Name) == "" {
-			return fmt.Errorf("%s: name required", fw)
-		}
-		if !validFlagTypes.Contains(fl.Type) {
-			return fmt.Errorf("%s: type %q must be one of string|bool|int|string-slice", fw, fl.Type)
-		}
-		if flagNames.Contains(fl.Name) {
-			return fmt.Errorf("%s: duplicate flag name %q", fw, fl.Name)
-		}
-		flagNames.Add(fl.Name)
-		if fl.Short != "" {
-			if len(fl.Short) != 1 {
-				return fmt.Errorf("%s: short %q must be a single character", fw, fl.Short)
-			}
-			if flagShorts.Contains(fl.Short) {
-				return fmt.Errorf("%s: duplicate short %q", fw, fl.Short)
-			}
-			flagShorts.Add(fl.Short)
-		}
-		if strings.HasPrefix(fl.Name, "no-") {
-			return fmt.Errorf("%s: flag name %q cannot start with \"no-\" (reserved for bool negation)", fw, fl.Name)
-		}
-	}
-	for i, fl := range c.Flags {
-		fw := fmt.Sprintf("%s.flags[%d]", where, i)
-		for _, peer := range fl.Conflicts {
-			if peer == fl.Name {
-				return fmt.Errorf("%s: flag %q conflicts with itself", fw, fl.Name)
-			}
-			if !flagNames.Contains(peer) {
-				return fmt.Errorf("%s: flag %q conflicts with unknown flag %q", fw, fl.Name, peer)
-			}
-		}
+	if err := validateWatch(c, where); err != nil {
+		return err
 	}
 
 	if err := validatePreconditions(c.Preconditions, where); err != nil {

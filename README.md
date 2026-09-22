@@ -485,6 +485,17 @@ The output of the leaf and its diagnostics both land in the frame. A failed run 
 
 Two leaves refuse to repeat. A `<download>` leaf transfers a file one time. `--watch` on it is an error. A leaf with a `confirm` prompt needs `--yes`, because the prompt draws into the frame where nobody can answer it.
 
+A config can make the repeat the default. `watch="5s"` on a `<command>` says the node runs on that interval unless the flag says otherwise. It takes the same values as the flag. The loader holds it to the same floor. It inherits like `confirm=`, so one attribute on a group covers every screen under it.
+
+```xml
+<command name="board" watch="5s">
+	<command name="builds">...</command>
+	<command name="queue" watch="500ms">...</command>
+</command>
+```
+
+`--watch <every>` overrides the config's value for one invocation. `--watch off` (or `--watch 0`) runs the leaf one time. A `<download>` leaf cannot declare `watch=`. The loader says so. A `<download>` leaf under a group that declares one runs one time, with a warning on stderr that names the interval it ignored. Over MCP a tool call is one run, and the server ignores the attribute.
+
 ## Screens: `<tml>`
 
 `<fields>` says what the records are, and the renderer picks a table or a list. A screen is the other shape of an answer: several numbers, a heading and one list, laid out at once. `<tml>` gives a leaf that shape. It names a component written in [TML](https://github.com/wow-look-at-my/tml), a declarative language for terminal layout. It then says which part of the response fills each of the component's properties.
@@ -1032,6 +1043,7 @@ The grammar is an XSD that [api-cli-spec](https://github.com/wow-look-at-my/api-
 | `passthrough="true"` | Leaf-only. See [Passthrough mode](#passthrough-mode). |
 | `runnable="true"` | A node with subcommands runs in its own right. Every `<arg>` then needs a `pattern=`. See [A parent that also runs](#a-parent-that-also-runs). |
 | `confirm=` (or `<confirm>`) | Prompt `<msg> [y/N]` before the run. `--yes` bypasses it. Off a terminal the run refuses rather than assume a yes. Inherited. |
+| `watch=` | Repeat on this interval by default (`5s`, `500ms`, or seconds). `--watch` overrides it, and `--watch off` runs once. Inherited. Not on a `<download>` leaf. See [Watch](#watch). |
 | `<arg>` / `<flag>` | Positional args / named flags. |
 | `<vars>` | Merged with ancestor vars (this node wins). |
 | `<run>` / `<cwd>` / `<stdin>` | Override the inherited executable / cwd / stdin. |
@@ -1084,7 +1096,7 @@ One predicate covers both cases. `{{ .arg.id }}` is truthy when the arg is prese
 | `--format <mode>` |       | `auto`  | `raw` / `auto` / `always`. |
 | `--as <sink>`     |       |         | Force a `<fields>` representation: `table|list|lines|raw|json|markdown|csv|timeline`. |
 | `--view <name>`   |       |         | Pick a named legacy view, bypassing predicate selection. |
-| `--watch <every>` |       |         | Re-run on an interval and repaint in place: `2s`, `500ms`, or seconds (`2`). See [Watch](#watch). |
+| `--watch <every>` |       |         | Re-run on an interval and repaint in place: `2s`, `500ms`, or seconds (`2`). Overrides the config's `watch=`, and `off` runs once. See [Watch](#watch). |
 | `--var KEY=VALUE` |       |         | Set an env var before evaluation (so `{{.env.KEY}}` sees it). Repeatable. |
 | `--concurrency <n>` |     | `4`     | Parallel downloads. See [Downloads](#downloads). |
 | `--download-dir <path>` | | `.`     | Base directory for `<download>` destinations. |
