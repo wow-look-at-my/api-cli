@@ -251,7 +251,6 @@ type progressRow struct {
 	p     itemProgress
 }
 
-
 // frame renders the block: the counts header, a single slot per in-flight
 // download, and the aggregate line.
 func (t *tui) frame(now time.Time) []string {
