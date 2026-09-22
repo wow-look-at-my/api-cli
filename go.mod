@@ -8,19 +8,19 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
-	github.com/wow-look-at-my/api-cli-spec v0.0.0-20260914102655-9db6dec83491 // go-toolchain:auto-branch
-	github.com/wow-look-at-my/api-dsl v0.0.0-20260914102251-0c828c1540bf // go-toolchain:auto-branch
-	github.com/wow-look-at-my/ascii-timeline v0.0.0-20260918064607-0889e1479b9e // go-toolchain:auto-branch
+	github.com/wow-look-at-my/api-cli-spec v0.0.0
+	github.com/wow-look-at-my/api-dsl v0.0.0
+	github.com/wow-look-at-my/ascii-timeline v0.0.0
 	golang.org/x/term v0.43.0
 	golang.org/x/text v0.37.0
 )
 
-require github.com/wow-look-at-my/go-containers v0.0.0-20260913115023-d3bbbdd0286d // go-toolchain:auto-branch
+require github.com/wow-look-at-my/go-containers v0.0.0
 
 require (
 	charm.land/bubbletea/v2 v2.0.9
 	github.com/spf13/pflag v1.0.9
-	github.com/wow-look-at-my/tml v0.0.0-20260906010451-55d1cae28f7e // go-toolchain:auto-branch
+	github.com/wow-look-at-my/tml v0.0.0
 )
 
 require (
