@@ -30,10 +30,11 @@ func TestParseWatchInterval(t *testing.T) {
 		{in: "soon", wantErr: "want a duration"},
 	}
 	for _, c := range cases {
-		got, err := parseWatchInterval(c.in)
+		got, err := parseWatchInterval("--watch", c.in)
 		if c.wantErr != "" {
 			require.Error(t, err, "input %q", c.in)
 			assert.Contains(t, err.Error(), c.wantErr, "input %q", c.in)
+			assert.Contains(t, err.Error(), "--watch", "the error names its source")
 			continue
 		}
 		require.NoError(t, err, "input %q", c.in)
@@ -174,16 +175,77 @@ func watchRoot(t *testing.T, args ...string) *cobra.Command {
 }
 
 func TestWatchInterval_ReadsTheFlag(t *testing.T) {
-	got, err := watchInterval(watchRoot(t, "--watch", "2s"))
+	got, fromFlag, err := watchInterval(watchRoot(t, "--watch", "2s"), "")
 	require.NoError(t, err)
 	assert.Equal(t, 2*time.Second, got)
+	assert.True(t, fromFlag)
 
-	got, err = watchInterval(watchRoot(t))
+	got, fromFlag, err = watchInterval(watchRoot(t), "")
 	require.NoError(t, err)
-	assert.Zero(t, got, "no flag means the leaf runs one time")
+	assert.Zero(t, got, "no flag and no watch= means the leaf runs one time")
+	assert.False(t, fromFlag)
 
-	_, err = watchInterval(watchRoot(t, "--watch", "nope"))
+	_, _, err = watchInterval(watchRoot(t, "--watch", "nope"), "")
 	require.Error(t, err)
+}
+
+func TestWatchInterval_TheFlagOverridesTheConfig(t *testing.T) {
+	got, fromFlag, err := watchInterval(watchRoot(t), "5s")
+	require.NoError(t, err)
+	assert.Equal(t, 5*time.Second, got, "watch= is the default interval")
+	assert.False(t, fromFlag)
+
+	got, fromFlag, err = watchInterval(watchRoot(t, "--watch", "1s"), "5s")
+	require.NoError(t, err)
+	assert.Equal(t, time.Second, got, "--watch wins over watch=")
+	assert.True(t, fromFlag)
+
+	for _, off := range []string{"off", "0"} {
+		got, fromFlag, err = watchInterval(watchRoot(t, "--watch", off), "5s")
+		require.NoError(t, err, "--watch %s", off)
+		assert.Zero(t, got, "--watch %s runs the leaf one time whatever the config says", off)
+		assert.True(t, fromFlag)
+	}
+
+	_, _, err = watchInterval(watchRoot(t), "soon")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "watch=", "the error names the config attribute")
+}
+
+func TestValidateWatch(t *testing.T) {
+	require.NoError(t, validateWatch(&Command{Name: "a"}, "a"))
+	require.NoError(t, validateWatch(&Command{Name: "a", Watch: "5s"}, "a"))
+	require.NoError(t, validateWatch(&Command{Name: "a", Watch: "2"}, "a"))
+
+	err := validateWatch(&Command{Name: "a", Watch: "soon"}, "commands[0]")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "commands[0]: watch=")
+
+	err = validateWatch(&Command{Name: "a", Watch: "10ms"}, "a")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "at least")
+
+	err = validateWatch(&Command{Name: "a", Watch: "5s", Downloads: []Download{{URL: "http://x/f"}}}, "a")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "<download>")
+}
+
+func TestValidate_WatchOnAGroupCoversItsLeaves(t *testing.T) {
+	cfg, err := loadStr(t, `<config name="w">
+		<run>echo hi</run>
+		<command name="board" watch="5s">
+			<command name="a"/>
+			<command name="b" watch="500ms"/>
+		</command></config>`)
+	require.NoError(t, err)
+	assert.Equal(t, "5s", cfg.Commands[0].Watch)
+	assert.Equal(t, "", cfg.Commands[0].Commands[0].Watch, "inheritance happens at build time, not at parse time")
+	assert.Equal(t, "500ms", cfg.Commands[0].Commands[1].Watch)
+
+	_, err = loadStr(t, `<config name="w">
+		<command name="get" watch="5s"><download><url>http://x/f</url></download></command></config>`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "watch= does not apply to a <download> leaf")
 }
 
 func TestWatchable_RejectsALeafThatCannotRepeat(t *testing.T) {

@@ -13,6 +13,74 @@ import (
 	"github.com/wow-look-at-my/go-containers/set"
 )
 
+// validateArgsAndFlags is the load-time check on a node's declared args and
+// flags: names, types, order, shorts, and conflicts.
+func validateArgsAndFlags(c *Command, where string) error {
+	argNames := set.New[string]()
+	requiredAfterOptional := false
+	for i, a := range c.Args {
+		aw := fmt.Sprintf("%s.args[%d]", where, i)
+		if strings.TrimSpace(a.Name) == "" {
+			return fmt.Errorf("%s: name required", aw)
+		}
+		if !validArgTypes.Contains(a.Type) {
+			return fmt.Errorf("%s: type %q must be one of string|int", aw, a.Type)
+		}
+		if argNames.Contains(a.Name) {
+			return fmt.Errorf("%s: duplicate arg name %q", aw, a.Name)
+		}
+		argNames.Add(a.Name)
+		if a.Variadic && i != len(c.Args)-1 {
+			return fmt.Errorf("%s: variadic arg %q must be the last arg", aw, a.Name)
+		}
+		if !a.Required {
+			requiredAfterOptional = true
+		} else if requiredAfterOptional {
+			return fmt.Errorf("%s: required arg %q cannot follow an optional arg", aw, a.Name)
+		}
+	}
+
+	flagNames := set.New[string]()
+	flagShorts := set.New[string]()
+	for i, fl := range c.Flags {
+		fw := fmt.Sprintf("%s.flags[%d]", where, i)
+		if strings.TrimSpace(fl.Name) == "" {
+			return fmt.Errorf("%s: name required", fw)
+		}
+		if !validFlagTypes.Contains(fl.Type) {
+			return fmt.Errorf("%s: type %q must be one of string|bool|int|string-slice", fw, fl.Type)
+		}
+		if flagNames.Contains(fl.Name) {
+			return fmt.Errorf("%s: duplicate flag name %q", fw, fl.Name)
+		}
+		flagNames.Add(fl.Name)
+		if fl.Short != "" {
+			if len(fl.Short) != 1 {
+				return fmt.Errorf("%s: short %q must be a single character", fw, fl.Short)
+			}
+			if flagShorts.Contains(fl.Short) {
+				return fmt.Errorf("%s: duplicate short %q", fw, fl.Short)
+			}
+			flagShorts.Add(fl.Short)
+		}
+		if strings.HasPrefix(fl.Name, "no-") {
+			return fmt.Errorf("%s: flag name %q cannot start with \"no-\" (reserved for bool negation)", fw, fl.Name)
+		}
+	}
+	for i, fl := range c.Flags {
+		fw := fmt.Sprintf("%s.flags[%d]", where, i)
+		for _, peer := range fl.Conflicts {
+			if peer == fl.Name {
+				return fmt.Errorf("%s: flag %q conflicts with itself", fw, fl.Name)
+			}
+			if !flagNames.Contains(peer) {
+				return fmt.Errorf("%s: flag %q conflicts with unknown flag %q", fw, fl.Name, peer)
+			}
+		}
+	}
+	return nil
+}
+
 func registerFlag(cmd *cobra.Command, f Flag) {
 	typ := f.Type
 	if typ == "" {
@@ -148,7 +216,7 @@ func zeroArg(a Arg) any {
 
 // gatherFlags builds the .flag sub-map from the cobra-parsed flag set.
 //
-// Bool flags with default=true register a hidden --no-NAME companion; when
+// Bool flags with default=true register a hidden --no-NAME companion.
 //
 //	set, it flips the value to false. String flags whose configured default
 //	is itself a template (contains `{{`) are rendered against the current

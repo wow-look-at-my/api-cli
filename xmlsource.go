@@ -283,7 +283,7 @@ func buildFormat(n *xnode) (*Format, error) {
 }
 
 func buildCommandNode(n *xnode) (*Command, error) {
-	if err := checkAttrs(n, "name", "description", "passthrough", "runnable", "confirm"); err != nil {
+	if err := checkAttrs(n, "name", "description", "passthrough", "runnable", "confirm", "watch"); err != nil {
 		return nil, err
 	}
 	c := &Command{
@@ -292,6 +292,7 @@ func buildCommandNode(n *xnode) (*Command, error) {
 		Passthrough: n.Attr("passthrough") == "true",
 		Runnable:    n.Attr("runnable") == "true",
 		Confirm:     n.Attr("confirm"),
+		Watch:       n.Attr("watch"),
 	}
 	for _, child := range n.Children() {
 		if err := addCommandChild(c, child); err != nil {
@@ -579,7 +580,7 @@ func entryObject(n *xnode) (map[string]any, error) {
 	return out, nil
 }
 
-// entryValue maps a single entry element to a Go value: - children that are
+// entryValue maps a single entry element to a Go value.
 //
 //	all <param> -> a map (name -> template string) - other structural child
 //	elements -> a nested object - otherwise (text / placeholders) -> a
