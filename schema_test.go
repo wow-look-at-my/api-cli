@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,37 @@ func TestShippedConfigsValidateAgainstTheGrammar(t *testing.T) {
 			defer file.Close()
 
 			assert.NoError(t, validator.ValidateWithSchema(file, strings.NewReader(spec.Schema)))
+		})
+	}
+}
+
+// This is the well-formedness gate, so a file that needs no grammar still runs
+// through it.
+func TestShippedXMLIsWellFormed(t *testing.T) {
+	var paths []string
+	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() && d.Name() == ".git" {
+			return filepath.SkipDir
+		}
+		switch filepath.Ext(path) {
+		case ".xml", ".xsd", ".tml":
+			paths = append(paths, path)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, paths)
+
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			file, err := os.Open(path)
+			require.NoError(t, err)
+			defer file.Close()
+
+			assert.NoError(t, validator.Validate(file))
 		})
 	}
 }
