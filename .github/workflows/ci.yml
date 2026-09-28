@@ -28,13 +28,3 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./.github/scripts/demo-summary.sh
-
-  validate-xml:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: wow-look-at-my/xml-validator@master
-        with:
-          files: '**/*.xml **/*.xsd **/*.tml'
-
-      # The grammar check is a Go test, which reads the schema from api-cli-spec.

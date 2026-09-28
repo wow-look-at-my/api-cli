@@ -19,7 +19,7 @@ It is a *hybrid* tool. HTTP requests are first-class (`<run><request>`, no curl 
 - Timeline sink: `github.com/wow-look-at-my/ascii-timeline/timeline`, a pure-stdlib renderer. It powers `--as=timeline`.
 - Screens: `github.com/wow-look-at-my/tml`, the terminal markup language, plus `charm.land/bubbletea/v2` for the watch program. Both arrive with `<tml>`. See docs and rules 17 and 18.
 - Test assertions: `github.com/stretchr/testify`.
-- XML validation: `wow-look-at-my/xml-validator` checks well-formedness and **XML 1.1**. Shipped files declare `version="1.1"`. Its `validator` package also validates each shipped config against the grammar in `schema_test.go`.
+- XML validation: `wow-look-at-my/xml-validator` checks well-formedness and **XML 1.1**. Shipped files declare `version="1.1"`. Its `validator` package checks every shipped XML, XSD and TML file, and validates each config against the grammar, in `schema_test.go`.
 - The grammar: `github.com/wow-look-at-my/api-cli-spec` owns `api-cli.xsd` and holds it to a resolved form per document. This repo keeps no copy: `spec.Schema` is the embedded original, which `api-cli docs schema` prints and the tests validate against.
 
 Do not add a new third-party dependency without a clear cause.
@@ -121,7 +121,7 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 ## Common gotchas
 
 - **Line budget.** go-toolchain warns at 500 lines and **fails at 750**. Several files sit near the warning. Extract a topical file rather than grow one past 750.
-- **XML 1.1.** A shipped `*.xml` or `*.xsd` must declare `version="1.1"`. The CI `xml-validator` rejects XML 1.0 and a missing declaration. api-dsl removes the declaration before it decodes. An inline test snippet can therefore leave it out.
+- **XML 1.1.** A shipped `*.xml`, `*.xsd` or `*.tml` must declare `version="1.1"`. `TestShippedXMLIsWellFormed` rejects XML 1.0 and a missing declaration. api-dsl removes the declaration before it decodes. An inline test snippet can therefore leave it out.
 - **The language is not ours to edit here.** A change to `<value>`/`<if>`/`<for>`, to the DOM, or to a shared template helper belongs in api-dsl. A helper that is only meaningful to a CLI belongs in `cliFuncs` (`render.go`).
 - **Sets are `github.com/wow-look-at-my/go-containers/set`.** Use `set.Of(...)` for a fixed membership list, and `set.New[T]()` for one the code builds up. The code sometimes asks a `map[...]bool` or a `[]string` for membership only. That is a vet error, not a style note. go-toolchain rewrites the slice form in place. This dependency puts the module on go 1.26.
 - **`spread` sentinel.** NUL and SOH markers delimit the spread elements. See `render.go` and `exec.go`.
@@ -131,7 +131,7 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 ## Tooling
 
 - `go-toolchain` runs `go mod tidy`, vet, all tests with coverage, and the build. **Always run `go-toolchain`, never a bare `go ...`.** Coverage minimum 80%.
-- CI is `.github/workflows/ci.yml`. The `test` job runs `ste-lint` over the markdown, then go-toolchain, then the demo. A second job, `validate-xml`, checks every XML file for well-formedness. The grammar check itself is a Go test. The build names no `os` and no `arch`, so it produces one fat APE that autoreleases to buildhost.
+- CI is `.github/workflows/ci.yml`. The one `test` job runs `ste-lint` over the markdown, then go-toolchain, then the demo. The well-formedness check and the grammar check are both Go tests. The build names no `os` and no `arch`, so it produces one fat APE that autoreleases to buildhost.
 - `ste-lint` (`wow-look-at-my/actions@ste-lint#latest`) checks every `*.md` file against the mechanical subset of ASD-STE100. One paragraph is one line, and a sentence caps at 25 words. A contraction, a semicolon, a comma splice or the word "would" fails the job.
 
 ## Conventions

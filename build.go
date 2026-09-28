@@ -224,6 +224,9 @@ func watchable(c *cobra.Command, node Command, confirmTmpl string) error {
 	if len(node.Downloads) > 0 {
 		return fmt.Errorf("--watch does not apply to a <download> leaf")
 	}
+	if node.Stream != nil {
+		return fmt.Errorf("--watch does not apply to a <stream> leaf: the stream already runs until its source ends")
+	}
 	if confirmTmpl != "" {
 		if yes, _ := c.Root().PersistentFlags().GetBool("yes"); !yes {
 			return fmt.Errorf("--watch on a leaf that asks for confirmation needs --yes")
@@ -389,6 +392,13 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 	}
 
 	logVerbose("leaf %q: executing", node.Name)
+	if node.Stream != nil {
+		exitCode = runStream(node.Stream, cmdTmpl, request, leafCwd, leafStdin, data)
+		logVerbose("leaf %q: stream ended with exit code %d", node.Name, exitCode)
+		executions++
+		reportExecutions(c, executions)
+		return nil
+	}
 	exitCode, err = execLeaf(c, cmdTmpl, request, leafCwd, leafStdin, data, node.Fields, node.TML, formatRef, formats)
 	if err != nil {
 		return err
