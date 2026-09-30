@@ -290,7 +290,9 @@ A `<download>` reaches its URL as a `<request>` does. It goes over the built-in 
 
 ### Reporting progress from a transport
 
-A program that holds the body until it finishes writes nothing to stdout mid-transfer. Its row then reads `waiting` until the file lands. The progress fd fixes that. Wire it up whenever the program you delegate to does not stream its output.
+A program that holds the body until it finishes writes nothing to stdout mid-transfer. On Linux, api-cli then measures it from outside: the row shows the bytes the program and its child processes have read, from `/proc/<pid>/io`. That count includes protocol overhead and the program's own startup reads. As a result, it is close but not exact. Other systems have no `/proc`. The row reads `waiting` until the file lands.
+
+The progress fd gives the exact number on every system. Wire it up whenever the program you delegate to does not stream its output. A report replaces the `/proc` estimate for that transfer.
 
 api-cli gives every download transport a pipe on file descriptor 3. The variable `API_CLI_PROGRESS_FD` names it in the program's environment, and `.request.progress_fd` names it in the templates. The program writes one line per report:
 
@@ -303,7 +305,7 @@ done=2097152 total=73400320
 - **`done=`** is the bytes received so far, and **`total=`** is the file's size. Each is optional. A line needs at least one. A report replaces the previous one. It never adds to it.
 - **Stdout is still the file.** The final byte count, the `.part` rename and the digest come from stdout alone. A report only drives the row while the transfer is open.
 - **A bad line fails the download.** An unknown key, a missing value or a negative number stops the transfer with an error that names the line. The queue does not retry it, because the same program sends the same line again.
-- **A program that never writes to the fd is fine.** The row falls back to the stdout count.
+- **A program that never writes to the fd is fine.** The row falls back to the `/proc` estimate on Linux, and to the stdout count elsewhere.
 
 Pass the fd to a program that takes it as a flag:
 

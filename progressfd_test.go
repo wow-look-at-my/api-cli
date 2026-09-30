@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -50,6 +51,33 @@ func TestTransport_ProgressFDDrivesTheRowWhileStdoutIsSilent(t *testing.T) {
 	batch.wait()
 	require.NoError(t, item.failure())
 	assert.EqualValues(t, 5000, item.shown(), "the finished count is the file's own size")
+}
+
+// The row still shows what it has read, from /proc.
+func TestTransport_SilentProgramIsMeasuredFromProc(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("/proc/<pid>/io is Linux only")
+	}
+	q := newDownloadQueue(1, 0)
+	batch := q.batch(nil, nil)
+	item := batch.add(downloadSpec{
+		URL:  "https://internal.example/held.bin",
+		Dest: filepath.Join(t.TempDir(), "held.bin"),
+		Transport: &downloadTransport{Name: "holder", Argv: []string{"sh", "-c",
+			`x=$(head -c 2000000 /dev/zero | tr '\000' a); sleep 1; printf %s "$x"`}},
+	})
+
+	deadline := time.Now().Add(3 * time.Second)
+	for item.shown() < 2000000 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	require.Equal(t, dlActive, item.state.Load(), "the count must show while the program still holds the body")
+	assert.EqualValues(t, 0, item.done.Load(), "stdout has carried nothing yet")
+	assert.GreaterOrEqual(t, item.shown(), int64(2000000))
+
+	batch.wait()
+	require.NoError(t, item.failure())
+	assert.EqualValues(t, 2000000, item.shown(), "the finished count is the file's own size")
 }
 
 func TestTransport_BadProgressLineFailsWithoutRetry(t *testing.T) {

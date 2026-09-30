@@ -74,13 +74,17 @@ func readProgress(r io.Reader, item *downloadItem) error {
 }
 
 // shown is the byte count the display draws. While the transfer is open it is
-// the larger of the stdout count and the program's own report.
+// the larger of the stdout count and the program's own report. A program that
+// never reports is measured from /proc instead.
 func (d *downloadItem) shown() int64 {
 	done := d.done.Load()
-	if d.state.Load() == dlActive {
-		return max(done, d.reported.Load())
+	if d.state.Load() != dlActive {
+		return done
 	}
-	return done
+	if rep := d.reported.Load(); rep > 0 {
+		return max(done, rep)
+	}
+	return max(done, d.observed.Load())
 }
 
 func runWithProgress(cmd *exec.Cmd, item *downloadItem) error {
@@ -99,7 +103,14 @@ func runWithProgress(cmd *exec.Cmd, item *downloadItem) error {
 
 	readErr := make(chan error, 1)
 	go func() { readErr <- readProgress(r, item) }()
+	stop, sampled := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(sampled)
+		sampleProcRead(cmd.Process.Pid, item, stop)
+	}()
 	runErr := cmd.Wait()
+	close(stop)
+	<-sampled
 	perr := <-readErr
 	if runErr != nil {
 		return runErr

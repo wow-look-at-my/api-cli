@@ -88,6 +88,8 @@ type downloadItem struct {
 
 	// reported is the byte count a transport program wrote to its progress fd.
 	reported atomic.Int64
+	// observed is the bytes the program has read, from /proc (procio.go).
+	observed atomic.Int64
 
 	mu  sync.Mutex
 	err error
@@ -282,6 +284,7 @@ func (q *downloadQueue) run(item *downloadItem) {
 		log("retrying %s: %v", item.label(), err)
 		item.done.Store(0)
 		item.reported.Store(0)
+		item.observed.Store(0)
 		item.total.Store(-1)
 		time.Sleep(retryDelay)
 	}

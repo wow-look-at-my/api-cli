@@ -109,7 +109,7 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 32. **A `<mock>` stands in for a program.** That is the leaf's action. No command and no request runs for it. An inherited `<run>` stays where it is, exactly as for a `<download>`. The leaf's OWN `<run>` is the one exception. That shape is a thin wrapper, so the records and the outputs land first. The real program then runs. `runMock` plans every output path before it writes one, which is what lets a `<record>` name `.mock.outputs` for this call.
 33. **A node runs when `executes()` says so** (`runnable.go`): a leaf, or a parent with `runnable="true"`. That predicate gates `RunE` (`build.go`), the MCP tool list (`mcp.go`) and every "leaf-only" validation. `validateRunnable` keeps dispatch decidable. Each arg of a runnable node needs a `pattern=`. A pattern that matches a subcommand name, its own or one cobra owns, is a load error.
 
-34. **A download transport reports progress on fd 3** (`progressfd.go`). Stdout stays the file, and its byte count is final. A `done=` report only drives the row while the transfer is open. A malformed report fails the download without a retry. See the README's "Reporting progress from a transport".
+34. **A download transport reports progress on fd 3** (`progressfd.go`). Stdout stays the file, and its byte count is final. A `done=` report only drives the row while the transfer is open. A malformed report fails the download without a retry. A program that never reports is measured from `/proc/<pid>/io` on Linux (`procio.go`, `item.observed`). See the README's "Reporting progress from a transport".
 
 ## Adding a new field to the config
 
