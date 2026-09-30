@@ -134,6 +134,8 @@ One property keeps the forms apart. A jq program almost always opens with `.`, `
 
 The shaped body is what the leaf prints, `--format=raw` included. jq runs before every presentation layer, and never as part of one.
 
+**A `jq=` program needs a JSON body.** A body that is not JSON fails the request, and the error shows the start of that body. The excerpt usually reveals an SSO login page or a proxy error. Without `jq=`, a body that is not JSON passes through unchanged.
+
 A status of 400 or more prints the body to stderr and exits non-zero, like `curl -f`. The root `<run>` usually holds the shared request. A leaf's own `<run>` overrides it, for example with a `POST` or a raw-body download.
 
 `allow-status=` names the error statuses that are an answer instead of a failure. The body then reaches the caller with exit code 0, and a step stores it at `.result.<name>` as any other step output.
@@ -178,7 +180,7 @@ The program gets the fully rendered request on top of the leaf's usual context. 
 | `.request.header_lines` | `["Accept: application/json", ...]`, for splatting. |
 
 - **The body goes to the program's stdin** unless the transport declares its own `<stdin>`. Stdin is explicit either way. A transport never inherits your terminal, so a program that reads stdin cannot hang and wait for one.
-- **A non-zero exit fails the request**, as a 4xx from the built-in client does. The program's stderr passes through untouched.
+- **A non-zero exit fails the request**, as a 4xx from the built-in client does. The program's stderr passes through untouched. The error also shows the start of its stdout, because that is often the error page.
 - **Which transport runs**: the request's `transport=` attribute, then the registry's `default="true"` entry, then the built-in client. There is no override at run time. How a request reaches its endpoint is a property of that endpoint, not a user preference. The name `http` belongs to the built-in client, so `transport="http"` on one request opts that request out of a default transport. That is the public endpoint in an otherwise internal API.
 - `<cwd>` sets the program's working directory. A transport's `<run>` must be a command. It is the thing that performs a request. It cannot be one.
 
@@ -232,6 +234,14 @@ The block comes off the screen when the queue drains, and the run's summary foll
 A start is never announced. The slot already says that a transfer runs. A separate `downloading` line only doubles the volume.
 
 In a pipe there is no display. The `downloaded` lines stay on stderr, and the destination paths go to stdout, one per line, for whatever reads them next.
+
+The steps that feed a `<download>` report their progress too. On a terminal, the block holds one live line for the step that runs. It names the element, the poll attempt, and the `.status` field of the last response when the body has one. A retry shows as `retry 1/3`.
+
+```
+listing 16/53 TCLP-16  attempt 12/120  status=pending
+```
+
+Without the display (`--no-tui`, or stdout in a pipe), stderr gets one line per element when it finishes, such as `listing 16/53 TCLP-16: done`. A long poll also adds one line for every ten attempts that leave `until=` false. No line appears per attempt.
 
 - **`<download>` is the leaf's action.** It runs after the steps, and it stands in for the leaf's `<run>`. An inherited request therefore does not fire on the way.
 - **`when=`** is a Go-template predicate. A falsy render (empty, `false`, `0` or `no`) skips that declaration, so one leaf can carry a conditional set.
@@ -843,7 +853,7 @@ Mix the two freely. A `<step><run>` can be a shell command while the leaf makes 
 
 - Steps run in declaration order. Each `entry` renders against the current context, and that context includes `.result.*` from the prior steps.
 - Step output parses as JSON, with `UseNumber`. Output that is not JSON stays a string. A request step stores what the leaf prints, and that includes the `<response jq=>` shaping.
-- A non-zero step aborts the run with that exit code.
+- A non-zero step aborts the run with that exit code, after its `retries=`. See [Retrying a step](#retrying-a-step-retries-and-on-error).
 - A `when` attribute is a Go-template predicate. It skips the step on a falsy render (empty, `false`, `0` or `no`), and `.result.<name>` then stays unset.
 - More than one command in a run prints `N executions` to stderr. Suppress that line with `--quiet` or `-q`.
 - A step's `when` is evaluated **before** the step renders anything. A step that must not run therefore cannot fail on a value it never had.
@@ -885,7 +895,13 @@ A step with `over="result.builds"` runs once per element of that list. The eleme
 
 `.result.detail` is then a list of `{"item": element, "result": response}`, in the source order. That pairing is the point: a screen that draws a card per build walks one list, rather than reaching across two of them by position. A repeated step is also how a list endpoint that carries no detail becomes one that does. Most CI and queue APIs take that shape.
 
-A failing element fails the whole step, with that element's exit code. A board missing one build reads as a shorter queue rather than as a broken run. The run stops instead.
+A failing element fails the whole step, with that element's exit code. A board missing one build reads as a shorter queue rather than as a broken run. The run stops instead. `on-error="skip"` is the explicit way to keep the other elements. See [Retrying a step](#retrying-a-step-retries-and-on-error).
+
+An error inside a repeated step names the step, the element's position, the total and the element itself.
+
+```
+error: step "listing" [16/53] TCLP-16: transport "auth-fetch" exited 1
+```
 
 `over=` walks a list the context holds: a step result, a `<var>`, or a `variadic` arg, whose Go slice needs no JSON detour. It also takes a template that renders a JSON list, for a list the context does not hold in that shape. See [`over=` on a download](#downloads) for the `collect` helper that flattens a fan-out result.
 
@@ -903,8 +919,34 @@ An API that answers `status: pending` needs a poll, not a call. A step with `unt
 - **`.result.<name>` is the body that satisfied the predicate**, never one of the answers before it.
 - **`interval=`** is a duration such as `500ms` or `2s`. It defaults to one second, and it never grows: a slow job is not a reason to wait longer and longer for it.
 - **`attempts=`** caps the poll at 60 by default. A poll that runs out fails the run and prints the last response. The reason is therefore the body itself rather than a bare timeout.
-- **A non-zero exit ends the poll at once.** A job that reports a failure has answered, and asking again cannot change it.
+- **A non-zero exit ends the poll at once**, after the step's `retries=`. A job that reports a failure has answered, and asking again cannot change it.
 - **`over=` and `until=` compose.** A repeated step polls each element in turn, which is how one invocation lists N items whose listings are all jobs.
+
+### Retrying a step: `retries=` and `on-error=`
+
+A flaky endpoint needs a second try, not a shell loop. `retries="N"` runs a failed step again, up to N more times, before the failure counts.
+
+```xml
+<step name="listing" over="result.items" until="{{ eq .status &quot;done&quot; }}" retries="3" on-error="skip">
+	<run><request transport="auth-fetch"><url><value name="var.api"/>/listing/<value name="item.id"/></url></request></run>
+</step>
+```
+
+- **A failure is any failed run.** A command fails on a non-zero exit. A request fails on an HTTP error status or a network fault. It also fails on a `<transport>` that exits non-zero, or a body that is not JSON under `jq=`.
+- **The retries run one second apart, at a fixed cadence.** The delay never grows. The download queue uses the same delay.
+- **The default is `0`**, which fails at once. A negative value is a load error.
+- **A poll retries each attempt.** A retried attempt does not use up an `attempts=` slot. A poll that runs out of attempts is final, and nothing retries it.
+- **With `over=`, each element gets its own retries.**
+
+`on-error=` decides what a repeated step does with an element that still fails. It takes `fail` (the default) or `skip`. It needs `over=`. On a step without `over=`, it is a load error.
+
+- **`skip` leaves the element out of the step's result list.** It prints that element's error and continues. A `<download over=>` therefore gets the elements that succeeded.
+- **A poll that never satisfies `until=` counts as a failure**, so `skip` leaves that element out too.
+- **A skip is never silent.** The run exits 1 at the end, and stderr names every element it left out.
+
+```
+listing: 2 of 53 items skipped: TCLP-1, TCLP-9
+```
 
 ## Legacy formats and views
 
@@ -1013,6 +1055,7 @@ Each row is something the grammar does not do, and the shape to write instead. E
 | **A record key named `item` is shadowed.** `over=` promotes a record's keys and then puts the record itself at `.item`, so the record wins that name. | Name the field something else in the response, or reach it as `.item.item`. The `<field expr=>` form has the same rule. |
 | **`<join contiguous=>` cannot see a missing last part.** It reads the whole numbers between the lowest and the highest order in the group. | Check the count yourself in a `<step when=>` against whatever the listing says it holds. A hole in the middle is what this attribute reports. |
 | **An `<arg pattern=>` cannot read `.arg` or `.flag`.** A pattern has to be known before any value arrives, so it renders once at load time against the vars and `.env` only. | Put the rule in a `<var>` and name it, or use `{{ segmentPattern }}`. A check that depends on another value belongs in a `<precondition>`, which runs per invocation. |
+| **`on-error="skip"` needs `over=`.** A step without `over=` has no element to leave out, so the loader rejects the pair. | Give the step `retries=` to ride out a brief fault. Use `allow-status=` on a request to keep an error status as an answer, then branch on `.result` in a later `<step when=>`. |
 | **Nothing selects a transport at run time.** There is no `--transport` flag, by design: how a request reaches its endpoint is a property of the endpoint. | Name the transport in the config, on the `<request>` or as the registry `default="true"`. `transport="http"` is the per-request way back to the built-in client. |
 
 ## Config schema

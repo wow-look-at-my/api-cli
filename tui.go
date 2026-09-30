@@ -44,6 +44,7 @@ type tui struct {
 	// them: the terminal owns the scrollback, so nothing is kept to redraw.
 	pending  []string
 	partial  string
+	step     *stepProgress
 	painted  int
 	started  bool
 	stopped  bool
@@ -186,6 +187,13 @@ func (t *tui) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// setStep shows the running step in the block. nil removes the line.
+func (t *tui) setStep(p *stepProgress) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.step = p
+}
+
 // logf adds a single preformatted line. The queue's log hook points here.
 func (t *tui) logf(format string, args ...any) {
 	t.mu.Lock()
@@ -278,6 +286,11 @@ func (t *tui) frame(now time.Time) []string {
 	lay := planProgressLayout(t.width-2, fractions)
 
 	lines := []string{head}
+	t.mu.Lock()
+	if t.step != nil {
+		lines = append(lines, "  "+t.step.line())
+	}
+	t.mu.Unlock()
 	for _, r := range rows {
 		lines = append(lines, "  "+progressLine(r.label, r.p, lay))
 	}

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -93,8 +94,10 @@ func TestPoll_ExhaustedAttemptsFailWithTheLastBody(t *testing.T) {
 	}
 
 	var oc stepOutcome
-	_, _, err := runStepAction(step, map[string]any{}, step.Command, nil, "", "", capture, io.Discard, &oc)
+	r := &stepRunner{step: step, data: map[string]any{}, cmd: step.Command, capture: capture, errOut: io.Discard, oc: &oc}
+	_, _, err := r.action()
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), `step "job": until`, "a plain step keeps its own name only")
 	assert.Contains(t, err.Error(), `did not hold in 3 attempt(s)`)
 	assert.Contains(t, err.Error(), `"status":"pending"`)
 	assert.Equal(t, 3, calls, "every attempt runs, and none after the cap")
@@ -118,11 +121,82 @@ func TestPoll_NonZeroExitEndsThePoll(t *testing.T) {
 	}
 
 	var oc stepOutcome
-	out, code, err := runStepAction(step, map[string]any{}, step.Command, nil, "", "", capture, io.Discard, &oc)
+	r := &stepRunner{step: step, data: map[string]any{}, cmd: step.Command, capture: capture, errOut: io.Discard, oc: &oc}
+	out, fail, err := r.action()
 	require.NoError(t, err)
-	assert.Equal(t, 3, code)
+	require.NotNil(t, fail)
+	assert.Equal(t, 3, fail.code)
 	assert.Equal(t, "boom", out)
 	assert.Equal(t, 1, calls)
+}
+
+// retries= runs a failed attempt again, and the retry does not use up a poll
+// attempt.
+func TestPoll_RetriesAFailedAttempt(t *testing.T) {
+	waits := noPollSleep(t)
+	calls := 0
+	capture := func(*Cmd, string, string, any) (string, int) {
+		calls++
+		if calls <= 2 {
+			return "", 1
+		}
+		return `{"status":"done"}`, 0
+	}
+	step := Step{
+		Name:     "job",
+		Until:    `{{ eq .status "done" }}`,
+		Attempts: 1,
+		Retries:  2,
+		Command:  &Cmd{Shell: true, Template: "true"},
+	}
+
+	var oc stepOutcome
+	var errOut strings.Builder
+	r := &stepRunner{step: step, data: map[string]any{}, cmd: step.Command, capture: capture, errOut: &errOut, oc: &oc}
+	out, fail, err := r.action()
+	require.NoError(t, err)
+	require.Nil(t, fail)
+	assert.JSONEq(t, `{"status":"done"}`, out)
+	assert.Equal(t, 3, oc.executions)
+	assert.Equal(t, []time.Duration{retryDelay, retryDelay}, waits(), "retries wait the download queue's fixed delay")
+	assert.Contains(t, errOut.String(), `step "job": retry 1/2`)
+}
+
+// Retries run out, and the last failure is the step's.
+func TestPoll_ExhaustedRetriesFail(t *testing.T) {
+	noPollSleep(t)
+	calls := 0
+	capture := func(*Cmd, string, string, any) (string, int) {
+		calls++
+		return "", 4
+	}
+	step := Step{Name: "job", Retries: 2, Command: &Cmd{Shell: true, Template: "false"}}
+
+	var oc stepOutcome
+	r := &stepRunner{step: step, data: map[string]any{}, cmd: step.Command, capture: capture, errOut: io.Discard, oc: &oc}
+	_, fail, err := r.action()
+	require.NoError(t, err)
+	require.NotNil(t, fail)
+	assert.Equal(t, 4, fail.code)
+	assert.Equal(t, 3, calls, "the first run and two retries")
+}
+
+func TestStep_RejectsBadRetriesAndOnError(t *testing.T) {
+	for name, tc := range map[string]struct{ attrs, want string }{
+		"negative retries":   {`retries="-1"`, "retries=-1 must be >= 0"},
+		"non-integer":        {`retries="x"`, `retries="x" must be an integer`},
+		"skip without over":  {`on-error="skip"`, "so it needs over="},
+		"unknown on-error":   {`on-error="ignore" over="arg.ids"`, "must be fail or skip"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := loadStr(t, `<config name="p"><command name="c"><arg name="ids" variadic="true"/>
+				<steps><step name="s" `+tc.attrs+`><run><argv>true</argv></run></step></steps>
+				<run><argv>true</argv></run>
+			</command></config>`)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.want)
+		})
+	}
 }
 
 // The predicate reads the body it just got, and the whole body stays reachable.

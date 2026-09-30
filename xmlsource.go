@@ -500,7 +500,7 @@ func buildFlag(n *xnode) (Flag, error) {
 }
 
 func buildStep(n *xnode) (Step, error) {
-	if err := checkAttrs(n, "name", "when", "over", "until", "interval", "attempts"); err != nil {
+	if err := checkAttrs(n, "name", "when", "over", "until", "interval", "attempts", "retries", "on-error"); err != nil {
 		return Step{}, err
 	}
 	s := Step{
@@ -509,13 +509,21 @@ func buildStep(n *xnode) (Step, error) {
 		Over:     strings.TrimSpace(n.Attr("over")),
 		Until:    n.Attr("until"),
 		Interval: strings.TrimSpace(n.Attr("interval")),
+		OnError:  strings.TrimSpace(n.Attr("on-error")),
 	}
-	if raw := strings.TrimSpace(n.Attr("attempts")); raw != "" {
+	for _, a := range []struct {
+		name string
+		dst  *int
+	}{{"attempts", &s.Attempts}, {"retries", &s.Retries}} {
+		raw := strings.TrimSpace(n.Attr(a.name))
+		if raw == "" {
+			continue
+		}
 		v, err := strconv.Atoi(raw)
 		if err != nil {
-			return Step{}, fmt.Errorf("<step %q>: attempts=%q must be an integer", s.Name, raw)
+			return Step{}, fmt.Errorf("<step %q>: %s=%q must be an integer", s.Name, a.name, raw)
 		}
-		s.Attempts = v
+		*a.dst = v
 	}
 	for _, child := range n.Children() {
 		switch child.Name() {

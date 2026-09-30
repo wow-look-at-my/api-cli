@@ -41,6 +41,7 @@ func startDownloadSession(c *cobra.Command) *downloadSession {
 		s.batch = q.batch(func(format string, args ...any) {
 			fmt.Fprintf(errOut, format+"\n", args...)
 		}, errOut)
+		stepWatch = &stepWatcher{log: func(line string) { fmt.Fprintln(errOut, line) }}
 		return s
 	}
 
@@ -52,6 +53,7 @@ func startDownloadSession(c *cobra.Command) *downloadSession {
 	s.batch.errOut = s.tui
 	// Steps and the downloader write above the slots rather than over them.
 	execStdout, execStderr = s.tui, s.tui
+	stepWatch = &stepWatcher{show: s.tui.setStep}
 	s.tui.Start()
 	return s
 }
@@ -64,6 +66,7 @@ func (s *downloadSession) close() {
 		return
 	}
 	s.closed = true
+	stepWatch = nil
 	if s.tui == nil {
 		return
 	}

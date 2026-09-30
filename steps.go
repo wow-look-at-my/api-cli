@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -12,8 +13,7 @@ const (
 	defaultPollAttempts = 60
 )
 
-// pollSleep waits between attempts of a polling step. A var so a test of the
-// loop costs no real seconds.
+// pollSleep waits between attempts of a polling step and between retries.
 var pollSleep = time.Sleep
 
 // stepCapture runs a single step's command and returns its stdout and exit
@@ -27,6 +27,24 @@ type stepOutcome struct {
 	executions int
 	output     string
 	code       int
+	// skipped lists what each on-error="skip" step left out.
+	skipped []stepSkips
+}
+
+// stepSkips is what a single repeated step left out of its result.
+type stepSkips struct {
+	step  string
+	total int
+	items []string
+}
+
+// reportSkips writes a summary line per step that skipped elements, and
+// reports whether there was one. A run that skipped anything must not exit 0.
+func reportSkips(w io.Writer, skips []stepSkips) bool {
+	for _, s := range skips {
+		fmt.Fprintf(w, "%s: %d of %d items skipped: %s\n", s.step, len(s.items), s.total, strings.Join(s.items, ", "))
+	}
+	return len(skips) > 0
 }
 
 // runSteps executes a leaf's steps in order, storing each step's parsed output
@@ -39,6 +57,7 @@ type stepOutcome struct {
 // leaf's, likewise overridable per step.
 func runSteps(steps []Step, data map[string]any, results map[string]any, cmdTmpl *Cmd, request *Request, cwdTmpl, stdinTmpl string, capture stepCapture, errOut io.Writer) (stepOutcome, error) {
 	var oc stepOutcome
+	defer stepWatch.idle()
 	for _, step := range steps {
 		if step.When != "" {
 			whenOut, err := renderString(step.When, data)
@@ -52,88 +71,41 @@ func runSteps(steps []Step, data map[string]any, results map[string]any, cmdTmpl
 			}
 		}
 
-		stepCmd, stepReq := cmdTmpl, request
+		r := &stepRunner{step: step, data: data, cmd: cmdTmpl, req: request, cwdTmpl: cwdTmpl, stdinTmpl: stdinTmpl, capture: capture, errOut: errOut, oc: &oc}
 		switch {
 		case step.Request.Defined():
-			stepCmd, stepReq = nil, step.Request
+			r.cmd, r.req = nil, step.Request
 		case step.Command.Defined():
-			stepCmd, stepReq = step.Command, nil
+			r.cmd, r.req = step.Command, nil
 		}
-		if !stepCmd.Defined() && !stepReq.Defined() {
+		if !r.cmd.Defined() && !r.req.Defined() {
 			return oc, fmt.Errorf("step %q: no command or request available", step.Name)
 		}
 
 		if step.Over != "" {
-			done, err := runStepOver(step, data, results, stepCmd, stepReq, cwdTmpl, stdinTmpl, capture, errOut, &oc)
+			done, err := r.runOver(results)
 			if err != nil || !done {
 				return oc, err
 			}
 			continue
 		}
 
-		out, code, err := runStepAction(step, data, stepCmd, stepReq, cwdTmpl, stdinTmpl, capture, errOut, &oc)
+		out, fail, err := r.action()
 		if err != nil {
 			return oc, err
 		}
-
-		logVerbose("step %q: exit code %d", step.Name, code)
 		logDebugBlock(fmt.Sprintf("step %q: stdout", step.Name), out)
-		if code != 0 {
-			oc.output, oc.code = out, code
+		if fail != nil {
+			logVerbose("step %q: exit code %d", step.Name, fail.code)
+			if !fail.quiet {
+				fail.report(errOut, "")
+			}
+			oc.output, oc.code = out, fail.code
 			return oc, nil
 		}
 		results[step.Name] = parseResult(out)
 	}
 	return oc, nil
-}
-
-// runStepAction performs a single step's action and counts it. Without `until=`
-// that is a single run. With it, the step repeats until the predicate holds: an
-// async job that answers "pending" is polled here rather than in a shell loop
-// around the whole program.
-func runStepAction(step Step, data map[string]any, stepCmd *Cmd, stepReq *Request, cwdTmpl, stdinTmpl string, capture stepCapture, errOut io.Writer, oc *stepOutcome) (string, int, error) {
-	if step.Until == "" {
-		out, code, err := runStepOnce(step, data, stepCmd, stepReq, cwdTmpl, stdinTmpl, capture, errOut)
-		if err == nil {
-			oc.executions++
-		}
-		return out, code, err
-	}
-
-	interval, err := pollInterval(step)
-	if err != nil {
-		return "", 0, fmt.Errorf("step %q: %w", step.Name, err)
-	}
-	attempts := step.Attempts
-	if attempts <= 0 {
-		attempts = defaultPollAttempts
-	}
-
-	var last any
-	for attempt := 1; attempt <= attempts; attempt++ {
-		out, code, err := runStepOnce(step, data, stepCmd, stepReq, cwdTmpl, stdinTmpl, capture, errOut)
-		if err != nil {
-			return "", 0, err
-		}
-		oc.executions++
-		if code != 0 {
-			return out, code, nil
-		}
-		last = parseResult(out)
-		verdict, err := renderString(step.Until, pollContext(data, last))
-		if err != nil {
-			return "", 0, fmt.Errorf("step %q: render until: %w", step.Name, err)
-		}
-		logVerbose("step %q: attempt %d/%d: until %q => %q", step.Name, attempt, attempts, step.Until, verdict)
-		if isTruthy(verdict) {
-			return out, code, nil
-		}
-		if attempt < attempts {
-			pollSleep(interval)
-		}
-	}
-	return "", 0, fmt.Errorf("step %q: until %q did not hold in %d attempt(s); last response: %s",
-		step.Name, step.Until, attempts, jsonCompact(last))
 }
 
 // pollContext is what `until=` is evaluated against: the run's own context with
@@ -175,94 +147,21 @@ func validatePoll(s Step, where string) error {
 	return nil
 }
 
-// runStepOnce renders a step's entry and runs it a single time.
-func runStepOnce(step Step, data map[string]any, stepCmd *Cmd, stepReq *Request, cwdTmpl, stdinTmpl string, capture stepCapture, errOut io.Writer) (string, int, error) {
-	stepEntry, err := renderEntry(step.Entry, data)
-	if err != nil {
-		return "", 0, fmt.Errorf("step %q: render entry: %w", step.Name, err)
+// validateStepFailure checks retries= and on-error= at load time.
+func validateStepFailure(s Step, where string) error {
+	if s.Retries < 0 {
+		return fmt.Errorf("%s: retries=%d must be >= 0", where, s.Retries)
 	}
-	if stepEntry == nil {
-		stepEntry = map[string]any{}
-	}
-	data["entry"] = stepEntry
-	logDebug("step %q: entry: %s", step.Name, jsonCompact(stepEntry))
-
-	if stepReq.Defined() {
-		logVerbose("step %q: requesting", step.Name)
-		out, code := runRequest(stepReq, data, errOut)
-		return out, code, nil
-	}
-
-	stepCwdTmpl := cwdTmpl
-	if step.Cwd != "" {
-		stepCwdTmpl = step.Cwd
-	}
-	stepCwd, err := renderCwd(stepCwdTmpl, data)
-	if err != nil {
-		return "", 0, fmt.Errorf("step %q: render cwd: %w", step.Name, err)
-	}
-
-	stepStdinTmpl := stdinTmpl
-	if step.Stdin != "" {
-		stepStdinTmpl = step.Stdin
-	}
-	stepStdin, err := renderStdin(stepStdinTmpl, data)
-	if err != nil {
-		return "", 0, fmt.Errorf("step %q: render stdin: %w", step.Name, err)
-	}
-
-	logVerbose("step %q: executing", step.Name)
-	out, code := capture(stepCmd, stepCwd, stepStdin, data)
-	return out, code, nil
-}
-
-// runStepOver repeats a step a single time per element of the list at
-// step.Over. The element rides in the data context as `.item`, so the step's
-// own entry names the part of it that says what to fetch.
-//
-// The result pairs each element with its own response. A screen that draws a
-// single card per build then walks a single list, rather than reaching across
-// by position, which is the shape a data template can actually take.
-//
-// A failing element fails the whole step: half a screen of builds, with the
-// rest silently missing, reads as a shorter queue rather than as a broken run.
-func runStepOver(step Step, data map[string]any, results map[string]any, stepCmd *Cmd, stepReq *Request, cwdTmpl, stdinTmpl string, capture stepCapture, errOut io.Writer, oc *stepOutcome) (bool, error) {
-	found, ok, err := overSource(data, step.Over)
-	if err != nil {
-		return false, fmt.Errorf("step %q: %w", step.Name, err)
-	}
-	if !ok {
-		return false, fmt.Errorf("step %q: over %q is not in the context", step.Name, step.Over)
-	}
-	list, ok := asList(found)
-	if !ok {
-		return false, fmt.Errorf("step %q: over %q is %T, and a repeated step needs a list", step.Name, step.Over, found)
-	}
-	logVerbose("step %q: repeating over %d element(s) of %q", step.Name, len(list), step.Over)
-
-	prevItem, hadItem := data["item"]
-	prevIndex, hadIndex := data["index"]
-	defer func() {
-		restore(data, "item", prevItem, hadItem)
-		restore(data, "index", prevIndex, hadIndex)
-	}()
-
-	collected := make([]any, 0, len(list))
-	for i, element := range list {
-		data["item"], data["index"] = element, i
-		out, code, err := runStepAction(step, data, stepCmd, stepReq, cwdTmpl, stdinTmpl, capture, errOut, oc)
-		if err != nil {
-			return false, err
+	switch s.OnError {
+	case "", "fail":
+	case "skip":
+		if s.Over == "" {
+			return fmt.Errorf("%s: on-error=\"skip\" leaves failed elements out of a repeated step, so it needs over=", where)
 		}
-		logDebugBlock(fmt.Sprintf("step %q[%d]: stdout", step.Name, i), out)
-		if code != 0 {
-			oc.output, oc.code = out, code
-			return false, nil
-		}
-		collected = append(collected, map[string]any{"item": element, "result": parseResult(out)})
+	default:
+		return fmt.Errorf("%s: on-error=%q must be fail or skip", where, s.OnError)
 	}
-	results[step.Name] = collected
-	return true, nil
+	return nil
 }
 
 // restore puts a context key back the way the step found it.
