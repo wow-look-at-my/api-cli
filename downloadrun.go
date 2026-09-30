@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -40,12 +41,17 @@ func startDownloadSession(c *cobra.Command) *downloadSession {
 	if isTTY && !s.settings.NoTUI && s.startTUI() {
 		return s
 	}
+	// The workers log concurrently, so each line goes out whole under the lock.
+	var mu sync.Mutex
 	errOut := execStderr
-	s.batch.log = func(format string, args ...any) {
-		fmt.Fprintf(errOut, format+"\n", args...)
+	line := func(msg string) {
+		mu.Lock()
+		defer mu.Unlock()
+		fmt.Fprintln(errOut, msg)
 	}
+	s.batch.log = func(format string, args ...any) { line(fmt.Sprintf(format, args...)) }
 	s.batch.errOut = errOut
-	stepWatch = &stepWatcher{log: func(line string) { fmt.Fprintln(errOut, line) }}
+	stepWatch = &stepWatcher{log: line}
 	return s
 }
 
