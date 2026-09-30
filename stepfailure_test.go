@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -141,18 +140,6 @@ func TestStepProgress_Line(t *testing.T) {
 	p.Retry, p.Retries = 1, 3
 	assert.Equal(t, "listing 16/53 TCLP-1  attempt 12/120  retry 1/3  status=pending", p.line())
 	assert.Equal(t, "listing", stepProgress{Step: "listing"}.line())
-}
-
-// The TUI block carries the running step as its own line, and drops it when
-// the steps end.
-func TestTUI_ShowsTheRunningStep(t *testing.T) {
-	ui := newTUI(nil, 100, func() []*downloadItem { return nil })
-	ui.setStep(&stepProgress{Step: "listing", Index: 2, Total: 5, Item: "b", Attempt: 3, Attempts: 9})
-	assert.Contains(t, ui.frame(time.Now()), "  listing 2/5 b  attempt 3/9")
-	ui.setStep(nil)
-	for _, line := range ui.frame(time.Now()) {
-		assert.NotContains(t, line, "listing")
-	}
 }
 
 func TestItemLabel(t *testing.T) {

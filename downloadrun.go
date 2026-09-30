@@ -34,28 +34,41 @@ func startDownloadSession(c *cobra.Command) *downloadSession {
 	s := &downloadSession{settings: resolveDownloadSettings(c)}
 	q := sharedQueue(s.settings.Concurrency, s.settings.Retries)
 
-	isTTY, width, _ := stdoutSize()
+	isTTY, _, _ := stdoutSize()
 	s.tty = isTTY
-	if !isTTY || s.settings.NoTUI {
-		errOut := execStderr
-		s.batch = q.batch(func(format string, args ...any) {
-			fmt.Fprintf(errOut, format+"\n", args...)
-		}, errOut)
-		stepWatch = &stepWatcher{log: func(line string) { fmt.Fprintln(errOut, line) }}
+	s.batch = q.batch(nil, nil)
+	if isTTY && !s.settings.NoTUI && s.startTUI() {
 		return s
 	}
+	errOut := execStderr
+	s.batch.log = func(format string, args ...any) {
+		fmt.Fprintf(errOut, format+"\n", args...)
+	}
+	s.batch.errOut = errOut
+	stepWatch = &stepWatcher{log: func(line string) { fmt.Fprintln(errOut, line) }}
+	return s
+}
 
+// startTUI takes over the terminal. A display that cannot start says why, and
+// the session falls back to plain lines.
+func (s *downloadSession) startTUI() bool {
+	ui, err := newTUI(execStdout, execStderr, s.batch.snapshot)
+	if err == nil {
+		err = ui.Start()
+	}
+	if err != nil {
+		fmt.Fprintf(execStderr, "error: %v; showing plain progress lines instead\n", err)
+		return false
+	}
 	s.prevOut, s.prevErr = execStdout, execStderr
-	s.batch = q.batch(nil, nil)
-	s.tui = newTUI(s.prevOut, width, s.batch.snapshot)
+	s.tui = ui
 	s.batch.log = s.tui.logf
-	// A transport program's stderr scrolls above the slots too.
+	// A transport program's stderr scrolls above the region too.
 	s.batch.errOut = s.tui
-	// Steps and the downloader write above the slots rather than over them.
+	// Steps and the downloader write above the region rather than over it.
 	execStdout, execStderr = s.tui, s.tui
 	stepWatch = &stepWatcher{show: s.tui.setStep}
-	s.tui.Start()
-	return s
+	return true
 }
 
 // close ends the display and restores the output channels. Idempotent: the

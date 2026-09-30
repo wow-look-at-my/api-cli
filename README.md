@@ -215,7 +215,7 @@ A step can work a URL out: parse it from a listing, sign it, or follow a redirec
 </command>
 ```
 
-On a terminal this draws a block of slots at the bottom of the screen. An in-flight transfer holds one slot, and repaints over its own previous line with its percentage, sizes, rate and ETA. An aggregate `TOTAL` row closes the block.
+On a terminal this draws a block of slots at the bottom of the screen, in color. An in-flight transfer holds one slot, with a bar, its percentage, sizes, rate and ETA. An aggregate `TOTAL` row closes the block. A narrow terminal drops the bar first, then the rate, the ETA and the sizes. The block is a [tml](https://github.com/wow-look-at-my/tml) component, and `NO_COLOR` turns the color off.
 
 A transfer that finishes gives up its slot and emits one `downloaded` line above the block. The output of the steps goes to the same place. Those lines are written one time and scroll away into the terminal's own scrollback. A long run therefore reads as the list of what landed.
 
