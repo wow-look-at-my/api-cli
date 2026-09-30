@@ -328,6 +328,13 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 		return err
 	}
 	executions := oc.executions
+	// The summary comes last, after the leaf's own output and after the
+	// download display has come down.
+	defer func() {
+		if reportSkips(execStderr, oc.skipped) && exitCode == 0 {
+			exitCode = 1
+		}
+	}()
 	if oc.code != 0 {
 		exitCode = oc.code
 		// The steps failed, so nothing reaches the queue. Take the display down

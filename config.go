@@ -200,14 +200,18 @@ type Step struct {
 	// Until makes the step poll: it repeats its own run until this predicate
 	// renders truthy. The predicate sees the last body promoted to the top
 	// level, so an async job's `status` field is `.status`.
-	Until    string          `json:"until,omitempty"`
-	Interval string          `json:"interval,omitempty"`
-	Attempts int             `json:"attempts,omitempty"`
-	Entry    json.RawMessage `json:"entry,omitempty"`
-	Command  *Cmd            `json:"command,omitempty"`
-	Request  *Request        `json:"request,omitempty"`
-	Cwd      string          `json:"cwd,omitempty"`
-	Stdin    string          `json:"stdin,omitempty"`
+	Until    string `json:"until,omitempty"`
+	Interval string `json:"interval,omitempty"`
+	Attempts int    `json:"attempts,omitempty"`
+	// Retries runs a failed run again this many times before it counts.
+	Retries int `json:"retries,omitempty"`
+	// OnError is "fail" (the default) or "skip", which leaves a failed element of over= out of the result.
+	OnError string          `json:"onError,omitempty"`
+	Entry   json.RawMessage `json:"entry,omitempty"`
+	Command *Cmd            `json:"command,omitempty"`
+	Request *Request        `json:"request,omitempty"`
+	Cwd     string          `json:"cwd,omitempty"`
+	Stdin   string          `json:"stdin,omitempty"`
 }
 
 // Arg is a positional argument. Type is "string" or "int" (default string).
@@ -676,6 +680,9 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 			return err
 		}
 		if err := validatePoll(s, sw); err != nil {
+			return err
+		}
+		if err := validateStepFailure(s, sw); err != nil {
 			return err
 		}
 	}
