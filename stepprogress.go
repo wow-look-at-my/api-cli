@@ -17,7 +17,7 @@ type stepProgress struct {
 	Status            string
 }
 
-// label is the step and the element: "listing 16/53 TCLP-1".
+// label is the step and the element: "jobs 7/20 JOB-7".
 func (p stepProgress) label() string {
 	if p.Total == 0 {
 		return p.Step
@@ -25,8 +25,8 @@ func (p stepProgress) label() string {
 	return fmt.Sprintf("%s %d/%d %s", p.Step, p.Index, p.Total, p.Item)
 }
 
-// line is the live status line: "listing / TCLP-1 attempt /
-// status=pending".
+// line is the live status line: the label, the attempt, the retry and the
+// last status, spaces apart.
 func (p stepProgress) line() string {
 	parts := []string{p.label()}
 	if p.Attempts > 0 {

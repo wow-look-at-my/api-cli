@@ -238,10 +238,10 @@ In a pipe there is no display. The `downloaded` lines stay on stderr, and the de
 The steps that feed a `<download>` report their progress too. On a terminal, the block holds one live line for the step that runs. It names the element, the poll attempt, and the `.status` field of the last response when the body has one. A retry shows as `retry 1/3`.
 
 ```
-listing 16/53 TCLP-16  attempt 12/120  status=pending
+jobs 7/20 JOB-7  attempt 4/30  status=pending
 ```
 
-Without the display (`--no-tui`, or stdout in a pipe), stderr gets one line per element when it finishes, such as `listing 16/53 TCLP-16: done`. A long poll also adds one line for every ten attempts that leave `until=` false. No line appears per attempt.
+Without the display (`--no-tui`, or stdout in a pipe), stderr gets one line per element when it finishes, such as `jobs 7/20 JOB-7: done`. A long poll also adds one line for every ten attempts that leave `until=` false. No line appears per attempt.
 
 - **`<download>` is the leaf's action.** It runs after the steps, and it stands in for the leaf's `<run>`. An inherited request therefore does not fire on the way.
 - **`when=`** is a Go-template predicate. A falsy render (empty, `false`, `0` or `no`) skips that declaration, so one leaf can carry a conditional set.
@@ -900,7 +900,7 @@ A failing element fails the whole step, with that element's exit code. A board m
 An error inside a repeated step names the step, the element's position, the total and the element itself.
 
 ```
-error: step "listing" [16/53] TCLP-16: transport "auth-fetch" exited 1
+error: step "jobs" [7/20] JOB-7: transport "corp" exited 1
 ```
 
 `over=` walks a list the context holds: a step result, a `<var>`, or a `variadic` arg, whose Go slice needs no JSON detour. It also takes a template that renders a JSON list, for a list the context does not hold in that shape. See [`over=` on a download](#downloads) for the `collect` helper that flattens a fan-out result.
@@ -927,8 +927,8 @@ An API that answers `status: pending` needs a poll, not a call. A step with `unt
 A flaky endpoint needs a second try, not a shell loop. `retries="N"` runs a failed step again, up to N more times, before the failure counts.
 
 ```xml
-<step name="listing" over="result.items" until="{{ eq .status &quot;done&quot; }}" retries="3" on-error="skip">
-	<run><request transport="auth-fetch"><url><value name="var.api"/>/listing/<value name="item.id"/></url></request></run>
+<step name="jobs" over="result.items" until="{{ eq .status &quot;done&quot; }}" retries="3" on-error="skip">
+	<run><request transport="corp"><url><value name="var.api"/>/jobs/<value name="item.id"/></url></request></run>
 </step>
 ```
 
@@ -945,7 +945,7 @@ A flaky endpoint needs a second try, not a shell loop. `retries="N"` runs a fail
 - **A skip is never silent.** The run exits 1 at the end, and stderr names every element it left out.
 
 ```
-listing: 2 of 53 items skipped: TCLP-1, TCLP-9
+jobs: 2 of 20 items skipped: JOB-3, JOB-11
 ```
 
 ## Legacy formats and views
