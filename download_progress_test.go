@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,6 +50,18 @@ func TestDownload_UnknownLengthCountsBytesMidTransfer(t *testing.T) {
 	require.NoError(t, item.failure())
 	assert.EqualValues(t, 65*1024, item.done.Load())
 	assert.Positive(t, n)
+}
+
+func TestProgressRow_NoBytesYetShowsTheWait(t *testing.T) {
+	now := time.Now()
+	tu := newTUI(&bytes.Buffer{}, 100, staticItems(
+		mkItem(dlActive, "/d/idle.part", 0, -1, now.Add(-12*time.Second)),
+		mkItem(dlActive, "/d/busy.part", 2048, -1, now.Add(-3*time.Second)),
+	))
+	lines := strings.Join(tu.frame(now), "\n")
+	assert.Contains(t, lines, "waiting 00:12", "a row with no bytes says how long it has waited")
+	assert.Contains(t, lines, "2.0 KiB / ?", "a row with bytes shows the count, with no length")
+	assert.NotContains(t, lines, "0 B / ?")
 }
 
 func TestDownload_TransportCountsBytesMidTransfer(t *testing.T) {
