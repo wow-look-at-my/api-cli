@@ -431,6 +431,9 @@ func percentText(fraction float64) string {
 // download in the tally never reported a length — is marked with "+" rather
 // than presented as the finish line.
 func sizesText(p itemProgress) string {
+	if p.Waiting > 0 {
+		return "waiting " + shortDuration(p.Waiting)
+	}
 	right := "?"
 	if p.Total > 0 {
 		right = humanBytes(p.Total)

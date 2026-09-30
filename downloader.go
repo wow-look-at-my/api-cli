@@ -546,6 +546,8 @@ type itemProgress struct {
 	// TotalIsFloor marks an aggregate whose denominator is incomplete because
 	// some download in it has not reported a length.
 	TotalIsFloor bool
+	// Waiting is how long an in-flight item has gone without its first byte.
+	Waiting time.Duration
 }
 
 // progressOf derives an item's rate and ETA from the bytes it has moved since
@@ -559,7 +561,11 @@ func progressOf(done, total int64, start, now time.Time) itemProgress {
 		}
 	}
 	elapsed := now.Sub(start).Seconds()
-	if start.IsZero() || elapsed <= 0 || done <= 0 {
+	if start.IsZero() || elapsed <= 0 {
+		return p
+	}
+	if done <= 0 {
+		p.Waiting = now.Sub(start)
 		return p
 	}
 	p.Speed = float64(done) / elapsed
