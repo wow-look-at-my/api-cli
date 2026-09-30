@@ -93,12 +93,15 @@ func TestTUI_ColumnsGiveWayAsTheTerminalNarrows(t *testing.T) {
 	wide := frameAt(t, tu, 120, now)
 	assert.Contains(t, wide, " 25%")
 	assert.Contains(t, wide, "512 B / 2.0 KiB")
-	assert.Contains(t, wide, "KiB/s")
+	assert.Contains(t, wide, "256 B/s")
+	assert.Contains(t, wide, "ETA 00:06")
+	assert.Contains(t, wide, "████", "the bar draws the known fraction")
 	assert.Contains(t, wide, "10 B / ?", "an unknown length still reports what it knows")
 
 	narrow := frameAt(t, tu, 50, now)
 	assert.Contains(t, narrow, "25%", "the percentage outlasts the bar")
-	assert.NotContains(t, narrow, "KiB/s", "the rate goes early")
+	assert.NotContains(t, narrow, "B/s", "the rate goes early")
+	assert.NotContains(t, narrow, "████", "the bar goes first")
 	for _, line := range strings.Split(narrow, "\n") {
 		assert.LessOrEqual(t, displayWidth(line), 50, "%q", line)
 	}
