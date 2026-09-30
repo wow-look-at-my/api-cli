@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -56,7 +57,7 @@ func clipConfig(t *testing.T, stepAttrs string) *Config {
 			</steps>
 			<download over="result.listing">
 				<url><value name="result.url"/></url>
-				<to><value name="item"/>.bin</to>
+				<to><value name="item.item"/>.bin</to>
 			</download>
 		</command>
 	</config>`)
@@ -112,11 +113,26 @@ func TestStepFailure_FailNamesTheElement(t *testing.T) {
 // An exhausted poll without skip fails the run with the element named.
 func TestStepFailure_ExhaustedPollNamesTheElement(t *testing.T) {
 	noPollSleep(t)
-	cfg := clipConfig(t, `retries="1"`)
+	capture := func(_ *Cmd, _, _ string, data any) (string, int) {
+		if data.(map[string]any)["item"] == "stuck" {
+			return `{"parts":[],"status":"pending"}`, 0
+		}
+		return `{"status":"done"}`, 0
+	}
+	steps := []Step{{
+		Name:     "listing",
+		Over:     "ids",
+		Until:    `{{ eq .status "done" }}`,
+		Attempts: 3,
+		Retries:  1,
+		Command:  &Cmd{Shell: true, Template: "true"},
+	}}
+	data := map[string]any{"ids": []any{"ok", "stuck"}}
 
-	_, _, errOut := execCmdFull(t, cfg, "pull", "ok", "stuck", "--download-dir", t.TempDir())
-	assert.Contains(t, errOut, `step "listing" [2/2] stuck: until`)
-	assert.Contains(t, errOut, `"status":"pending"`)
+	_, err := runSteps(steps, data, map[string]any{}, nil, nil, "", "", capture, io.Discard)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `step "listing" [2/2] stuck: until`)
+	assert.Contains(t, err.Error(), `"status":"pending"`)
 }
 
 func TestStepProgress_Line(t *testing.T) {

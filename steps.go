@@ -95,7 +95,9 @@ func runSteps(steps []Step, data map[string]any, results map[string]any, cmdTmpl
 			return oc, err
 		}
 		logDebugBlock(fmt.Sprintf("step %q: stdout", step.Name), out)
-		if fail != nil {
+		if fail == nil {
+			logVerbose("step %q: exit code 0", step.Name)
+		} else {
 			logVerbose("step %q: exit code %d", step.Name, fail.code)
 			if !fail.quiet {
 				fail.report(errOut, "")
