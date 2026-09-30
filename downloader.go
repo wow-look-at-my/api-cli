@@ -81,12 +81,13 @@ type downloadItem struct {
 
 	name  atomic.Value // string: the destination path, a single
 	done  atomic.Int64
-	// reported is the byte count a transport program wrote to its progress fd.
-	reported atomic.Int64
-	total    atomic.Int64
+	total atomic.Int64
 	state atomic.Int32
 	start atomic.Int64 // unix nanos
 	end   atomic.Int64 // unix nanos
+
+	// reported is the byte count a transport program wrote to its progress fd.
+	reported atomic.Int64
 
 	mu  sync.Mutex
 	err error

@@ -266,7 +266,7 @@ func (t *tui) frame(now time.Time) []string {
 		if item.state.Load() != dlActive {
 			continue
 		}
-		p := progressOf(item.shown(),item.total.Load(), time.Unix(0, item.start.Load()), now)
+		p := progressOf(item.shown(), item.total.Load(), time.Unix(0, item.start.Load()), now)
 		rows = append(rows, progressRow{item.label(), p})
 	}
 	rows = append(rows, progressRow{"TOTAL", aggregateProgress(totals)})
