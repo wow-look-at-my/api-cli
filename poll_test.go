@@ -183,10 +183,10 @@ func TestPoll_ExhaustedRetriesFail(t *testing.T) {
 
 func TestStep_RejectsBadRetriesAndOnError(t *testing.T) {
 	for name, tc := range map[string]struct{ attrs, want string }{
-		"negative retries":   {`retries="-1"`, "retries=-1 must be >= 0"},
-		"non-integer":        {`retries="x"`, `retries="x" must be an integer`},
-		"skip without over":  {`on-error="skip"`, "so it needs over="},
-		"unknown on-error":   {`on-error="ignore" over="arg.ids"`, "must be fail or skip"},
+		"negative retries":  {`retries="-1"`, "retries=-1 must be >= 0"},
+		"non-integer":       {`retries="x"`, `retries="x" must be an integer`},
+		"skip without over": {`on-error="skip"`, "so it needs over="},
+		"unknown on-error":  {`on-error="ignore" over="arg.ids"`, "must be fail or skip"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := loadStr(t, `<config name="p"><command name="c"><arg name="ids" variadic="true"/>
