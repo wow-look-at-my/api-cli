@@ -294,15 +294,15 @@ A program that holds the body until it finishes writes nothing to stdout mid-tra
 
 The progress fd gives the exact number on every system. Wire it up whenever the program you delegate to does not stream its output. A report replaces the `/proc` estimate for that transfer.
 
-api-cli gives every download transport a pipe on file descriptor 3. The variable `API_CLI_PROGRESS_FD` names it in the program's environment, and `.request.progress_fd` names it in the templates. The program writes one line per report:
+api-cli gives every download transport a pipe on file descriptor 3. The variable `API_CLI_PROGRESS_FD` names it in the program's environment, and `.request.progress_fd` names it in the templates. The program writes one JSON object per line:
 
 ```
-total=73400320
-done=1048576
-done=2097152 total=73400320
+{"total":73400320}
+{"done":1048576}
+{"done":2097152,"total":73400320}
 ```
 
-- **`done=`** is the bytes received so far, and **`total=`** is the file's size. Each is optional. A line needs at least one. A report replaces the previous one. It never adds to it.
+- **`done`** is the bytes received so far, and **`total`** is the file's size. Each is optional. A line needs at least one. A report replaces the previous one. It never adds to it.
 - **Stdout is still the file.** The final byte count, the `.part` rename and the digest come from stdout alone. A report only drives the row while the transfer is open.
 - **A bad line fails the download.** An unknown key, a missing value or a negative number stops the transfer with an error that names the line. The queue does not retry it, because the same program sends the same line again.
 - **A program that never writes to the fd is fine.** The row falls back to the `/proc` estimate on Linux, and to the stdout count elsewhere.
@@ -323,15 +323,19 @@ Pass the fd to a program that takes it as a flag:
 Only the program knows how far it got when it holds the body in memory. A wrapper around it sees nothing until the program writes. So the report has to come from the program: from its read loop, as each chunk arrives. In Go that is a counting `io.Writer` in the copy from the response body:
 
 ```go
-var progress io.Writer = io.Discard
+type report struct {
+	Done  *int64 `json:"done,omitempty"`
+	Total *int64 `json:"total,omitempty"`
+}
+progress := json.NewEncoder(io.Discard)
 if fd, err := strconv.Atoi(os.Getenv("API_CLI_PROGRESS_FD")); err == nil {
-	progress = os.NewFile(uintptr(fd), "progress")
+	progress = json.NewEncoder(os.NewFile(uintptr(fd), "progress"))
 }
 if resp.ContentLength >= 0 {
-	fmt.Fprintf(progress, "total=%d\n", resp.ContentLength)
+	progress.Encode(report{Total: &resp.ContentLength})
 }
 // on each chunk:
-fmt.Fprintf(progress, "done=%d\n", received)
+progress.Encode(report{Done: &received})
 ```
 
 Write a report at most a few times a second. The display repaints every 100 ms, so more lines only cost the program time.

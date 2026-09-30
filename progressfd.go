@@ -2,12 +2,12 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 )
 
@@ -22,32 +22,37 @@ type progressReport struct {
 	done, total int64
 }
 
-// parseProgressLine reads a single report. An unknown key, a missing value or
-// a negative number is an error: a program that speaks the protocol wrong
-// must hear about it, or its rows sit at zero with no reason given.
+// parseProgressLine reads a single report: a JSON object with "done", "total"
+// or both. An unknown key, a missing value or a negative number is an error: a
+// program that speaks the protocol wrong must hear about it, or its rows sit at
+// zero with no reason given.
 func parseProgressLine(line string) (progressReport, error) {
 	r := progressReport{done: -1, total: -1}
-	fields := strings.Fields(line)
-	if len(fields) == 0 {
-		return r, fmt.Errorf("empty progress line")
+	var wire struct {
+		Done  *int64 `json:"done"`
+		Total *int64 `json:"total"`
 	}
-	for _, f := range fields {
-		key, val, ok := strings.Cut(f, "=")
-		if !ok {
-			return r, fmt.Errorf("progress field %q is not key=value", f)
+	dec := json.NewDecoder(strings.NewReader(line))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&wire); err != nil {
+		return r, fmt.Errorf("progress line %q: %w (want {\"done\":N,\"total\":N})", line, err)
+	}
+	if dec.More() {
+		return r, fmt.Errorf("progress line %q: one JSON object per line", line)
+	}
+	if wire.Done == nil && wire.Total == nil {
+		return r, fmt.Errorf("progress line %q names neither done nor total", line)
+	}
+	for _, v := range []*int64{wire.Done, wire.Total} {
+		if v != nil && *v < 0 {
+			return r, fmt.Errorf("progress line %q: a byte count cannot be negative", line)
 		}
-		n, err := strconv.ParseInt(val, 10, 64)
-		if err != nil || n < 0 {
-			return r, fmt.Errorf("progress field %q needs a whole number of bytes", f)
-		}
-		switch key {
-		case "done":
-			r.done = n
-		case "total":
-			r.total = n
-		default:
-			return r, fmt.Errorf("progress field %q: the keys are done and total", f)
-		}
+	}
+	if wire.Done != nil {
+		r.done = *wire.Done
+	}
+	if wire.Total != nil {
+		r.total = *wire.Total
 	}
 	return r, nil
 }

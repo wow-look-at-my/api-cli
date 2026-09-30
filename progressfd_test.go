@@ -13,15 +13,16 @@ import (
 )
 
 func TestParseProgressLine(t *testing.T) {
-	r, err := parseProgressLine("done=1024 total=4096")
+	r, err := parseProgressLine(`{"done":1024,"total":4096}`)
 	require.NoError(t, err)
 	assert.Equal(t, progressReport{done: 1024, total: 4096}, r)
 
-	r, err = parseProgressLine("total=10")
+	r, err = parseProgressLine(`{"total":10}`)
 	require.NoError(t, err)
 	assert.Equal(t, progressReport{done: -1, total: 10}, r, "a size known before any byte is a report")
 
-	for _, bad := range []string{"", "bytes=5", "done=", "done=-1", "done=1.5", "done 5"} {
+	for _, bad := range []string{``, `{}`, `{"bytes":5}`, `{"done":null}`, `{"done":-1}`, `{"done":1.5}`,
+		`{"done":"5"}`, `done=5`, `{"done":1}{"done":2}`} {
 		_, err := parseProgressLine(bad)
 		assert.Error(t, err, "%q must be rejected", bad)
 	}
@@ -36,7 +37,7 @@ func TestTransport_ProgressFDDrivesTheRowWhileStdoutIsSilent(t *testing.T) {
 		URL:  "https://internal.example/big.bin",
 		Dest: filepath.Join(t.TempDir(), "big.bin"),
 		Transport: &downloadTransport{Name: "buffered", Argv: []string{"sh", "-c",
-			`echo "done=1000 total=5000" >&"$API_CLI_PROGRESS_FD"; sleep 1; head -c 5000 /dev/zero`}},
+			`echo '{"done":1000,"total":5000}' >&"$API_CLI_PROGRESS_FD"; sleep 1; head -c 5000 /dev/zero`}},
 	})
 
 	deadline := time.Now().Add(3 * time.Second)
@@ -87,14 +88,14 @@ func TestTransport_BadProgressLineFailsWithoutRetry(t *testing.T) {
 	item := batch.add(downloadSpec{
 		URL:       "https://internal.example/x",
 		Dest:      filepath.Join(t.TempDir(), "x"),
-		Transport: &downloadTransport{Name: "chatty", Argv: []string{"sh", "-c", `echo "bytes=5" >&3; printf x`}},
+		Transport: &downloadTransport{Name: "chatty", Argv: []string{"sh", "-c", `echo '{"bytes":5}' >&3; printf x`}},
 	})
 	batch.wait()
 
 	err := item.failure()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "progress fd")
-	assert.Contains(t, err.Error(), "the keys are done and total")
+	assert.Contains(t, err.Error(), `unknown field "bytes"`)
 	for _, l := range logs {
 		assert.False(t, strings.HasPrefix(l, "retrying"), "a protocol error repeats on every attempt")
 	}
