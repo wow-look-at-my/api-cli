@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -80,7 +81,9 @@ type downloadItem struct {
 
 	name  atomic.Value // string: the destination path, a single
 	done  atomic.Int64
-	total atomic.Int64
+	// reported is the byte count a transport program wrote to its progress fd.
+	reported atomic.Int64
+	total    atomic.Int64
 	state atomic.Int32
 	start atomic.Int64 // unix nanos
 	end   atomic.Int64 // unix nanos
@@ -277,6 +280,8 @@ func (q *downloadQueue) run(item *downloadItem) {
 		}
 		log("retrying %s: %v", item.label(), err)
 		item.done.Store(0)
+		item.reported.Store(0)
+		item.total.Store(-1)
 		time.Sleep(retryDelay)
 	}
 
@@ -345,9 +350,9 @@ func (q *downloadQueue) fetchViaTransport(item *downloadItem) (error, bool) {
 	cmd.Stdout = pf.sink
 	cmd.Stderr = item.batch.errOut
 
-	if err := cmd.Run(); err != nil {
+	if err := runWithProgress(cmd, item); err != nil {
 		pf.abort()
-		return fmt.Errorf("transport %q: %w", tr.Name, err), true
+		return fmt.Errorf("transport %q: %w", tr.Name, err), !errors.Is(err, errBadProgress)
 	}
 	return pf.commit()
 }
@@ -500,7 +505,7 @@ func tallyDownloads(items []*downloadItem, now time.Time) downloadTotals {
 	t := downloadTotals{TotalKnown: true}
 	earliest := int64(0)
 	for _, item := range items {
-		done := item.done.Load()
+		done := item.shown()
 		total := item.total.Load()
 		state := item.state.Load()
 		t.Bytes += done

@@ -283,10 +283,56 @@ A `<download>` reaches its URL as a `<request>` does. It goes over the built-in 
 ```
 
 - **Selection matches requests**: the `transport=` attribute, then the registry's `default="true"` entry, then the built-in client. A config whose endpoints all need the program therefore needs it for its files too, and says nothing extra. `transport="http"` opts one download back to the built-in client.
-- **The program gets the same `.request` context** -- `method`, `url`, `headers` and `header_lines` -- so one program serves requests and downloads alike. `method` is `GET`, and there is no body.
+- **The program gets the same `.request` context** -- `method`, `url`, `headers` and `header_lines` -- so one program serves requests and downloads alike. `method` is `GET`, and there is no body. A download adds `progress_fd`, the fd for [progress reports](#reporting-progress-from-a-transport).
 - **Its stdout streams into the file** rather than into a buffered response body. That is the one difference between the two paths. It is also why a file larger than memory is fine. The `.part` sibling, the byte count and the digest check are the same code on both.
 - **A non-zero exit fails the download, and the queue retries it.** A program owns its own exit codes. curl says 22 for a 404 and 7 for a refused connection. This path therefore cannot tell an answer from a hiccup, unlike the built-in client, and it lets the attempt limit end the transfer. Its stderr is emitted above the slots.
-- The size is unknown at the start, because there is no `Content-Length`. That file's row drops the bar and the percentage. It reports the bytes and the rate. A file with no bytes yet reads `waiting mm:ss`, which is the time since its transfer started. A frame where no file reported a length drops both columns outright. The total is marked as a floor.
+- The size is unknown at the start, because there is no `Content-Length`. That file's row drops the bar and the percentage. It reports the bytes and the rate. A file with no bytes yet reads `waiting mm:ss`, which is the time since its transfer started. A frame where no file reported a length drops both columns outright. The total is marked as a floor. The program can supply both numbers itself on the [progress fd](#reporting-progress-from-a-transport).
+
+### Reporting progress from a transport
+
+A program that holds the body until it finishes writes nothing to stdout mid-transfer. Its row then reads `waiting` until the file lands. The progress fd fixes that. Wire it up whenever the program you delegate to does not stream its output.
+
+api-cli gives every download transport a pipe on file descriptor 3. The variable `API_CLI_PROGRESS_FD` names it in the program's environment, and `.request.progress_fd` names it in the templates. The program writes one line per report:
+
+```
+total=73400320
+done=1048576
+done=2097152 total=73400320
+```
+
+- **`done=`** is the bytes received so far, and **`total=`** is the file's size. Each is optional. A line needs at least one. A report replaces the previous one. It never adds to it.
+- **Stdout is still the file.** The final byte count, the `.part` rename and the digest come from stdout alone. A report only drives the row while the transfer is open.
+- **A bad line fails the download.** An unknown key, a missing value or a negative number stops the transfer with an error that names the line. The queue does not retry it, because the same program sends the same line again.
+- **A program that never writes to the fd is fine.** The row falls back to the stdout count.
+
+Pass the fd to a program that takes it as a flag:
+
+```xml
+<transport name="corp">
+	<run>
+		<argv>corp-fetch</argv>
+		<argv>--progress-fd</argv>
+		<argv><value name="request.progress_fd"/></argv>
+		<argv><value name="request.url"/></argv>
+	</run>
+</transport>
+```
+
+Only the program knows how far it got when it holds the body in memory. A wrapper around it sees nothing until the program writes. So the report has to come from the program: from its read loop, as each chunk arrives. In Go that is a counting `io.Writer` in the copy from the response body:
+
+```go
+var progress io.Writer = io.Discard
+if fd, err := strconv.Atoi(os.Getenv("API_CLI_PROGRESS_FD")); err == nil {
+	progress = os.NewFile(uintptr(fd), "progress")
+}
+if resp.ContentLength >= 0 {
+	fmt.Fprintf(progress, "total=%d\n", resp.ContentLength)
+}
+// on each chunk:
+fmt.Fprintf(progress, "done=%d\n", received)
+```
+
+Write a report at most a few times a second. The display repaints every 100 ms, so more lines only cost the program time.
 
 ### Checking a download against a digest
 
