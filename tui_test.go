@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -28,11 +27,6 @@ func mkItem(state int32, dest string, done, total int64, started time.Time) *dow
 	}
 	return item
 }
-
-// ansiSeq matches a CSI or OSC escape, so an assertion reads the text a user sees.
-var ansiSeq = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)`)
-
-func stripANSI(s string) string { return ansiSeq.ReplaceAllString(s, "") }
 
 // frameAt renders the region's props at a width, the way the live region lays
 // out a frame.
