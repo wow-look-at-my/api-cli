@@ -56,6 +56,18 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 	if oc.code != 0 {
 		return mcpCombine(oc.output, stepErrBuf.String()), true
 	}
+	if len(oc.skipped) > 0 {
+		var summary bytes.Buffer
+		summary.WriteString(stepErrBuf.String())
+		reportSkips(&summary, oc.skipped)
+		out, _ := mcpExecAfterSteps(leaf, data)
+		return mcpCombine(out, strings.TrimRight(summary.String(), "\n")), true
+	}
+	return mcpExecAfterSteps(leaf, data)
+}
+
+// mcpExecAfterSteps is the rest of a tool call once its steps succeeded.
+func mcpExecAfterSteps(leaf *mcpLeaf, data map[string]any) (string, bool) {
 
 	entry, err := renderEntry(leaf.node.Entry, data)
 	if err != nil {

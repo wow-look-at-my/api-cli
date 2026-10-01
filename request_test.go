@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -184,10 +185,21 @@ func TestApplyJQ_Identity(t *testing.T) {
 	assert.Contains(t, out, `"b": 2`)
 }
 
-func TestApplyJQ_NonJSONPassesThrough(t *testing.T) {
-	out, err := applyJQ("var.f", []byte("not json at all"), map[string]any{"var": map[string]any{"f": "."}})
+func TestApplyJQ_NonJSONPassesThroughWithoutAProgram(t *testing.T) {
+	out, err := applyJQ("", []byte("not json at all"), map[string]any{})
 	require.NoError(t, err)
 	assert.Equal(t, "not json at all", out)
+}
+
+// A config that names a jq program expects JSON. A login page must not reach
+// until= and the templates as if it were an answer.
+func TestApplyJQ_NonJSONFailsUnderAProgram(t *testing.T) {
+	page := "<!DOCTYPE html><html><head><title>Sign in</title></head>" + strings.Repeat("x", 400)
+	_, err := applyJQ("var.f", []byte(page), map[string]any{"var": map[string]any{"f": "."}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "response is not JSON")
+	assert.Contains(t, err.Error(), "<title>Sign in</title>")
+	assert.Less(t, len(err.Error()), 320, "the excerpt is capped")
 }
 
 func TestApplyJQ_MultipleOutputs(t *testing.T) {

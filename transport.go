@@ -193,31 +193,32 @@ func knownTransports() string {
 
 // runViaTransport hands a prepared request to the transport program and
 // returns its stdout as the response body.
-func runViaTransport(t *Transport, p *preparedRequest, data map[string]any, errOut io.Writer) (string, int) {
+func runViaTransport(t *Transport, p *preparedRequest, data map[string]any, errOut io.Writer) (string, *callFailure) {
 	ctx := p.context(data)
 
 	cwd, err := renderCwd(t.Cwd, ctx)
 	if err != nil {
-		fmt.Fprintf(errOut, "error: transport %q: render cwd: %v\n", t.Name, err)
-		return "", 1
+		return "", failed("transport %q: render cwd: %v", t.Name, err)
 	}
 
 	stdin := p.Body
 	if t.StdinSet {
 		if stdin, err = renderString(t.Stdin, ctx); err != nil {
-			fmt.Fprintf(errOut, "error: transport %q: render stdin: %v\n", t.Name, err)
-			return "", 1
+			return "", failed("transport %q: render stdin: %v", t.Name, err)
 		}
 	}
 
 	logVerbose("transport %q: %s %s", t.Name, p.Method, p.URL)
 	out, code := captureExecTo(t.Command, cwd, stdin, ctx, errOut)
 	if code != 0 {
-		fmt.Fprintf(errOut, "error: transport %q exited %d\n", t.Name, code)
-		return "", code
+		fail := &callFailure{code: code, msg: fmt.Sprintf("transport %q exited %d", t.Name, code)}
+		if strings.TrimSpace(out) != "" {
+			fail.detail = "stdout starts with " + bodyExcerpt([]byte(out))
+		}
+		return "", fail
 	}
 	logVerbose("transport %q: %d bytes", t.Name, len(out))
-	return out, 0
+	return out, nil
 }
 
 // context layers the rendered request onto the leaf's data context, so a
