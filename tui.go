@@ -113,7 +113,7 @@ func (t *tui) props(now time.Time) tml.Props {
 		if item.state.Load() != dlActive {
 			continue
 		}
-		p := progressOf(item.done.Load(), item.total.Load(), time.Unix(0, item.start.Load()), now)
+		p := progressOf(item.shown(), item.total.Load(), time.Unix(0, item.start.Load()), now)
 		rows = append(rows, progressRecord(item.label(), "active", p))
 	}
 	rows = append(rows, progressRecord("TOTAL", "total", aggregateProgress(totals)))
@@ -177,6 +177,9 @@ func percentText(fraction float64) string {
 // download in the tally never reported a length — is marked with "+" rather
 // than presented as the finish line.
 func sizesText(p itemProgress) string {
+	if p.Waiting > 0 {
+		return "waiting " + shortDuration(p.Waiting)
+	}
 	right := "?"
 	if p.Total > 0 {
 		right = humanBytes(p.Total)

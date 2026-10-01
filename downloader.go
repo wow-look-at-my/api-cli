@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -84,6 +85,11 @@ type downloadItem struct {
 	state atomic.Int32
 	start atomic.Int64 // unix nanos
 	end   atomic.Int64 // unix nanos
+
+	// reported is the byte count a transport program wrote to its progress fd.
+	reported atomic.Int64
+	// observed is the bytes the program has read, from /proc (procio.go).
+	observed atomic.Int64
 
 	mu  sync.Mutex
 	err error
@@ -277,6 +283,9 @@ func (q *downloadQueue) run(item *downloadItem) {
 		}
 		log("retrying %s: %v", item.label(), err)
 		item.done.Store(0)
+		item.reported.Store(0)
+		item.observed.Store(0)
+		item.total.Store(-1)
 		time.Sleep(retryDelay)
 	}
 
@@ -345,9 +354,9 @@ func (q *downloadQueue) fetchViaTransport(item *downloadItem) (error, bool) {
 	cmd.Stdout = pf.sink
 	cmd.Stderr = item.batch.errOut
 
-	if err := cmd.Run(); err != nil {
+	if err := runWithProgress(cmd, item); err != nil {
 		pf.abort()
-		return fmt.Errorf("transport %q: %w", tr.Name, err), true
+		return fmt.Errorf("transport %q: %w", tr.Name, err), !errors.Is(err, errBadProgress)
 	}
 	return pf.commit()
 }
@@ -500,7 +509,7 @@ func tallyDownloads(items []*downloadItem, now time.Time) downloadTotals {
 	t := downloadTotals{TotalKnown: true}
 	earliest := int64(0)
 	for _, item := range items {
-		done := item.done.Load()
+		done := item.shown()
 		total := item.total.Load()
 		state := item.state.Load()
 		t.Bytes += done
@@ -546,6 +555,8 @@ type itemProgress struct {
 	// TotalIsFloor marks an aggregate whose denominator is incomplete because
 	// some download in it has not reported a length.
 	TotalIsFloor bool
+	// Waiting is how long an in-flight item has gone without its first byte.
+	Waiting time.Duration
 }
 
 // progressOf derives an item's rate and ETA from the bytes it has moved since
@@ -559,7 +570,11 @@ func progressOf(done, total int64, start, now time.Time) itemProgress {
 		}
 	}
 	elapsed := now.Sub(start).Seconds()
-	if start.IsZero() || elapsed <= 0 || done <= 0 {
+	if start.IsZero() || elapsed <= 0 {
+		return p
+	}
+	if done <= 0 {
+		p.Waiting = now.Sub(start)
 		return p
 	}
 	p.Speed = float64(done) / elapsed

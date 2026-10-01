@@ -160,6 +160,7 @@ func prepareDownloadTransport(name, rawURL string, headers []renderedHeader, ctx
 
 	p := &preparedRequest{Method: http.MethodGet, URL: rawURL, Headers: headers}
 	tctx := p.context(ctx)
+	tctx["request"].(map[string]any)["progress_fd"] = progressFD
 
 	cwd, err := renderCwd(t.Cwd, tctx)
 	if err != nil {
