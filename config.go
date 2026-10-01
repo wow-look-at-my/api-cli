@@ -6,6 +6,7 @@ import (
 	"github.com/wow-look-at-my/api-cli/fields"
 	"github.com/wow-look-at-my/go-containers/set"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -17,18 +18,25 @@ import (
 // context composed of args, flags, environment, vars, and the leaf's entry
 // variables. The rendered command is then executed.
 type Config struct {
-	Schema      string                `json:"$schema,omitempty"`
-	Name        string                `json:"name"`
-	Description string                `json:"description,omitempty"`
-	Vars        map[string]any        `json:"vars,omitempty"`
-	Command     *Cmd                  `json:"command,omitempty"`
-	Request     *Request              `json:"request,omitempty"`
-	Cwd         string                `json:"cwd,omitempty"`
-	Stdin       string                `json:"stdin,omitempty"`
-	Formats     map[string]*Format    `json:"formats,omitempty"`
-	Transports  map[string]*Transport `json:"transports,omitempty"`
-	Downloads   *Downloads            `json:"downloads,omitempty"`
-	Commands    []Command             `json:"commands,omitempty"`
+	Schema      string         `json:"$schema,omitempty"`
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	Vars        map[string]any `json:"vars,omitempty"`
+	Command     *Cmd           `json:"command,omitempty"`
+	Request     *Request       `json:"request,omitempty"`
+	Cwd         string         `json:"cwd,omitempty"`
+	Stdin       string         `json:"stdin,omitempty"`
+	// Preconditions gate every node under the config. A guard written here runs
+	// on each run in the tree, which is what keeps a single rule out of every leaf.
+	Preconditions []string              `json:"preconditions,omitempty"`
+	Formats       map[string]*Format    `json:"formats,omitempty"`
+	Transports    map[string]*Transport `json:"transports,omitempty"`
+	Downloads     *Downloads            `json:"downloads,omitempty"`
+	Commands      []Command             `json:"commands,omitempty"`
+	// Dir is the directory the config was read from. A <tml src=> resolves
+	// against it, so a path in the config means what the author sees next to
+	// the file rather than wherever the shell happens to sit.
+	Dir string `json:"-"`
 }
 
 // Command is a node in the CLI tree. A node is a leaf iff it has no
@@ -52,6 +60,12 @@ type Config struct {
 // The rendered string is fed to the child process's stdin. When empty/unset,
 // the child inherits the parent process's stdin.
 //
+// `runnable` makes a node with subcommands execute in its own right, which is
+// how a single name is both `tool [id]` and `tool sub`. Cobra reads the
+// earliest positional as a subcommand name, so every arg of a runnable node
+// needs a `pattern` that matches none of its subcommand names. `--` ends the
+// subcommand lookup, for a value that starts with a dash.
+//
 // `steps` run sequentially before the leaf's own run. A step runs a command or
 // a request — the same fork as `<run>` — and defaults to the leaf's effective
 // run when it declares neither. Each step's output is captured and parsed as
@@ -61,6 +75,7 @@ type Command struct {
 	Name          string          `json:"name"`
 	Description   string          `json:"description,omitempty"`
 	Passthrough   bool            `json:"passthrough,omitempty"`
+	Runnable      bool            `json:"runnable,omitempty"`
 	Args          []Arg           `json:"args,omitempty"`
 	Flags         []Flag          `json:"flags,omitempty"`
 	Vars          map[string]any  `json:"vars,omitempty"`
@@ -72,9 +87,13 @@ type Command struct {
 	Entry         json.RawMessage `json:"entry,omitempty"`
 	Preconditions []string        `json:"preconditions,omitempty"`
 	Confirm       string          `json:"confirm,omitempty"`
+	Watch         string          `json:"watch,omitempty"`
 	Format        *FormatRef      `json:"format,omitempty"`
-	Fields        *Fields         `json:"fields,omitempty"`
+	Fields        []FieldsBlock   `json:"fields,omitempty"`
+	TML           *TML            `json:"tml,omitempty"`
+	Mock          *Mock           `json:"mock,omitempty"`
 	Downloads     []Download      `json:"downloads,omitempty"`
+	Stream        *Stream         `json:"stream,omitempty"`
 	Commands      []Command       `json:"commands,omitempty"`
 }
 
@@ -90,18 +109,18 @@ type Command struct {
 // predicate is truthy AND the user has not opted out (--no-format,
 // --format=raw, NO_FORMAT=1).
 //
-// `Views` are alternative renderings; selectView decides which one applies.
+// `Views` are alternative renderings; selectView decides which a single applies.
 type Format struct {
 	Input string `json:"input,omitempty"`
 	When  string `json:"when,omitempty"`
 	Views []View `json:"views"`
 }
 
-// View is one alternative rendering inside a Format. Selection rules:
-//  1. --view=<name> from the user wins if set.
-//  2. Else first view whose `When` predicate renders truthy wins.
-//  3. Else first view with `Default: true`.
-//  4. Else first view in the slice.
+// View is a single alternative rendering inside a Format.
+//
+//	--view=<name> from the user wins if set. Else earliest view whose
+//	`When` predicate renders truthy wins. Else earliest view with
+//	`Default: true`. Else earliest view in the slice.
 type View struct {
 	Name     string `json:"name"`
 	When     string `json:"when,omitempty"`
@@ -170,8 +189,24 @@ func (r *FormatRef) Defined() bool {
 // parsed as JSON if valid, and stored under `.result.<name>` for use in
 // subsequent steps and the leaf's own entry/command templates.
 type Step struct {
-	Name    string          `json:"name"`
-	When    string          `json:"when,omitempty"`
+	Name string `json:"name"`
+	When string `json:"when,omitempty"`
+	// Over repeats the step a single time per element of a list an earlier
+	// result holds. The step sees the element as `.item` and its position
+	// as `.index`, and the result is a list of {"item": element, "result":
+	// response} in the source order. So a single screen can show a row per
+	// build AND what another call says about each of them.
+	Over string `json:"over,omitempty"`
+	// Until makes the step poll: it repeats its own run until this predicate
+	// renders truthy. The predicate sees the last body promoted to the top
+	// level, so an async job's `status` field is `.status`.
+	Until    string `json:"until,omitempty"`
+	Interval string `json:"interval,omitempty"`
+	Attempts int    `json:"attempts,omitempty"`
+	// Retries runs a failed run again this many times before it counts.
+	Retries int `json:"retries,omitempty"`
+	// OnError is "fail" (the default) or "skip", which leaves a failed element of over= out of the result.
+	OnError string          `json:"onError,omitempty"`
 	Entry   json.RawMessage `json:"entry,omitempty"`
 	Command *Cmd            `json:"command,omitempty"`
 	Request *Request        `json:"request,omitempty"`
@@ -183,13 +218,18 @@ type Step struct {
 //
 // If Variadic is true, the arg consumes all remaining positional values into a
 // []string (or []int) and must be the last entry in the args list. A required
-// variadic arg requires at least one value; an optional variadic arg accepts
-// zero or more.
+// variadic arg requires at least a single value; an optional variadic arg
+// accepts empty or more. Pattern is a regular expression every supplied value
+// must match. It is validation on a leaf, and it is what makes a runnable
+// parent unambiguous: the loader rejects a pattern that matches any of the
+// node's own subcommand names, so a value cobra reads as an argument can never
+// be a subcommand.
 type Arg struct {
 	Name        string `json:"name"`
 	Type        string `json:"type,omitempty"`
 	Required    bool   `json:"required,omitempty"`
 	Variadic    bool   `json:"variadic,omitempty"`
+	Pattern     string `json:"pattern,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
@@ -201,7 +241,7 @@ type Arg struct {
 // "string" type.
 //
 // `Conflicts` lists sibling flag names that may not be set together; the CLI
-// rejects the invocation if more than one is supplied.
+// rejects the invocation if more than a single is supplied.
 type Flag struct {
 	Name        string   `json:"name"`
 	Short       string   `json:"short,omitempty"`
@@ -273,9 +313,9 @@ func (c *Cmd) Defined() bool {
 	return c.Shell || len(c.Argv) > 0
 }
 
-// Request is a first-class HTTP request, the alternative to a shell/argv Cmd as
-// a leaf's executable. It is built from a <run><request> element. Like Cmd it
-// inherits down the command tree: the closest ancestor that defines a <run>
+// Request is a earliest-class HTTP request, the alternative to a shell/argv Cmd
+// as a leaf's executable. It is built from a <run><request> element. Like Cmd
+// it inherits down the command tree: the closest ancestor that defines a <run>
 // (whether request or command) wins for a subtree.
 //
 // Every string field is a Go template rendered against the leaf's data context
@@ -289,6 +329,10 @@ type Request struct {
 	Body      string    `json:"body,omitempty"`      // template; empty means no body
 	Response  *Response `json:"response,omitempty"`  // nil means stream the raw body
 	Transport string    `json:"transport,omitempty"` // registry name; empty means the config default
+
+	// AllowStatus lists the 4xx/5xx statuses that are an answer rather than a
+	// failure ("404" on a lookup that may miss).
+	AllowStatus []int `json:"allowStatus,omitempty"`
 }
 
 // Transport is a user-supplied program that performs requests in place of the
@@ -297,13 +341,9 @@ type Request struct {
 //
 // The program receives the fully-rendered request at `.request` (method, url,
 // body, headers, header_lines) on top of the leaf's own data context, so its
-// argv is written with the same placeholders as any other command. Its stdout
-// is the response body and feeds `<response jq=>` exactly like a built-in
-// response; a non-zero exit fails the request.
+// argv is written with the same placeholders as any other command.
 //
 // Stdin is the request body unless the transport declares its own `<stdin>`.
-// Either way it is explicit: a transport never inherits the user's terminal,
-// so a program that reads stdin cannot hang waiting for one.
 type Transport struct {
 	Name     string `json:"name"`
 	Command  *Cmd   `json:"command,omitempty"`
@@ -318,7 +358,7 @@ func (r *Request) Defined() bool {
 	return r != nil && strings.TrimSpace(r.URL) != ""
 }
 
-// Param is one query parameter. Name and Value are templates. When, if
+// Param is a single query parameter. Name and Value are templates. When, if
 // non-empty, is a context path: the param is included only when it is truthy
 // (set by an enclosing <if test=>).
 type Param struct {
@@ -327,17 +367,16 @@ type Param struct {
 	When  string `json:"when,omitempty"`
 }
 
-// Header is one request header. Name and Value are templates. When mirrors
-// Param.When for headers wrapped in <if test=>.
+// Header is a single request header. Name and Value are templates. When
+// mirrors Param.When for headers wrapped in <if test=>.
 type Header struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 	When  string `json:"when,omitempty"`
 }
 
-// Response shapes a JSON response body before output. JQ is the jq program, as
-// a template, or a bare dotted context path naming one (e.g. "var.filter") —
-// see jqProgram. The program runs over the decoded body and the result(s) are
+// Response shapes a JSON response body before output. "var.filter") — see
+// jqProgram. The program runs over the decoded body and the result(s) are
 // emitted as JSON.
 type Response struct {
 	JQ string `json:"jq,omitempty"`
@@ -351,7 +390,16 @@ type (
 	Field  = fields.Field
 )
 
-// reservedCommandNames are the names cobra owns. A config cannot declare one.
+// When is a template predicate over the format context (.data, .tty, .width,
+// .arg, .flag, .result, ...); an empty When always renders. A leaf may declare
+// several blocks, and every block whose predicate holds renders, in document
+// order.
+type FieldsBlock struct {
+	When   string  `json:"when,omitempty"`
+	Fields *Fields `json:"fields"`
+}
+
+// reservedCommandNames are the names cobra owns.
 var reservedCommandNames = set.Of("help", "completion", "__complete", "docs")
 
 // validFlagTypes are the accepted <flag type=> values. The empty string
@@ -380,9 +428,14 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse config %q: %w", path, err)
 	}
+	// A pattern= may name a <var>, and validate compiles what it resolves to.
+	if err := resolveArgPatterns(cfg); err != nil {
+		return nil, fmt.Errorf("parse config %q: %w", path, err)
+	}
 	if err := validate(cfg); err != nil {
 		return nil, fmt.Errorf("validate config %q: %w", path, err)
 	}
+	cfg.Dir = filepath.Dir(path)
 	return cfg, nil
 }
 
@@ -399,6 +452,9 @@ func validate(cfg *Config) error {
 		}
 	}
 	if err := validateTransports(cfg.Transports); err != nil {
+		return err
+	}
+	if err := validatePreconditions(cfg.Preconditions, "top-level"); err != nil {
 		return err
 	}
 	if err := validateDownloadSettings(cfg.Downloads); err != nil {
@@ -422,7 +478,7 @@ func validate(cfg *Config) error {
 }
 
 // validateTransports checks the transport registry: every entry needs a
-// command to run, and at most one may claim the default.
+// command to run, and at most a single may claim the default.
 func validateTransports(transports map[string]*Transport) error {
 	names := make([]string, 0, len(transports))
 	for name := range transports {
@@ -470,6 +526,9 @@ func validateRequest(r *Request, where string, transports map[string]*Transport)
 	if _, ok := transports[name]; !ok {
 		return fmt.Errorf("%s: references unknown transport %q", where, name)
 	}
+	if len(r.AllowStatus) > 0 {
+		return fmt.Errorf("%s: allow-status needs the built-in client, and transport %q reports an exit code rather than a status; write transport=%q on this request, or let the program fail and branch in a <step when=>", where, name, builtinTransportName)
+	}
 	return nil
 }
 
@@ -501,9 +560,9 @@ func validateFormat(f *Format, where string) error {
 }
 
 // validateCommand enforces schema invariants. inheritedCmd indicates whether
-// an ancestor has a command template available (we need at least one to reach
-// a leaf). formats is the top-level format registry; named refs resolve into
-// it.
+// an ancestor has a command template available (we need at least a single to
+// reach a leaf). formats is the top-level format registry; named refs resolve
+// into it.
 func validateCommand(c *Command, where string, siblings map[string]bool, inheritedRun bool, formats map[string]*Format, transports map[string]*Transport) error {
 	if strings.TrimSpace(c.Name) == "" {
 		return fmt.Errorf("%s: \"name\" is required", where)
@@ -525,68 +584,22 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	if c.Passthrough && len(c.Commands) > 0 {
 		return fmt.Errorf("%s: passthrough is only allowed on leaves", where)
 	}
-
-	argNames := set.New[string]()
-	requiredAfterOptional := false
-	for i, a := range c.Args {
-		aw := fmt.Sprintf("%s.args[%d]", where, i)
-		if strings.TrimSpace(a.Name) == "" {
-			return fmt.Errorf("%s: name required", aw)
-		}
-		if !validArgTypes.Contains(a.Type) {
-			return fmt.Errorf("%s: type %q must be one of string|int", aw, a.Type)
-		}
-		if argNames.Contains(a.Name) {
-			return fmt.Errorf("%s: duplicate arg name %q", aw, a.Name)
-		}
-		argNames.Add(a.Name)
-		if a.Variadic && i != len(c.Args)-1 {
-			return fmt.Errorf("%s: variadic arg %q must be the last arg", aw, a.Name)
-		}
-		if !a.Required {
-			requiredAfterOptional = true
-		} else if requiredAfterOptional {
-			return fmt.Errorf("%s: required arg %q cannot follow an optional arg", aw, a.Name)
-		}
+	if err := validateRunnable(c, where); err != nil {
+		return err
+	}
+	if err := validateMock(c, where); err != nil {
+		return err
 	}
 
-	flagNames := set.New[string]()
-	flagShorts := set.New[string]()
-	for i, fl := range c.Flags {
-		fw := fmt.Sprintf("%s.flags[%d]", where, i)
-		if strings.TrimSpace(fl.Name) == "" {
-			return fmt.Errorf("%s: name required", fw)
-		}
-		if !validFlagTypes.Contains(fl.Type) {
-			return fmt.Errorf("%s: type %q must be one of string|bool|int|string-slice", fw, fl.Type)
-		}
-		if flagNames.Contains(fl.Name) {
-			return fmt.Errorf("%s: duplicate flag name %q", fw, fl.Name)
-		}
-		flagNames.Add(fl.Name)
-		if fl.Short != "" {
-			if len(fl.Short) != 1 {
-				return fmt.Errorf("%s: short %q must be a single character", fw, fl.Short)
-			}
-			if flagShorts.Contains(fl.Short) {
-				return fmt.Errorf("%s: duplicate short %q", fw, fl.Short)
-			}
-			flagShorts.Add(fl.Short)
-		}
-		if strings.HasPrefix(fl.Name, "no-") {
-			return fmt.Errorf("%s: flag name %q cannot start with \"no-\" (reserved for bool negation)", fw, fl.Name)
-		}
+	if err := validateArgsAndFlags(c, where); err != nil {
+		return err
 	}
-	for i, fl := range c.Flags {
-		fw := fmt.Sprintf("%s.flags[%d]", where, i)
-		for _, peer := range fl.Conflicts {
-			if peer == fl.Name {
-				return fmt.Errorf("%s: flag %q conflicts with itself", fw, fl.Name)
-			}
-			if !flagNames.Contains(peer) {
-				return fmt.Errorf("%s: flag %q conflicts with unknown flag %q", fw, fl.Name, peer)
-			}
-		}
+	if err := validateWatch(c, where); err != nil {
+		return err
+	}
+
+	if err := validatePreconditions(c.Preconditions, where); err != nil {
+		return err
 	}
 
 	if c.Command.Defined() && c.Request.Defined() {
@@ -595,36 +608,60 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 	if err := validateRequest(c.Request, where+".request", transports); err != nil {
 		return err
 	}
-	if c.Fields != nil && c.Format.Defined() {
+	if len(c.Fields) > 0 && c.Format.Defined() {
 		return fmt.Errorf("%s: use either <fields> or <format>, not both", where)
 	}
-	if c.Fields != nil && len(c.Commands) > 0 {
-		return fmt.Errorf("%s: <fields> is only allowed on leaves (nodes with no subcommands)", where)
+	if len(c.Fields) > 0 && !c.executes() {
+		return fmt.Errorf("%s: <fields> needs a node that runs (a leaf, or a parent with runnable=)", where)
 	}
 
 	if err := validateDownloads(c, where, transports); err != nil {
 		return err
 	}
 
-	haveRun := inheritedRun || c.Command.Defined() || c.Request.Defined()
-
-	// Leaf: must have something to do. A <download> leaf is that something —
-	// the hand-off is the action, so it needs no run of its own.
-	if len(c.Commands) == 0 {
-		if !haveRun && len(c.Downloads) == 0 {
-			return fmt.Errorf("%s: leaf has no command/request/download and no ancestor defines one", where)
+	if c.TML != nil {
+		if len(c.Commands) > 0 {
+			return fmt.Errorf("%s: <tml> is only allowed on leaves (nodes with no subcommands)", where)
+		}
+		if c.Fields != nil {
+			return fmt.Errorf("%s: use either <tml> or <fields>, not both", where)
+		}
+		if err := validateTML(c.TML, where); err != nil {
+			return err
 		}
 	}
 
-	// `entry` and `steps` only make sense on leaves.
-	if len(c.Entry) > 0 && len(c.Commands) > 0 {
-		return fmt.Errorf("%s: `entry` is only allowed on leaves (nodes with no subcommands)", where)
+	haveRun := inheritedRun || c.Command.Defined() || c.Request.Defined()
+
+	if c.Stream != nil {
+		if len(c.Fields) > 0 || c.Format.Defined() || c.TML != nil {
+			return fmt.Errorf("%s: <stream> emits bytes as they arrive, so <fields>, <format> and <tml> cannot shape them; drop one of the two", where)
+		}
+		// Both are the leaf's action, and a run performs a single action.
+		// Accepting the pair would silently drop the stream and transfer the files.
+		if len(c.Downloads) > 0 {
+			return fmt.Errorf("%s: <stream> and <download> are both the leaf's action, so a run takes one; move them to two leaves", where)
+		}
+		if !c.executes() {
+			return fmt.Errorf("%s: <stream> needs a node that runs (a leaf, or a parent with runnable=)", where)
+		}
+		if err := validateStream(c.Stream, where+".stream", haveRun, c.Request, transports); err != nil {
+			return err
+		}
 	}
-	if len(c.Steps) > 0 && len(c.Commands) > 0 {
-		return fmt.Errorf("%s: `steps` is only allowed on leaves (nodes with no subcommands)", where)
+
+	// A node that runs must have something to do. A <download> is that something —
+	// the hand-off is the action, so it needs no run of its own. A <mock> is the
+	// same: standing in for a program is the action.
+	if c.executes() && !haveRun && len(c.Downloads) == 0 && c.Mock == nil {
+		return fmt.Errorf("%s: %s has no command/request/download/mock and no ancestor defines one", where, nodeKind(c))
 	}
-	if len(c.Preconditions) > 0 && len(c.Commands) > 0 {
-		return fmt.Errorf("%s: `preconditions` is only allowed on leaves (nodes with no subcommands)", where)
+
+	if len(c.Entry) > 0 && !c.executes() {
+		return fmt.Errorf("%s: `entry` needs a node that runs (a leaf, or a parent with runnable=)", where)
+	}
+	if len(c.Steps) > 0 && !c.executes() {
+		return fmt.Errorf("%s: `steps` needs a node that runs (a leaf, or a parent with runnable=)", where)
 	}
 	stepNames := set.New[string]()
 	for i, s := range c.Steps {
@@ -640,6 +677,12 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 			return fmt.Errorf("%s: a <run> is either a command or a request, not both", sw)
 		}
 		if err := validateRequest(s.Request, sw+".request", transports); err != nil {
+			return err
+		}
+		if err := validatePoll(s, sw); err != nil {
+			return err
+		}
+		if err := validateStepFailure(s, sw); err != nil {
 			return err
 		}
 	}

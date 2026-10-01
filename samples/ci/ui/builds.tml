@@ -1,0 +1,48 @@
+<?xml version="1.1" encoding="UTF-8"?>
+<Component xmlns="urn:tml:v1" name="Builds">
+	<Import src="./theme.tml"/>
+
+	<Property name="heading" type="string" required="true"/>
+	<Property name="builds" type="record[]" default=""/>
+	<Property name="empty" type="string" default="nothing building"/>
+
+	<!-- One card per build. Every property here is a field the config names,
+	     and a field the config forgets fails the run rather than drawing an
+	     empty card. -->
+	<DataTemplate name="Build">
+		<Property name="name" type="string" required="true"/>
+		<Property name="status" type="string" default=""/>
+		<Property name="mark" type="string" default="*"/>
+		<Property name="tone" type="string" default="muted"/>
+		<Property name="operator" type="string" default=""/>
+		<Property name="stage" type="string" default=""/>
+		<Property name="started" type="string" default=""/>
+		<Property name="log" type="string[]" default=""/>
+
+		<Template>
+			<Box style="card" width="*">
+				<Stack orientation="vertical">
+					<Stack orientation="horizontal" gap="1">
+						<Text style="{tone}">{mark}</Text>
+						<Text style="title" width="28">{name}</Text>
+						<Text width="12">{status}</Text>
+						<Text style="muted" width="14">{operator}</Text>
+						<Text style="muted">{started}</Text>
+					</Stack>
+					<Text style="muted">stage {stage}</Text>
+					<For each="{log}" as="line">
+						<Text style="log">  {line}</Text>
+					</For>
+				</Stack>
+			</Box>
+		</Template>
+	</DataTemplate>
+
+	<Template>
+		<Stack id="board" orientation="vertical" gap="1">
+			<Text id="heading" style="title">{heading}</Text>
+			<Text id="empty" if="{not builds}" style="muted">{empty}</Text>
+			<Stack id="builds" itemsSource="{builds}" itemTemplate="Build" orientation="vertical" gap="1"/>
+		</Stack>
+	</Template>
+</Component>

@@ -88,8 +88,8 @@ func TestSteps_RequestStepThenCommandLeaf(t *testing.T) {
 	assert.Equal(t, "2 executions\n", errOut)
 }
 
-// A command step and a request step compose in one leaf, each seeing the
-// other's result.
+// A command step and a request step compose in a single leaf, each
+// seeing the other's result.
 func TestSteps_MixedCommandAndRequest(t *testing.T) {
 	srv, seen := recordingServer(t, map[string]string{"/things/9": `{"label":"nine"}`})
 	swapHTTPClient(t, srv)
@@ -169,10 +169,10 @@ func TestSteps_RequestThroughTransportInMCP(t *testing.T) {
 			Name:  "chain",
 			Steps: []Step{{Name: "first", Entry: json.RawMessage(`{"path":"/one"}`)}},
 			Entry: json.RawMessage(`{"path":"/two"}`),
-			Fields: &Fields{List: []Field{
+			Fields: fieldsBlocks(&Fields{List: []Field{
 				{Name: "step", Expr: "{{$.result.first.url}}"},
 				{Name: "leaf", Path: "url"},
-			}},
+			}}),
 		}},
 	}
 	require.NoError(t, validate(cfg))

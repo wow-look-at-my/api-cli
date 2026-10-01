@@ -167,7 +167,7 @@ func TestMcpGatherArgs_Missing(t *testing.T) {
 	node := Command{Args: []Arg{{Name: "name"}}}
 	got, err := mcpGatherArgs(node, map[string]any{})
 	require.NoError(t, err)
-	assert.Empty(t, got)
+	assert.Equal(t, map[string]any{"name": ""}, got)
 }
 
 func TestMcpGatherArgs_VariadicString(t *testing.T) {
@@ -511,9 +511,6 @@ func TestBuildMCPServer_ToolCount(t *testing.T) {
 		},
 	}
 	srv := buildMCPServer(cfg)
-	// The SDK server should have 3 tools: a, b_c, b_d
-	// We can't inspect the server directly, but buildMCPServer not panicking
-	// and returning a non-nil server is the key assertion.
 	assert.NotNil(t, srv)
 }
 

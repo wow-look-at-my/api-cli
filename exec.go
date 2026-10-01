@@ -28,10 +28,8 @@ var (
 // stdin, if non-empty, is fed to the child's standard input (and closed
 // after). When empty, the child inherits the parent process's stdin.
 //
-// Returns the child's exit code on normal exit; 127 if the binary couldn't
-// be located or the command was malformed; 1 on render errors or unexpected
-// I/O failures. A nil *Cmd is a bug caught by validation — this function
-// treats it as a render error.
+// A nil *Cmd is a bug caught by validation — this function treats it as a
+// render error.
 func doExec(c *Cmd, cwd, stdin string, data any) int {
 	if !c.Defined() {
 		fmt.Fprintln(execStderr, "error: command is empty")
@@ -66,8 +64,7 @@ func doExec(c *Cmd, cwd, stdin string, data any) int {
 }
 
 // captureExec is like doExec but captures the child's stdout and returns it
-// as a string. stderr still flows to execStderr. Returns the captured output
-// and the child's exit code (non-zero on failure).
+// as a string. stderr still flows to execStderr.
 func captureExec(c *Cmd, cwd, stdin string, data any) (string, int) {
 	if !c.Defined() {
 		fmt.Fprintln(execStderr, "error: command is empty")
@@ -181,11 +178,11 @@ func captureExecCapped(c *Cmd, cwd, stdin string, data any, maxBytes int) (strin
 	return tee.buf.String(), false, 0
 }
 
-// cappedTee buffers writes up to max bytes. Once the cap would be exceeded by
-// the next Write, it flushes the buffered prefix to out and switches to
-// passthrough mode, where every subsequent Write goes straight to out. This
-// gives the format path a "first 32MB or whatever fits" buffer with a
-// transparent fallback to streaming for larger outputs.
+// cappedTee buffers writes up to max bytes. a single time the cap would be
+// exceeded by the next Write, it flushes the buffered prefix to out and
+// switches to passthrough mode, where every subsequent Write goes straight to
+// out. This gives the format path a "earliest 32MB or whatever fits" buffer
+// with a transparent fallback to streaming for larger outputs.
 type cappedTee struct {
 	buf        *bytes.Buffer
 	out        io.Writer
@@ -275,7 +272,7 @@ func buildExecCmd(c *Cmd, data any) (*exec.Cmd, error) {
 // Split out of buildExecCmd for the caller that cannot execute where it
 // renders: a <download> resolves its transport while the leaf's data context
 // still exists, and the queue runs the result later, on a worker, with no
-// context in reach. Rendering stays in one place either way.
+// context in reach. Rendering stays in a single place either way.
 func resolveArgv(c *Cmd, data any) ([]string, error) {
 	if c.Shell {
 		rendered, err := renderString(c.Template, data)

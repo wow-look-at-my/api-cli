@@ -1,0 +1,45 @@
+<?xml version="1.1" encoding="UTF-8"?>
+<Component xmlns="urn:tml:v1" name="Repo">
+	<Import src="./theme.tml"/>
+	<Import src="./Card.tml"/>
+
+	<Property name="name" type="string" required="true"/>
+	<Property name="description" type="string" default=""/>
+	<Property name="stars" type="string" default="0"/>
+	<Property name="forks" type="string" default="0"/>
+	<Property name="issues" type="string" default="0"/>
+	<Property name="language" type="string" default="-"/>
+	<Property name="releases" type="record[]" default=""/>
+
+	<DataTemplate name="Release">
+		<Property name="tag" type="string" required="true"/>
+		<Property name="published" type="string" default=""/>
+		<Template>
+			<Stack orientation="horizontal" gap="1">
+				<Text width="18">{tag}</Text>
+				<Text style="muted">{published}</Text>
+			</Stack>
+		</Template>
+	</DataTemplate>
+
+	<Template>
+		<Stack id="dash" orientation="vertical" gap="1">
+			<Text id="name" style="title">{name}</Text>
+			<Text id="description" style="muted">{description}</Text>
+
+			<Stack id="cards" orientation="horizontal" gap="1">
+				<Card label="stars" value="{stars}" width="*"/>
+				<Card label="forks" value="{forks}" width="*"/>
+				<Card label="issues" value="{issues}" width="*"/>
+				<Card label="language" value="{language}" width="*"/>
+			</Stack>
+
+			<Box id="releases" style="panel" width="*">
+				<Stack orientation="vertical">
+					<Text style="title">releases</Text>
+					<Stack itemsSource="{releases}" itemTemplate="Release" orientation="vertical"/>
+				</Stack>
+			</Box>
+		</Stack>
+	</Template>
+</Component>

@@ -26,6 +26,18 @@ out, err := fields.Render(nil, f, body, map[string]any{"data": body}, "", 0)
 | `MarshalJSON`, `SortedKeys`, `JSONTypeName` | The JSON helpers the sinks use, exported because a caller formatting alongside them wants the same output. |
 | `DisplayWidth`, `StripANSI`, `AlignColumns`, `PadRight`, `PadLeft` | The width-aware aligner, usable on its own for any terminal table. |
 
+## A column sink gets one line per cell
+
+`table` and `markdown` fold every cell onto one line. A run of whitespace that holds a newline or a tab becomes one space. A value that holds neither is untouched, so ordinary spacing inside a cell survives.
+
+The reason is structural. A row is a line. A column is a position on that line. A cell that keeps its newlines puts every later column at the left margin, and a tab opens a column that the declaration never named. Both defeat a reader who scans down a column.
+
+A column carries two spaces of gutter, and a column wider than 50 columns carries three. `AlignColumns` applies that rule, so a caller that uses the aligner on its own gets it too. `tableWidth` reads the same rule, which keeps a wide column from pushing the table past the width the drop decision was given.
+
+The `list` sink keeps the whole value instead, and indents the later lines under the first, so a paragraph reads as one value. `raw`, `json` and `csv` carry the value exactly, and `csv` quotes it per RFC 4180.
+
+To show less than the whole value, use `firstline="true"` for the first line, or `truncate="N"` for a prefix.
+
 ## The renderer is injected, not built
 
 A `Field`'s `Expr` and a `Fields`' `Footer` are Go templates. The caller decides which helper functions they see. api-cli's own templates call `shellquote`, `spread` and `tabwriter`, which mean nothing to another program. So `Render` takes a `Renderer` instead of building one.

@@ -123,7 +123,8 @@ func TestParseXML_Fields(t *testing.T) {
 			<field name="virt" expr="{{.a}}-{{.b}}"/>
 			<field name="sha" firstline="true">sha</field>
 		</fields></command></config>`)
-	f := cfg.Commands[0].Fields
+	require.Len(t, cfg.Commands[0].Fields, 1)
+	f := cfg.Commands[0].Fields[0].Fields
 	require.NotNil(t, f)
 	assert.Equal(t, "data.items", f.Over)
 	assert.Equal(t, "{{.data.total}} total", f.Footer)

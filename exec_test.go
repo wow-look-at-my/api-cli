@@ -38,7 +38,7 @@ func TestDoExec_ArgvFormEchoes(t *testing.T) {
 	data := map[string]any{"arg": map[string]any{"a": "x", "b": "y z"}}
 	code := doExec(c, "", "", data)
 	assert.Equal(t, 0, code)
-	// argv form keeps spaces inside an element as one arg.
+	// argv form keeps spaces inside an element as a single arg.
 	assert.Equal(t, "x literal y z\n", out.String())
 }
 
@@ -93,6 +93,7 @@ func TestDoExec_ShellFormHonoursShellQuote(t *testing.T) {
 }
 
 func TestDoExec_StdinPassthrough(t *testing.T) {
+	t.Serial()
 	out, _ := captureExecStreams(t)
 	prevIn := execStdin
 	execStdin = bytes.NewBufferString("piped input\n")
@@ -114,7 +115,7 @@ func TestDoExec_ArgvSpread(t *testing.T) {
 }
 
 func TestDoExec_ArgvSpreadEmpty(t *testing.T) {
-	// Empty spread = zero argv slots; surrounding elements still pass through.
+	// Empty spread = empty argv slots; surrounding elements still pass through.
 	out, _ := captureExecStreams(t)
 	c := &Cmd{Argv: []string{"echo", "{{spread .arg.files}}", "only"}}
 	data := map[string]any{"arg": map[string]any{"files": []string{}}}
@@ -124,8 +125,8 @@ func TestDoExec_ArgvSpreadEmpty(t *testing.T) {
 }
 
 func TestDoExec_ArgvSpreadOnlyEmptyFails(t *testing.T) {
-	// If spread yields zero slots and there are no other elements, the argv
-	// is empty — a useful failure rather than running with no command.
+	// If spread yields empty slots and there are no other elements, the
+	// argv is empty — a useful failure rather than running with no command.
 	captureExecStreams(t)
 	c := &Cmd{Argv: []string{"{{spread .arg.files}}"}}
 	data := map[string]any{"arg": map[string]any{"files": []string{}}}

@@ -20,21 +20,67 @@ var httpClient = &http.Client{Timeout: 60 * time.Second}
 
 // preparedRequest is a request with every template rendered — what actually
 // goes on the wire. Both the built-in client and a <transport> program consume
-// this, so the two see an identical request.
+// this, so both see an identical request.
 type preparedRequest struct {
 	Method  string
 	URL     string // includes the query string
 	Body    string
 	Headers []renderedHeader
+	// AllowStatus holds the error statuses this request treats as an answer.
+	AllowStatus []int
+}
+
+// allows reports whether status is a single the request asked to keep.
+func (p *preparedRequest) allows(status int) bool {
+	for _, s := range p.AllowStatus {
+		if s == status {
+			return true
+		}
+	}
+	return false
 }
 
 type renderedHeader struct{ Name, Value string }
 
-// runRequest performs a first-class HTTP request and returns its output as a
-// string plus an exit code (0 on success). On an HTTP error status or a
-// transport error it writes a diagnostic to errOut and returns a non-zero
-// code with empty output, mirroring `curl -f`.
+// doHTTPStream performs a prepared request with the built-in client and returns
+// the response body as a stream rather than as a captured string. The caller
+// closes it.
 //
+// This is the <stream> source: the body is what the chunker cuts, so reading it
+// whole earliest would defeat the feature on the a single input it exists for.
+// The status check is the a single doHTTP makes, and it happens before the
+// earliest byte is handed over, so an error status fails the run instead of
+// streaming an error page as though it were the source.
+func doHTTPStream(p *preparedRequest, errOut io.Writer) (io.ReadCloser, int) {
+	var body io.Reader
+	if p.Body != "" {
+		body = strings.NewReader(p.Body)
+	}
+	httpReq, err := http.NewRequest(p.Method, p.URL, body)
+	if err != nil {
+		fmt.Fprintln(errOut, "error: build request:", err)
+		return nil, 1
+	}
+	for _, h := range p.Headers {
+		httpReq.Header.Set(h.Name, h.Value)
+	}
+
+	logVerbose("stream: request: %s %s", p.Method, p.URL)
+	resp, err := httpClient.Do(httpReq)
+	if err != nil {
+		fmt.Fprintln(errOut, "error: request failed:", err)
+		return nil, 1
+	}
+
+	if resp.StatusCode >= 400 && !p.allows(resp.StatusCode) {
+		defer resp.Body.Close()
+		fmt.Fprintf(errOut, "error: HTTP %d %s\n", resp.StatusCode, strings.TrimSpace(resp.Status))
+		return nil, 1
+	}
+	logVerbose("stream: request: status %d, streaming the body", resp.StatusCode)
+	return resp.Body, 0
+}
+
 // The request travels over the built-in net/http client, or over the
 // <transport> program the config selects for it (see transport.go).
 //
@@ -42,44 +88,99 @@ type renderedHeader struct{ Name, Value string }
 // (resolved from the data context) and re-encoded as indented JSON. Without a
 // <response> the raw body is returned verbatim.
 func runRequest(req *Request, data map[string]any, errOut io.Writer) (string, int) {
-	prepared, err := prepareRequest(req, data)
-	if err != nil {
-		fmt.Fprintln(errOut, "error:", err)
-		return "", 1
-	}
-
-	transport, err := resolveTransport(req)
-	if err != nil {
-		fmt.Fprintln(errOut, "error:", err)
-		return "", 1
-	}
-
-	var raw []byte
-	var code int
-	if transport != nil {
-		out, c := runViaTransport(transport, prepared, data, errOut)
-		raw, code = []byte(out), c
-	} else {
-		raw, code = doHTTP(prepared, errOut)
-	}
-	if code != 0 {
-		return "", code
-	}
-
-	if req.Response == nil {
-		return string(raw), 0
-	}
-	out, err := applyJQ(req.Response.JQ, raw, data)
-	if err != nil {
-		fmt.Fprintln(errOut, "error:", err)
-		return "", 1
+	out, fail := performRequest(req, data, errOut)
+	if fail != nil {
+		fail.report(errOut, "")
+		return "", fail.code
 	}
 	return out, 0
 }
 
+// callFailure is a call that produced no answer.
+type callFailure struct {
+	code   int
+	msg    string
+	detail string
+	// quiet marks a command's own non-zero exit.
+	quiet bool
+}
+
+func (f *callFailure) Error() string { return f.msg }
+
+// report writes the failure as an error line. A non-empty where names the step
+// and element it belongs to.
+func (f *callFailure) report(w io.Writer, where string) {
+	if where != "" {
+		fmt.Fprintf(w, "error: %s: %s\n", where, f.msg)
+	} else {
+		fmt.Fprintln(w, "error:", f.msg)
+	}
+	if f.detail != "" {
+		fmt.Fprintln(w, f.detail)
+	}
+}
+
+func failed(format string, args ...any) *callFailure {
+	return &callFailure{code: 1, msg: fmt.Sprintf(format, args...)}
+}
+
+// performRequest is runRequest without the report. Only a transport program's
+// own stderr reaches errOut here.
+func performRequest(req *Request, data map[string]any, errOut io.Writer) (string, *callFailure) {
+	prepared, err := prepareRequest(req, data)
+	if err != nil {
+		return "", failed("%v", err)
+	}
+
+	transport, err := resolveTransport(req)
+	if err != nil {
+		return "", failed("%v", err)
+	}
+
+	var raw []byte
+	var fail *callFailure
+	if transport != nil {
+		// A transport program reports an exit code, and the status it saw is not
+		// ours to read. Saying so beats an attribute that quietly does nothing.
+		if len(prepared.AllowStatus) > 0 {
+			return "", failed("allow-status needs the built-in client, and transport %q reports an exit code rather than a status. Write transport=%q on this request to opt it out of the default transport, or let the program fail and branch in a <step when=>.",
+				transport.Name, builtinTransportName)
+		}
+		var out string
+		out, fail = runViaTransport(transport, prepared, data, errOut)
+		raw = []byte(out)
+	} else {
+		raw, fail = doHTTP(prepared)
+	}
+	if fail != nil {
+		return "", fail
+	}
+
+	if req.Response == nil {
+		return string(raw), nil
+	}
+	out, err := applyJQ(req.Response.JQ, raw, data)
+	if err != nil {
+		return "", failed("%v", err)
+	}
+	return out, nil
+}
+
+// bodyExcerptLen caps how much of an unexpected body an error shows.
+const bodyExcerptLen = 200
+
+// bodyExcerpt is the start of a body, quoted onto a single line.
+func bodyExcerpt(raw []byte) string {
+	s := strings.TrimSpace(string(raw))
+	if len(s) > bodyExcerptLen {
+		s = strings.ToValidUTF8(s[:bodyExcerptLen], "") + "..."
+	}
+	return fmt.Sprintf("%q", s)
+}
+
 // prepareRequest renders every part of a request against the data context.
 func prepareRequest(req *Request, data map[string]any) (*preparedRequest, error) {
-	p := &preparedRequest{Method: strings.TrimSpace(req.Method)}
+	p := &preparedRequest{Method: strings.TrimSpace(req.Method), AllowStatus: req.AllowStatus}
 	if p.Method == "" {
 		p.Method = "GET"
 	}
@@ -115,16 +216,16 @@ func prepareRequest(req *Request, data map[string]any) (*preparedRequest, error)
 }
 
 // doHTTP performs a prepared request with the built-in client and returns the
-// response body. A 4xx/5xx status is a failure, like `curl -f`.
-func doHTTP(p *preparedRequest, errOut io.Writer) ([]byte, int) {
+// response body. A 4xx/5xx status is a failure, like `curl -f`, unless the
+// request named that status in allow-status.
+func doHTTP(p *preparedRequest) ([]byte, *callFailure) {
 	var body io.Reader
 	if p.Body != "" {
 		body = strings.NewReader(p.Body)
 	}
 	httpReq, err := http.NewRequest(p.Method, p.URL, body)
 	if err != nil {
-		fmt.Fprintln(errOut, "error: build request:", err)
-		return nil, 1
+		return nil, failed("build request: %v", err)
 	}
 	for _, h := range p.Headers {
 		httpReq.Header.Set(h.Name, h.Value)
@@ -133,26 +234,26 @@ func doHTTP(p *preparedRequest, errOut io.Writer) ([]byte, int) {
 	logVerbose("request: %s %s", p.Method, p.URL)
 	resp, err := httpClient.Do(httpReq)
 	if err != nil {
-		fmt.Fprintln(errOut, "error: request failed:", err)
-		return nil, 1
+		return nil, failed("request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Fprintln(errOut, "error: read response:", err)
-		return nil, 1
+		return nil, failed("read response: %v", err)
 	}
 	logVerbose("request: status %d (%d bytes)", resp.StatusCode, len(raw))
 
 	if resp.StatusCode >= 400 {
-		fmt.Fprintf(errOut, "error: HTTP %d %s\n", resp.StatusCode, strings.TrimSpace(resp.Status))
-		if len(raw) > 0 {
-			fmt.Fprintln(errOut, strings.TrimSpace(string(raw)))
+		if p.allows(resp.StatusCode) {
+			logVerbose("request: status %d allowed by allow-status", resp.StatusCode)
+			return raw, nil
 		}
-		return nil, 1
+		fail := failed("HTTP %d %s", resp.StatusCode, strings.TrimSpace(resp.Status))
+		fail.detail = strings.TrimSpace(string(raw))
+		return nil, fail
 	}
-	return raw, 0
+	return raw, nil
 }
 
 // buildRequestQuery assembles the URL-encoded query string (no leading "?")
@@ -217,15 +318,15 @@ func renderHeaders(headers []Header, data map[string]any) ([]renderedHeader, err
 // contextPath matches a bare dotted name — the `var.filter` form of a jq=
 // attribute. A jq program almost always opens with `.`, `$`, `[`, `{`, a
 // digit, or an operator, none of which start a path. A bare builtin like
-// `length` is the one collision, and it reads as the path.
+// `length` is the a single collision, and it reads as the path.
 var contextPath = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+)*$`)
 
 // jqProgram resolves a <response jq=> attribute to the program this invocation
-// runs. The attribute is a template, like <url> and <body>: one that carries a
-// placeholder renders against the leaf context, so the program can depend on
-// this run's args and flags. A bare dotted name is a context path instead,
-// which is how a config keeps its program in a <var>. Anything else is the
-// program itself.
+// runs. The attribute is a template, like <url> and <body>: a single that
+// carries a placeholder renders against the leaf context, so the program can
+// depend on this run's args and flags. A bare dotted name is a context path
+// instead, which is how a config keeps its program in a <var>. Anything else
+// is the program itself.
 func jqProgram(spec string, data map[string]any) (string, error) {
 	spec = strings.TrimSpace(spec)
 	switch {
@@ -255,10 +356,16 @@ func jqProgram(spec string, data map[string]any) (string, error) {
 // applyJQ runs the request's jq program over the JSON body and returns the
 // result(s) as indented JSON. An empty program pretty-prints the body
 // unchanged.
+//
+// A body that is not JSON passes through only when no jq= is set. A config
+// that names a program expects JSON, so an SSO page or a proxy error fails
+// here instead of reaching until= and the templates.
 func applyJQ(jqSpec string, raw []byte, data map[string]any) (string, error) {
 	var input any
 	if err := json.Unmarshal(raw, &input); err != nil {
-		// Not JSON: return the raw body untouched.
+		if strings.TrimSpace(jqSpec) != "" {
+			return "", fmt.Errorf("response is not JSON, and jq= needs JSON; the body starts with %s", bodyExcerpt(raw))
+		}
 		return string(raw), nil
 	}
 

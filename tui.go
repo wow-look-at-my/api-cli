@@ -1,271 +1,161 @@
 package main
 
 import (
+	"embed"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
+
+	"github.com/wow-look-at-my/tml"
+	"github.com/wow-look-at-my/tml/sema"
 )
 
-// The download TUI: a live progress region (one line per in-flight transfer
-// plus a totals line) sitting above a height-capped, self-scrolling log region
-// that carries whatever the steps and the downloader wrote.
-//
-// It repaints in place with a handful of ANSI sequences rather than a terminal
-// library, because the whole display is a fixed-height block of plain lines.
+// The download TUI is a tml.Live region pinned to the bottom of the screen:
+// the counts, the running step, a row per in-flight transfer.
 
+// Cursor controls for the watch painter.
 const (
-	ansiUp        = "\x1b[%dA" // move cursor up N lines
+	ansiUp        = "\x1b[%dA"
 	ansiClearLine = "\r\x1b[K"
 	ansiHideCur   = "\x1b[?25l"
 	ansiShowCur   = "\x1b[?25h"
-	frameInterval = 100 * time.Millisecond
-	minLogLines   = 3
 )
 
-// tui renders download progress above a scrolling log. It is an io.Writer: the
-// step and downloader output channels are pointed at it, and every line they
-// write lands in the log region instead of scrolling the progress display away.
+//go:embed ui/downloads
+var downloadsUI embed.FS
+
+// downloadsView is the component the region draws, loaded once per process.
+var downloadsView = sync.OnceValues(func() (*tml.View, error) {
+	sub, err := fs.Sub(downloadsUI, "ui/downloads")
+	if err != nil {
+		return nil, err
+	}
+	return tml.Load(sub, "Downloads.tml", tml.Options{Dark: true})
+})
+
+// tui is the display for a single download session.
 type tui struct {
-	out      io.Writer
-	width    int
-	logCap   int
+	live     *tml.Live
+	errOut   io.Writer
 	snapshot func() []*downloadItem
 
-	mu      sync.Mutex
-	logs    []string
-	partial string
-	painted int
-	stopped bool
-
-	stop chan struct{}
-	done chan struct{}
+	mu   sync.Mutex
+	step *stepProgress
 }
 
-// newTUI builds a renderer sized for the terminal. logLines of 0 auto-sizes the
-// log region to min(15, half the terminal height), never below 3 lines.
-func newTUI(out io.Writer, width, height, logLines int, snapshot func() []*downloadItem) *tui {
-	if width <= 0 {
-		width = 80
-	}
-	if height <= 0 {
-		height = 24
-	}
-	if logLines <= 0 {
-		logLines = min(maxLogLines, height/2)
-	}
-	if logLines < minLogLines {
-		logLines = minLogLines
-	}
-	return &tui{
-		out:      out,
-		width:    width,
-		logCap:   logLines,
-		snapshot: snapshot,
-		stop:     make(chan struct{}),
-		done:     make(chan struct{}),
-	}
-}
-
-// Start begins repainting until Stop. Painting from one goroutine keeps the
-// frame consistent while workers mutate progress underneath it.
-func (t *tui) Start() {
-	fmt.Fprint(t.out, ansiHideCur)
-	t.watchInterrupt()
-	go func() {
-		defer close(t.done)
-		ticker := time.NewTicker(frameInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-t.stop:
-				return
-			case <-ticker.C:
-				t.paint()
-			}
-		}
-	}()
-}
-
-// tuiExit ends the process after an interrupt. A var so the signal path is
-// testable without taking the test binary down with it.
+// tuiExit ends the process after an interrupt.
 var tuiExit = os.Exit
 
-// interruptExitCode is the conventional 128+SIGINT status for a run the user
-// cut short.
 const interruptExitCode = 130
 
-// watchInterrupt puts the terminal back if the run is cut short. Without it a
-// Ctrl-C leaves the cursor hidden, and the user's next shell prompt is invisible
-// until they run `reset`.
-func (t *tui) watchInterrupt() {
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		select {
-		case <-t.stop:
-			signal.Stop(sig)
-		case <-sig:
-			signal.Stop(sig)
-			t.onSignal()
-		}
-	}()
-}
-
-// onSignal restores the terminal and ends the run. A display that already
-// stopped does nothing instead.
-//
-// Notify fans a signal out to every display the process started, and both
-// select cases above go ready together when Stop races the signal, so a
-// retired display reaches this point. It owns no terminal any more. Answering
-// would write over the display that replaced it, and would end that run.
-func (t *tui) onSignal() {
-	if t.isStopped() {
-		return
+// newTUI builds the region on out. errOut is where a failure of the display
+// itself goes, once the region is off the screen.
+func newTUI(out, errOut io.Writer, snapshot func() []*downloadItem) (*tui, error) {
+	view, err := downloadsView()
+	if err != nil {
+		return nil, fmt.Errorf("download display: %w", err)
 	}
-	t.Stop()
-	fmt.Fprintln(t.out, "interrupted; partial transfers left as .part files")
-	tuiExit(interruptExitCode)
+	t := &tui{errOut: errOut, snapshot: snapshot}
+	t.live = tml.NewLive(view, func() tml.Props { return t.props(time.Now()) }, tml.LiveOptions{
+		Output: out,
+		OnInterrupt: func() {
+			fmt.Fprintln(out, "interrupted; partial transfers left as .part files")
+			tuiExit(interruptExitCode)
+		},
+	})
+	return t, nil
 }
 
-// isStopped reports whether Stop already ran.
-func (t *tui) isStopped() bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.stopped
-}
+// Start shows the region.
+func (t *tui) Start() error { return t.live.Start() }
 
-// Stop ends repainting, leaving the final frame on screen for the user to read.
+// Stop prints the lines still pending and takes the region off the screen. An
+// idle block of finished rows says nothing the summary below it does not say
+// better.
 func (t *tui) Stop() {
-	t.mu.Lock()
-	if t.stopped {
-		t.mu.Unlock()
-		return
+	if err := t.live.Stop(); err != nil && !errors.Is(err, tml.ErrInterrupted) {
+		fmt.Fprintln(t.errOut, "error: download display:", err)
 	}
-	t.stopped = true
-	t.mu.Unlock()
-
-	close(t.stop)
-	<-t.done
-	t.paint()
-	fmt.Fprint(t.out, ansiShowCur)
 }
 
-// Write feeds output into the log region. Partial lines are held until their
-// newline arrives, so a progress-writing child does not fragment the display.
-func (t *tui) Write(p []byte) (int, error) {
+// Write takes a child's output. A partial line waits for its newline.
+func (t *tui) Write(p []byte) (int, error) { return t.live.Write(p) }
+
+// logf prints a line above the region. The queue's log hook points here.
+func (t *tui) logf(format string, args ...any) { t.live.Printf(format, args...) }
+
+// setStep shows the running step in the region. nil removes the line.
+func (t *tui) setStep(p *stepProgress) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.partial += strings.ReplaceAll(string(p), "\r", "")
-	for {
-		i := strings.IndexByte(t.partial, '\n')
-		if i < 0 {
-			break
-		}
-		t.appendLog(t.partial[:i])
-		t.partial = t.partial[i+1:]
-	}
-	return len(p), nil
+	t.step = p
 }
 
-// logf adds one preformatted line. The queue's log hook points here.
-func (t *tui) logf(format string, args ...any) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.appendLog(fmt.Sprintf(format, args...))
-}
-
-// appendLog pushes a line into the capped ring. Callers hold t.mu.
-func (t *tui) appendLog(line string) {
-	t.logs = append(t.logs, line)
-	if over := len(t.logs) - t.logCap; over > 0 {
-		t.logs = append(t.logs[:0], t.logs[over:]...)
-	}
-}
-
-// paint redraws the frame in place: up to the top of the last frame, then one
-// cleared line per row.
-func (t *tui) paint() {
-	lines := t.frame(time.Now())
-
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	var b strings.Builder
-	if t.painted > 0 {
-		fmt.Fprintf(&b, ansiUp, t.painted)
-	}
-	for _, line := range lines {
-		b.WriteString(ansiClearLine)
-		b.WriteString(clipDisplay(line, t.width))
-		b.WriteByte('\n')
-	}
-	// A shorter frame than last time leaves stale rows below; clear them, then
-	// come back up so the next repaint still starts at the frame's top.
-	if extra := t.painted - len(lines); extra > 0 {
-		for i := 0; i < extra; i++ {
-			b.WriteString(ansiClearLine)
-			b.WriteByte('\n')
-		}
-		fmt.Fprintf(&b, ansiUp, extra)
-	}
-	t.painted = len(lines)
-	fmt.Fprint(t.out, b.String())
-}
-
-// frame renders one complete display: the progress region, a rule, then the log
-// region padded to its full height so the block never changes size.
-func (t *tui) frame(now time.Time) []string {
-	lines := t.progressRegion(now)
-	lines = append(lines, strings.Repeat("-", min(t.width, 60)))
-
-	t.mu.Lock()
-	logs := make([]string, len(t.logs))
-	copy(logs, t.logs)
-	t.mu.Unlock()
-
-	for _, l := range logs {
-		lines = append(lines, " "+l)
-	}
-	for i := len(logs); i < t.logCap; i++ {
-		lines = append(lines, "")
-	}
-	return lines
-}
-
-// progressRegion renders the counts header, one line per in-flight download,
-// and the aggregate line.
-func (t *tui) progressRegion(now time.Time) []string {
+// props is a single frame of the region: the counts, the running step, a row
+// per in-flight download, and the TOTAL row.
+func (t *tui) props(now time.Time) tml.Props {
 	items := t.snapshot()
 	totals := tallyDownloads(items, now)
 
 	head := fmt.Sprintf("downloads: %d active, %d queued, %d done", totals.Active, totals.Queued, totals.Done)
+	headStyle := "head"
 	if totals.Failed > 0 {
 		head += fmt.Sprintf(", %d failed", totals.Failed)
+		headStyle = "head.failed"
 	}
-	lines := []string{head}
-	lay := planProgressLayout(t.width - 2)
-
+	var rows []map[string]sema.Value
 	for _, item := range items {
 		if item.state.Load() != dlActive {
 			continue
 		}
-		p := progressOf(item.done.Load(), item.total.Load(), time.Unix(0, item.start.Load()), now)
-		lines = append(lines, "  "+progressLine(item.label(), p, lay))
+		p := progressOf(item.shown(), item.total.Load(), time.Unix(0, item.start.Load()), now)
+		rows = append(rows, progressRecord(item.label(), "active", p))
 	}
+	rows = append(rows, progressRecord("TOTAL", "total", aggregateProgress(totals)))
 
-	return append(lines, "  "+progressLine("TOTAL", aggregateProgress(totals), lay))
+	status := ""
+	t.mu.Lock()
+	if t.step != nil {
+		status = t.step.line()
+	}
+	t.mu.Unlock()
+	return tml.Props{
+		"head":      sema.StringValue(head),
+		"headStyle": sema.StringValue(headStyle),
+		"status":    sema.StringValue(status),
+		"rows":      sema.RecordListValue(rows),
+	}
 }
 
-// aggregateProgress turns a tally into the TOTAL row's numbers. The percentage
-// is always shown: an unreported length makes the denominator a floor, which
-// the row marks with a "+" rather than replacing the whole reading with "?".
+// progressRecord is a row the Transfer template draws. A length the server
+// never gave has no fraction, so the row hides its bar and percentage.
+func progressRecord(label, state string, p itemProgress) map[string]sema.Value {
+	r := map[string]sema.Value{
+		"label": sema.StringValue(label),
+		"state": sema.StringValue(state),
+		"known": sema.BoolValue(p.Fraction >= 0),
+		"sizes": sema.StringValue(sizesText(p)),
+		"speed": sema.StringValue(speedText(p.Speed)),
+		"eta":   sema.StringValue(etaText(p)),
+	}
+	if p.Fraction >= 0 {
+		r["value"] = sema.StringValue(fmt.Sprintf("%.4f", min(p.Fraction, 1)))
+		r["percent"] = sema.StringValue(percentText(p.Fraction))
+	}
+	return r
+}
+
+// aggregateProgress turns a tally into the TOTAL row's numbers. An unreported
+// length makes the denominator a floor, which the row marks with a "+" beside a
+// percentage the known lengths still support.
 func aggregateProgress(t downloadTotals) itemProgress {
 	p := itemProgress{Done: t.Bytes, Total: t.Total, Fraction: -1, TotalIsFloor: !t.TotalKnown}
-	if t.Total > 0 {
+	if t.Total > 0 && (t.TotalKnown || t.Total > t.Bytes) {
 		p.Fraction = float64(t.Bytes) / float64(t.Total)
 	}
 	if t.Elapsed <= 0 || t.Bytes <= 0 {
@@ -279,124 +169,7 @@ func aggregateProgress(t downloadTotals) itemProgress {
 	return p
 }
 
-// The progress columns, each sized for its widest legal value: a bar, the
-// percentage, the size pair ("1023.9 KiB / 1023.9 KiB+"), the rate
-// ("999.9 KiB/s"), and the ETA. Every column has a fixed width so the rows form
-// real columns.
-//
-// prio orders what goes when the terminal cannot fit them all. The bar goes
-// first despite being the eye-catching column: it is the one thing here the
-// percentage beside it already says. At 80 columns that leaves name, percent,
-// sizes, rate, and ETA — the numbers — and spends the recovered room on the
-// file name.
-const (
-	colBar = iota
-	colPct
-	colSizes
-	colSpeed
-	colETA
-)
-
-var progressColumns = []struct{ kind, width, prio int }{
-	{colBar, 16, 1},
-	{colPct, 4, 9},
-	{colSizes, 24, 5},
-	{colSpeed, 11, 2},
-	{colETA, 9, 3},
-}
-
-// The label column takes the room the columns leave, within these bounds. The
-// cap keeps a wide terminal from pushing the numbers half a screen away from
-// the names they belong to.
-const (
-	minLabelWidth = 8
-	maxLabelWidth = 32
-)
-
-// progressLayout is the column arrangement for one frame. It is computed once
-// and used for every row, because a layout decided per row would let one wide
-// value knock that row's columns out of line with its neighbours'.
-type progressLayout struct {
-	label int
-	keep  []int
-}
-
-func planProgressLayout(width int) progressLayout {
-	if width < minLabelWidth+2 {
-		width = minLabelWidth + 2
-	}
-	keep := make([]int, 0, len(progressColumns))
-	for i := range progressColumns {
-		keep = append(keep, i)
-	}
-	tail := func() int {
-		w := 0
-		for _, i := range keep {
-			w += progressColumns[i].width + 2
-		}
-		return w - 2
-	}
-	for len(keep) > 1 && minLabelWidth+2+tail() > width {
-		worst := 0
-		for k, i := range keep {
-			if progressColumns[i].prio < progressColumns[keep[worst]].prio {
-				worst = k
-			}
-		}
-		keep = append(keep[:worst:worst], keep[worst+1:]...)
-	}
-	label := min(max(width-2-tail(), minLabelWidth), maxLabelWidth)
-	return progressLayout{label: label, keep: keep}
-}
-
-// progressLine renders one row into the frame's layout. Each column is clipped
-// and padded to its declared width, so an unexpectedly wide value costs its own
-// cell and never the alignment.
-func progressLine(label string, p itemProgress, lay progressLayout) string {
-	if lay.label == 0 {
-		lay = planProgressLayout(80)
-	}
-	parts := make([]string, 0, len(lay.keep)+1)
-	parts = append(parts, padRight(lay.label, clipDisplay(label, lay.label)))
-	for _, i := range lay.keep {
-		col := progressColumns[i]
-		parts = append(parts, padRight(col.width, clipDisplay(columnText(col.kind, p), col.width)))
-	}
-	return strings.TrimRight(strings.Join(parts, "  "), " ")
-}
-
-func columnText(kind int, p itemProgress) string {
-	switch kind {
-	case colBar:
-		return progressBar(p.Fraction, 14)
-	case colPct:
-		return percentText(p.Fraction)
-	case colSizes:
-		return sizesText(p)
-	case colSpeed:
-		return speedText(p.Speed)
-	default:
-		return etaText(p)
-	}
-}
-
-// progressBar draws a fixed-width bar. A negative fraction means the total is
-// unknown, which the bar shows as empty rather than guessing at a position.
-func progressBar(fraction float64, width int) string {
-	filled := 0
-	if fraction > 0 {
-		filled = int(fraction * float64(width))
-		if filled > width {
-			filled = width
-		}
-	}
-	return "[" + strings.Repeat("=", filled) + strings.Repeat(" ", width-filled) + "]"
-}
-
 func percentText(fraction float64) string {
-	if fraction < 0 {
-		return "  ?%"
-	}
 	return fmt.Sprintf("%3.0f%%", fraction*100)
 }
 
@@ -404,6 +177,9 @@ func percentText(fraction float64) string {
 // download in the tally never reported a length — is marked with "+" rather
 // than presented as the finish line.
 func sizesText(p itemProgress) string {
+	if p.Waiting > 0 {
+		return "waiting " + shortDuration(p.Waiting)
+	}
 	right := "?"
 	if p.Total > 0 {
 		right = humanBytes(p.Total)
@@ -443,7 +219,7 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTP"[exp])
 }
 
-// shortDuration renders an ETA as mm:ss, or h:mm:ss once it passes an hour.
+// shortDuration renders an ETA as mm:ss, or h:mm:ss a single time it passes an hour.
 func shortDuration(d time.Duration) string {
 	if d < 0 {
 		d = 0

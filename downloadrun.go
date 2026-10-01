@@ -5,14 +5,15 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
-// downloadSession is one invocation's use of the shared downloader: the batch
-// it enqueues into, and the display it runs while that batch drains.
+// downloadSession is a single invocation's use of the shared downloader: the
+// batch it enqueues into, and the display it runs while that batch drains.
 //
 // The session opens before the leaf's steps run, not after, because the steps
 // are what work the URL out — their output belongs in the same log region as
@@ -34,27 +35,46 @@ func startDownloadSession(c *cobra.Command) *downloadSession {
 	s := &downloadSession{settings: resolveDownloadSettings(c)}
 	q := sharedQueue(s.settings.Concurrency, s.settings.Retries)
 
-	isTTY, width, height := stdoutSize()
+	isTTY, _, _ := stdoutSize()
 	s.tty = isTTY
-	if !isTTY || s.settings.NoTUI {
-		errOut := execStderr
-		s.batch = q.batch(func(format string, args ...any) {
-			fmt.Fprintf(errOut, format+"\n", args...)
-		}, errOut)
+	s.batch = q.batch(nil, nil)
+	if isTTY && !s.settings.NoTUI && s.startTUI() {
 		return s
 	}
-
-	s.prevOut, s.prevErr = execStdout, execStderr
-	s.batch = q.batch(nil, nil)
-	s.tui = newTUI(s.prevOut, width, height, s.settings.LogLines, s.batch.snapshot)
-	s.batch.log = s.tui.logf
-	// A transport program's stderr belongs in the log region too.
-	s.batch.errOut = s.tui
-	// Steps and the downloader write into the log region rather than over the
-	// progress display.
-	execStdout, execStderr = s.tui, s.tui
-	s.tui.Start()
+	// The workers log concurrently, so each line goes out whole under the lock.
+	var mu sync.Mutex
+	errOut := execStderr
+	line := func(msg string) {
+		mu.Lock()
+		defer mu.Unlock()
+		fmt.Fprintln(errOut, msg)
+	}
+	s.batch.log = func(format string, args ...any) { line(fmt.Sprintf(format, args...)) }
+	s.batch.errOut = errOut
+	stepWatch = &stepWatcher{log: line}
 	return s
+}
+
+// startTUI takes over the terminal. A display that cannot start says why, and
+// the session falls back to plain lines.
+func (s *downloadSession) startTUI() bool {
+	ui, err := newTUI(execStdout, execStderr, s.batch.snapshot)
+	if err == nil {
+		err = ui.Start()
+	}
+	if err != nil {
+		fmt.Fprintf(execStderr, "error: %v; showing plain progress lines instead\n", err)
+		return false
+	}
+	s.prevOut, s.prevErr = execStdout, execStderr
+	s.tui = ui
+	s.batch.log = s.tui.logf
+	// A transport program's stderr scrolls above the region too.
+	s.batch.errOut = s.tui
+	// Steps and the downloader write above the region rather than over it.
+	execStdout, execStderr = s.tui, s.tui
+	stepWatch = &stepWatcher{show: s.tui.setStep}
+	return true
 }
 
 // close ends the display and restores the output channels. Idempotent: the
@@ -65,6 +85,7 @@ func (s *downloadSession) close() {
 		return
 	}
 	s.closed = true
+	stepWatch = nil
 	if s.tui == nil {
 		return
 	}
@@ -73,7 +94,7 @@ func (s *downloadSession) close() {
 }
 
 // run plans the leaf's declarations, hands them to the queue, and waits for the
-// queue to drain. Returns the leaf's exit code: non-zero if any file failed.
+// queue to drain.
 func (s *downloadSession) run(dls []Download, data map[string]any) int {
 	specs, err := planDownloads(dls, data, s.settings.Dir)
 	if err != nil {
@@ -89,18 +110,33 @@ func (s *downloadSession) run(dls []Download, data map[string]any) int {
 
 	logVerbose("downloads: %d queued at concurrency %d", len(specs), s.settings.Concurrency)
 	start := time.Now()
+	j := newJoiner(specs, s.batch.log)
+	s.batch.onDone = j.note
 	for _, spec := range specs {
 		s.batch.add(spec)
 	}
 	items := s.batch.wait()
+	joinErrs := j.wait()
 	s.close()
 
-	return reportDownloads(items, time.Since(start), s.tty)
+	code := reportDownloads(items, time.Since(start), s.tty)
+	return reportJoins(joinErrs, code)
+}
+
+// reportJoins writes what the joiner could not write.
+func reportJoins(errs []error, code int) int {
+	for _, err := range errs {
+		fmt.Fprintln(execStderr, "error:", err)
+	}
+	if len(errs) > 0 {
+		return 1
+	}
+	return code
 }
 
 // reportDownloads writes the run's outcome. On a terminal the display already
 // showed each file, so only the summary follows it; through a pipe the
-// destination paths go to stdout, one per line, for whatever reads them next.
+// destination paths go to stdout, a single per line, for whatever reads them next.
 func reportDownloads(items []*downloadItem, elapsed time.Duration, tty bool) int {
 	var bytes int64
 	ok, failed := 0, 0
@@ -146,13 +182,20 @@ func mcpRunDownloads(dls []Download, data map[string]any) (string, bool) {
 	if len(specs) == 0 {
 		return "no downloads: every <download> was skipped or matched nothing", false
 	}
+	j := newJoiner(specs, batch.log)
+	batch.onDone = j.note
 	for _, spec := range specs {
 		batch.add(spec)
 	}
 
 	var out strings.Builder
 	failed := 0
-	for _, item := range batch.wait() {
+	items := batch.wait()
+	for _, err := range j.wait() {
+		failed++
+		fmt.Fprintf(&out, "join failed: %v\n", err)
+	}
+	for _, item := range items {
 		if err := item.failure(); err != nil {
 			failed++
 			fmt.Fprintf(&out, "failed %s: %v\n", item.spec.URL, err)
@@ -163,10 +206,30 @@ func mcpRunDownloads(dls []Download, data map[string]any) (string, bool) {
 	return strings.TrimRight(log.String()+out.String(), "\n"), failed > 0
 }
 
-// stdoutSize reports whether execStdout is a terminal and how big it is. A
+// openScratch gives the run a working directory of its own, published as
+// `.run.tmpdir`. Parts of a join live there until the join writes the output,
+// so nothing outside the config has to make a directory and pass it in.
+//
+// The returned function removes the directory. A run that keeps its parts (a
+// join without cleanup=, or no join at all) writes them under the download
+// directory instead, which this never touches.
+func openScratch(data map[string]any) (func(), error) {
+	dir, err := os.MkdirTemp("", "api-cli-")
+	if err != nil {
+		return nil, fmt.Errorf("scratch directory: %w", err)
+	}
+	logVerbose("run: scratch directory %s", dir)
+	data["run"] = map[string]any{"tmpdir": dir}
+	return func() { os.RemoveAll(dir) }, nil
+}
+
+// stdoutSize reports whether execStdout is a terminal and how wide it is. A
 // non-*os.File writer (a buffer in tests, a pipe in a shell) is never a
 // terminal, which is exactly the "piped to a file" case.
 func stdoutSize() (bool, int, int) {
+	if ttyOverride != nil {
+		return true, ttyOverride.width, ttyOverride.height
+	}
 	f, ok := execStdout.(*os.File)
 	if !ok {
 		return false, 0, 0

@@ -37,6 +37,14 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 	resultMap := map[string]any{}
 	data["result"] = resultMap
 
+	if len(leaf.node.Downloads) > 0 {
+		clean, serr := openScratch(data)
+		if serr != nil {
+			return "error: " + serr.Error(), true
+		}
+		defer clean()
+	}
+
 	var stepErrBuf bytes.Buffer
 	stepCap := func(c *Cmd, cwd, stdin string, d any) (string, int) {
 		return captureExecTo(c, cwd, stdin, d, &stepErrBuf)
@@ -48,6 +56,18 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 	if oc.code != 0 {
 		return mcpCombine(oc.output, stepErrBuf.String()), true
 	}
+	if len(oc.skipped) > 0 {
+		var summary bytes.Buffer
+		summary.WriteString(stepErrBuf.String())
+		reportSkips(&summary, oc.skipped)
+		out, _ := mcpExecAfterSteps(leaf, data)
+		return mcpCombine(out, strings.TrimRight(summary.String(), "\n")), true
+	}
+	return mcpExecAfterSteps(leaf, data)
+}
+
+// mcpExecAfterSteps is the rest of a tool call once its steps succeeded.
+func mcpExecAfterSteps(leaf *mcpLeaf, data map[string]any) (string, bool) {
 
 	entry, err := renderEntry(leaf.node.Entry, data)
 	if err != nil {
@@ -62,6 +82,20 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 	// command runs here either.
 	if len(leaf.node.Downloads) > 0 {
 		return mcpRunDownloads(leaf.node.Downloads, data)
+	}
+
+	// Same rule again for a <mock>, and the same exception: the leaf's own
+	// <run> makes it a thin wrapper, so the real program still runs after the
+	// records and the outputs land.
+	if leaf.node.Mock != nil {
+		var mockOut, mockErr bytes.Buffer
+		code, err := runMock(leaf.node.Mock, leaf.node.Name, nil, data, &mockOut, &mockErr)
+		if err != nil {
+			return "error: " + err.Error(), true
+		}
+		if code != 0 || !leaf.node.Command.Defined() {
+			return mcpCombine(mockOut.String(), mockErr.String()), code != 0
+		}
 	}
 
 	leafCwd, err := renderCwd(leaf.cwdTmpl, data)
@@ -85,16 +119,18 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 		return mcpCombine(out, errBuf.String()), true
 	}
 
-	// The <fields> auto-formatter takes precedence. MCP behaves like
-	// --format=always: .tty is true, .width is 80, no width-based dropping.
-	if leaf.node.Fields != nil {
+	// The <fields> auto-formatter takes precedence.
+	if len(leaf.node.Fields) > 0 {
 		parsed := parseInput(out, "json")
 		ctx := formatContext(parsed, data, true, 80)
-		rendered, ferr := renderFields(leaf.node.Fields, parsed, ctx, "", 0)
+		rendered, matched, ferr := renderFieldsBlocks(leaf.node.Fields, parsed, ctx, "", 0)
 		if ferr != nil {
 			return "error: " + ferr.Error(), true
 		}
-		return rendered, false
+		if matched {
+			return rendered, false
+		}
+		return out, false
 	}
 
 	if formatted, ok := mcpFormat(leaf, out, data); ok {
@@ -116,18 +152,18 @@ func mcpCombine(stdout, stderr string) string {
 	}
 }
 
-// mcpGatherArgs converts the JSON-decoded arguments map to a typed arg map.
+// mcpGatherArgs converts the JSON-decoded arguments map to a typed arg map. An
+// omitted arg holds an unset value of its type, exactly as on the CLI side.
 func mcpGatherArgs(node Command, arguments map[string]any) (map[string]any, error) {
+	if err := matchToolArgs(node, arguments); err != nil {
+		return nil, err
+	}
 	out := make(map[string]any, len(node.Args))
 	for _, a := range node.Args {
 		val, provided := arguments[a.Name]
 		if a.Variadic {
 			if !provided {
-				if a.Type == "int" {
-					out[a.Name] = []int{}
-				} else {
-					out[a.Name] = []string{}
-				}
+				out[a.Name] = zeroArg(a)
 				continue
 			}
 			arr, ok := val.([]any)
@@ -162,6 +198,7 @@ func mcpGatherArgs(node Command, arguments map[string]any) (map[string]any, erro
 			continue
 		}
 		if !provided {
+			out[a.Name] = zeroArg(a)
 			continue
 		}
 		if a.Type == "int" {

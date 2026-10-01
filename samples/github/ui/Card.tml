@@ -1,0 +1,15 @@
+<?xml version="1.1" encoding="UTF-8"?>
+<Component xmlns="urn:tml:v1" name="Card">
+	<Property name="label" type="string" required="true"/>
+	<Property name="value" type="string" required="true"/>
+	<Property name="width" type="length" default="auto"/>
+
+	<Template>
+		<Box style="panel" width="{width}">
+			<Stack orientation="vertical">
+				<Text style="muted">{label}</Text>
+				<Text style="stat">{value}</Text>
+			</Stack>
+		</Box>
+	</Template>
+</Component>

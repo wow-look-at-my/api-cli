@@ -71,6 +71,12 @@ func buildConfig(root *xnode) (*Config, error) {
 				return nil, err
 			}
 			cfg.Formats = f
+		case "preconditions":
+			p, err := buildPreconditions(child)
+			if err != nil {
+				return nil, err
+			}
+			cfg.Preconditions = p
 		case "transports":
 			t, err := buildTransports(child)
 			if err != nil {
@@ -119,7 +125,7 @@ func buildVars(n *xnode) (map[string]any, error) {
 }
 
 // buildRun parses a <run> element into either a Cmd (shell or argv form) or a
-// Request. Exactly one form applies.
+// Request. Exactly a single form applies.
 func buildRun(n *xnode) (*Cmd, *Request, error) {
 	if err := checkAttrs(n); err != nil {
 		return nil, nil, err
@@ -162,135 +168,16 @@ func buildRun(n *xnode) (*Cmd, *Request, error) {
 	return &Cmd{Shell: true, Template: strings.TrimSpace(tmpl)}, nil, nil
 }
 
-func buildRequest(n *xnode) (*Request, error) {
-	if err := checkAttrs(n, "method", "transport"); err != nil {
-		return nil, err
-	}
-	req := &Request{
-		Method:    strings.TrimSpace(n.Attr("method")),
-		Transport: strings.TrimSpace(n.Attr("transport")),
-	}
-	if req.Method == "" {
-		req.Method = "GET"
-	}
-	for _, child := range n.Children() {
-		switch child.Name() {
-		case "url":
-			s, err := compileTextElem(child)
-			if err != nil {
-				return nil, err
-			}
-			req.URL = strings.TrimSpace(s)
-		case "query":
-			if err := buildQuery(child, req); err != nil {
-				return nil, err
-			}
-		case "header":
-			h, err := buildHeader(child, "")
-			if err != nil {
-				return nil, err
-			}
-			req.Headers = append(req.Headers, h)
-		case "if":
-			if err := checkAttrs(child, "test"); err != nil {
-				return nil, err
-			}
-			test := child.Attr("test")
-			for _, inner := range child.Children() {
-				if inner.Name() != "header" {
-					return nil, fmt.Errorf("<request><if>: only <header> children are supported, got <%s>", inner.Name())
-				}
-				h, err := buildHeader(inner, test)
-				if err != nil {
-					return nil, err
-				}
-				req.Headers = append(req.Headers, h)
-			}
-		case "body":
-			s, err := compileTextElem(child)
-			if err != nil {
-				return nil, err
-			}
-			req.Body = s
-		case "response":
-			if err := checkAttrs(child, "jq"); err != nil {
-				return nil, err
-			}
-			req.Response = &Response{JQ: strings.TrimSpace(child.Attr("jq"))}
-		default:
-			return nil, fmt.Errorf("<request>: unexpected child element <%s>", child.Name())
-		}
-	}
-	return req, nil
-}
-
-func buildHeader(n *xnode, when string) (Header, error) {
-	if err := checkAttrs(n, "name"); err != nil {
-		return Header{}, err
-	}
-	name := n.Attr("name")
-	if name == "" {
-		return Header{}, fmt.Errorf("<header>: name= is required")
-	}
-	val, err := compileContent(n)
+func buildFields(n *xnode) (FieldsBlock, error) {
+	f, err := buildFieldsBody(n)
 	if err != nil {
-		return Header{}, err
+		return FieldsBlock{}, err
 	}
-	return Header{Name: name, Value: val, When: when}, nil
+	return FieldsBlock{When: strings.TrimSpace(n.Attr("when")), Fields: f}, nil
 }
 
-func buildQuery(n *xnode, req *Request) error {
-	if err := checkAttrs(n, "from"); err != nil {
-		return err
-	}
-	req.QueryFrom = strings.TrimSpace(n.Attr("from"))
-	for _, child := range n.Children() {
-		switch child.Name() {
-		case "param":
-			p, err := buildParam(child, "")
-			if err != nil {
-				return err
-			}
-			req.Query = append(req.Query, p)
-		case "if":
-			if err := checkAttrs(child, "test"); err != nil {
-				return err
-			}
-			test := child.Attr("test")
-			for _, inner := range child.Children() {
-				if inner.Name() != "param" {
-					return fmt.Errorf("<query><if>: only <param> children are supported, got <%s>", inner.Name())
-				}
-				p, err := buildParam(inner, test)
-				if err != nil {
-					return err
-				}
-				req.Query = append(req.Query, p)
-			}
-		default:
-			return fmt.Errorf("<query>: unexpected child element <%s>", child.Name())
-		}
-	}
-	return nil
-}
-
-func buildParam(n *xnode, when string) (Param, error) {
-	if err := checkAttrs(n, "name"); err != nil {
-		return Param{}, err
-	}
-	name := n.Attr("name")
-	if name == "" {
-		return Param{}, fmt.Errorf("<param>: name= is required")
-	}
-	val, err := compileContent(n)
-	if err != nil {
-		return Param{}, err
-	}
-	return Param{Name: name, Value: val, When: when}, nil
-}
-
-func buildFields(n *xnode) (*Fields, error) {
-	if err := checkAttrs(n, "over", "footer"); err != nil {
+func buildFieldsBody(n *xnode) (*Fields, error) {
+	if err := checkAttrs(n, "over", "footer", "when"); err != nil {
 		return nil, err
 	}
 	f := &Fields{Over: strings.TrimSpace(n.Attr("over")), Footer: n.Attr("footer")}
@@ -396,14 +283,16 @@ func buildFormat(n *xnode) (*Format, error) {
 }
 
 func buildCommandNode(n *xnode) (*Command, error) {
-	if err := checkAttrs(n, "name", "description", "passthrough", "confirm"); err != nil {
+	if err := checkAttrs(n, "name", "description", "passthrough", "runnable", "confirm", "watch"); err != nil {
 		return nil, err
 	}
 	c := &Command{
 		Name:        n.Attr("name"),
 		Description: n.Attr("description"),
 		Passthrough: n.Attr("passthrough") == "true",
+		Runnable:    n.Attr("runnable") == "true",
 		Confirm:     n.Attr("confirm"),
+		Watch:       n.Attr("watch"),
 	}
 	for _, child := range n.Children() {
 		if err := addCommandChild(c, child); err != nil {
@@ -413,7 +302,7 @@ func buildCommandNode(n *xnode) (*Command, error) {
 	return c, nil
 }
 
-// addCommandChild dispatches one child element of a <command> into the Command.
+// addCommandChild dispatches a single child element of a <command> into the Command.
 func addCommandChild(c *Command, child *xnode) error {
 	switch child.Name() {
 	case "arg":
@@ -440,6 +329,12 @@ func addCommandChild(c *Command, child *xnode) error {
 			return err
 		}
 		c.Command, c.Request = cmd, req
+	case "mock":
+		m, err := buildMock(child)
+		if err != nil {
+			return err
+		}
+		c.Mock = m
 	case "cwd":
 		s, err := compileTextElem(child)
 		if err != nil {
@@ -459,16 +354,11 @@ func addCommandChild(c *Command, child *xnode) error {
 		}
 		c.Confirm = s
 	case "preconditions":
-		for _, p := range child.Children() {
-			if p.Name() != "precondition" {
-				return fmt.Errorf("<preconditions>: unexpected child element <%s>", p.Name())
-			}
-			s, err := compileTextElem(p)
-			if err != nil {
-				return err
-			}
-			c.Preconditions = append(c.Preconditions, s)
+		p, err := buildPreconditions(child)
+		if err != nil {
+			return err
 		}
+		c.Preconditions = append(c.Preconditions, p...)
 	case "steps":
 		for _, s := range child.Children() {
 			if s.Name() != "step" {
@@ -491,7 +381,13 @@ func addCommandChild(c *Command, child *xnode) error {
 		if err != nil {
 			return err
 		}
-		c.Fields = f
+		c.Fields = append(c.Fields, f)
+	case "tml":
+		t, err := buildTML(child)
+		if err != nil {
+			return err
+		}
+		c.TML = t
 	case "format":
 		ref, err := buildFormatRef(child)
 		if err != nil {
@@ -504,6 +400,15 @@ func addCommandChild(c *Command, child *xnode) error {
 			return err
 		}
 		c.Downloads = append(c.Downloads, d)
+	case "stream":
+		s, err := buildStream(child)
+		if err != nil {
+			return err
+		}
+		if c.Stream != nil {
+			return fmt.Errorf("<command %q>: <stream> is declared once; give one leaf one boundary", c.Name)
+		}
+		c.Stream = s
 	case "command":
 		sub, err := buildCommandNode(child)
 		if err != nil {
@@ -516,8 +421,28 @@ func addCommandChild(c *Command, child *xnode) error {
 	return nil
 }
 
+// buildPreconditions reads a <preconditions> block. The config and every
+// <command> declare the same element, so both read it through here.
+func buildPreconditions(n *xnode) ([]string, error) {
+	if err := checkAttrs(n); err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, p := range n.Children() {
+		if p.Name() != "precondition" {
+			return nil, fmt.Errorf("<preconditions>: unexpected child element <%s>", p.Name())
+		}
+		s, err := compileTextElem(p)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, nil
+}
+
 func buildArg(n *xnode) (Arg, error) {
-	if err := checkAttrs(n, "name", "type", "required", "variadic", "description"); err != nil {
+	if err := checkAttrs(n, "name", "type", "required", "variadic", "pattern", "description"); err != nil {
 		return Arg{}, err
 	}
 	return Arg{
@@ -525,6 +450,7 @@ func buildArg(n *xnode) (Arg, error) {
 		Type:        n.Attr("type"),
 		Required:    n.Attr("required") == "true",
 		Variadic:    n.Attr("variadic") == "true",
+		Pattern:     strings.TrimSpace(n.Attr("pattern")),
 		Description: n.Attr("description"),
 	}, nil
 }
@@ -574,10 +500,31 @@ func buildFlag(n *xnode) (Flag, error) {
 }
 
 func buildStep(n *xnode) (Step, error) {
-	if err := checkAttrs(n, "name", "when"); err != nil {
+	if err := checkAttrs(n, "name", "when", "over", "until", "interval", "attempts", "retries", "on-error"); err != nil {
 		return Step{}, err
 	}
-	s := Step{Name: n.Attr("name"), When: n.Attr("when")}
+	s := Step{
+		Name:     n.Attr("name"),
+		When:     n.Attr("when"),
+		Over:     strings.TrimSpace(n.Attr("over")),
+		Until:    n.Attr("until"),
+		Interval: strings.TrimSpace(n.Attr("interval")),
+		OnError:  strings.TrimSpace(n.Attr("on-error")),
+	}
+	for _, a := range []struct {
+		name string
+		dst  *int
+	}{{"attempts", &s.Attempts}, {"retries", &s.Retries}} {
+		raw := strings.TrimSpace(n.Attr(a.name))
+		if raw == "" {
+			continue
+		}
+		v, err := strconv.Atoi(raw)
+		if err != nil {
+			return Step{}, fmt.Errorf("<step %q>: %s=%q must be an integer", s.Name, a.name, raw)
+		}
+		*a.dst = v
+	}
 	for _, child := range n.Children() {
 		switch child.Name() {
 		case "run":
@@ -650,10 +597,11 @@ func entryObject(n *xnode) (map[string]any, error) {
 	return out, nil
 }
 
-// entryValue maps one entry element to a Go value:
-//   - children that are all <param>      -> a map (name -> template string)
-//   - other structural child elements    -> a nested object
-//   - otherwise (text / placeholders)     -> a template string
+// entryValue maps a single entry element to a Go value.
+//
+//	all <param> -> a map (name -> template string) - other structural child
+//	elements -> a nested object - otherwise (text / placeholders) -> a
+//	template string
 func entryValue(n *xnode) (any, error) {
 	var structural []*xnode
 	for _, c := range n.Children() {

@@ -22,7 +22,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 }
 
 // swapDownloadClient points the download queue at a test server. The queue
-// caches the client when it is built, so the shared one is dropped too.
+// caches the client when it is built, so the shared a single is dropped too.
 func swapDownloadClient(t *testing.T, srv *httptest.Server) {
 	t.Helper()
 	t.Serial()
@@ -63,6 +63,41 @@ func assetServer(t *testing.T) (*httptest.Server, func() (string, string)) {
 	}))
 	t.Cleanup(srv.Close)
 	return srv, func() (string, string) { return auth, cookie }
+}
+
+// A group's watch= reaches a <download> leaf under it. It does not repeat the
+// transfer or refuse the group.
+func TestIntegration_DownloadUnderAnInheritedWatchRunsOnce(t *testing.T) {
+	srv, _ := assetServer(t)
+	swapHTTPClient(t, srv)
+	swapDownloadClient(t, srv)
+	dir := t.TempDir()
+
+	cfg, err := loadStr(t, `<config name="dl">
+		<command name="assets" watch="5s">
+			<command name="grab">
+				<download>
+					<url>`+srv.URL+`/files/one</url>
+					<to>one.txt</to>
+				</download>
+			</command>
+		</command>
+	</config>`)
+	require.NoError(t, err)
+
+	code, _, errOut := execCmdFull(t, cfg, "assets", "grab", "--download-dir", dir)
+	require.Equal(t, 0, code, "stderr: %s", errOut)
+	assert.Contains(t, errOut, "warning: watch=5s ignored: a <download> leaf runs one time")
+	one, err := os.ReadFile(filepath.Join(dir, "one.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "first", string(one))
+
+	// The flag asks for the same thing on purpose, and that stays an error.
+	// Cobra reports the error itself, so only the exit code is visible here.
+	require.NoError(t, os.Remove(filepath.Join(dir, "one.txt")))
+	code, _, _ = execCmdFull(t, cfg, "assets", "grab", "--download-dir", dir, "--watch", "2s")
+	assert.Equal(t, 1, code)
+	assert.NoFileExists(t, filepath.Join(dir, "one.txt"), "the refused run transfers nothing")
 }
 
 func TestIntegration_DownloadHandsStepURLsToTheQueue(t *testing.T) {
@@ -106,7 +141,11 @@ func TestIntegration_DownloadHandsStepURLsToTheQueue(t *testing.T) {
 		[]string{filepath.Join(dir, "one.txt"), filepath.Join(dir, "two.txt")},
 		strings.Fields(strings.TrimSpace(out)))
 	assert.Contains(t, errOut, "downloaded 2/2 files")
-	assert.Contains(t, errOut, "downloading ")
+	// A single line per file that landed, named by the file rather than by its
+	// full destination path, and no line at all for a start.
+	assert.Contains(t, errOut, "downloaded one.txt (5 B)")
+	assert.Contains(t, errOut, "downloaded two.txt (11 B)")
+	assert.NotContains(t, errOut, "downloading ")
 
 	auth, cookie := seen()
 	assert.Equal(t, "Bearer s3cret", auth, "the step's auth reaches the downloader")
@@ -134,7 +173,7 @@ func TestIntegration_DownloadFailureIsLoudAndNonZero(t *testing.T) {
 }
 
 func TestIntegration_DownloadVerifiesDigestsFromTheStep(t *testing.T) {
-	// The manifest carries a digest per asset; one of them is wrong, which is
+	// The manifest carries a digest per asset; any of them is wrong, which is
 	// the case the feature exists for.
 	good := sha256.Sum256([]byte("first"))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -175,8 +214,7 @@ func TestIntegration_DownloadVerifiesDigestsFromTheStep(t *testing.T) {
 	assert.NotContains(t, out, "two.txt")
 }
 
-// binaryBody is 64 KiB covering every byte value, including sequences that are
-// not valid UTF-8. Anything that treats a payload as text mangles it.
+// Anything that treats a payload as text mangles it.
 func binaryBody() []byte {
 	body := make([]byte, 65536)
 	for i := range body {
@@ -208,7 +246,7 @@ func TestIntegration_DownloadIsByteExact(t *testing.T) {
 }
 
 // The same guarantee for a request streamed to a redirect: the body is the
-// caller's file, so not one byte is added to it.
+// caller's file, so not a single byte is added to it.
 func TestIntegration_RedirectedRequestIsByteExact(t *testing.T) {
 	body := binaryBody()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -286,6 +324,7 @@ func TestIntegration_DownloadStepFailureSkipsTheQueue(t *testing.T) {
 }
 
 func TestMCP_DownloadLeafReportsWhatLanded(t *testing.T) {
+	t.Serial()
 	srv, _ := assetServer(t)
 	swapDownloadClient(t, srv)
 	dir := t.TempDir()
@@ -306,6 +345,7 @@ func TestMCP_DownloadLeafReportsWhatLanded(t *testing.T) {
 }
 
 func TestMCP_DownloadLeafWithNothingToDo(t *testing.T) {
+	t.Serial()
 	prev := downloadDefaults
 	t.Cleanup(func() { downloadDefaults = prev })
 	installDownloads(nil)

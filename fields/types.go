@@ -31,8 +31,7 @@ type Field struct {
 }
 
 // Render represents a Fields declaration as the chosen sink. An empty sink
-// follows the data's shape, a width lets a table drop columns by priority, and
-// r evaluates Expr and Footer.
+// follows the data's shape, and r evaluates Expr and Footer.
 func Render(r Renderer, f *Fields, parsed any, ctx map[string]any, sink string, width int) (string, error) {
 	return renderFields(r, f, parsed, ctx, sink, width)
 }

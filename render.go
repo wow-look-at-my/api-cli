@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,9 +23,9 @@ import (
 const spreadSentinel = "\x00"
 const spreadEndSentinel = "\x01"
 
-// cliFuncs are the template functions this CLI adds to the shared set. Each one
-// serves a shell, a file path, or a terminal column, which is vocabulary the
-// shared language does not carry.
+// cliFuncs are the template functions this CLI adds to the shared set. Each a
+// single serves a shell, a file path, or a terminal column, which is vocabulary
+// the shared language does not carry.
 func cliFuncs() template.FuncMap {
 	return template.FuncMap{
 		"shellquote":   shellQuote,
@@ -37,7 +39,21 @@ func cliFuncs() template.FuncMap {
 		"stripANSI":    stripANSI,
 		"filterSuffix": filterSuffix,
 		"filterPrefix": filterPrefix,
+		"collect":      collectPath,
+		"stem":         stem,
+		// The path-segment rule, as a pattern= a config names and as a predicate
+		// a <precondition> reads. See guards.go.
+		"segmentPattern": segmentPattern,
+		"safeSegments":   safeSegments,
 	}
+}
+
+// stem is a path without its directory and without its extension: the piece a
+// build tool names an artifact after. "src/foo/bar.cpp" becomes "bar", so an
+// output path reads {{ stem .mock.file }}.o.
+func stem(p string) string {
+	base := filepath.Base(p)
+	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
 // renderer executes every template this tool renders. It is read-only after
@@ -66,16 +82,115 @@ func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width 
 
 // renderString executes a text/template against data with the shared functions
 // plus cliFuncs.
+// asList normalizes a context value to the elements a repetition walks. A step
+// result is a []any and a variadic arg is a []string, so both `over=` sites
+// accept either rather than only the JSON shape.
+//
+// A string is not a list. Iterating a single gives a record per byte, which is
+// never what a config meant by over=.
+func asList(v any) ([]any, bool) {
+	switch t := v.(type) {
+	case nil:
+		return nil, false
+	case []any:
+		return t, true
+	case string, []byte:
+		return nil, false
+	}
+	rv := reflect.ValueOf(v)
+	if k := rv.Kind(); k != reflect.Slice && k != reflect.Array {
+		return nil, false
+	}
+	out := make([]any, rv.Len())
+	for i := range out {
+		out[i] = rv.Index(i).Interface()
+	}
+	return out, true
+}
+
+// collectPath gathers a single path out of every element of a list and flattens
+// the values that are lists themselves. A step that fanned out over N items
+// holds N responses, each carrying its own parts, and a single queue wants
+// every part of every item as a single list:
+//
+//	over="{{ toJson (collect &quot;result.parts&quot; .result.listing) }}"
+//
+// A path that is missing from an element is an error rather than a skip. The
+// alternative is a queue quietly short a single item's files.
+func collectPath(path string, v any) ([]any, error) {
+	list, ok := asList(v)
+	if !ok {
+		return nil, fmt.Errorf("collect %q: %T is not a list", path, v)
+	}
+	out := []any{}
+	for i, el := range list {
+		m, ok := el.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("collect %q: element %d is %T, not a record", path, i, el)
+		}
+		got, ok := fields.Lookup(m, path)
+		if !ok {
+			return nil, fmt.Errorf("collect %q: element %d has no such path", path, i)
+		}
+		if inner, ok := asList(got); ok {
+			out = append(out, inner...)
+			continue
+		}
+		out = append(out, got)
+	}
+	return out, nil
+}
+
+// overSource resolves an `over=` to the value it repeats across. A plain dotted
+// name is a context path. A template is rendered and its output read as JSON,
+// which is how a config reshapes a fan-out result without leaving the config:
+// `over="{{ toJson (collect "result.parts" .result.listing) }}"`.
+//
+// The next return is false when the path is not there at all. The caller
+// decides what that means, because a missing path and an empty list are
+// different mistakes.
+func overSource(data map[string]any, expr string) (any, bool, error) {
+	if !strings.Contains(expr, "{{") {
+		v, ok := fields.Lookup(data, expr)
+		return v, ok, nil
+	}
+	out, err := renderString(expr, data)
+	if err != nil {
+		return nil, false, fmt.Errorf("render over: %w", err)
+	}
+	if strings.TrimSpace(out) == "" {
+		return nil, false, nil
+	}
+	return parseResult(out), true, nil
+}
+
+// promoteCtx copies data and lays a single record over it: a map's keys
+// reach the top level, and the record itself takes the given name. This is
+// how a per-record template reads `.sequence` and `.item` alike.
+func promoteCtx(data map[string]any, rec any, name string) map[string]any {
+	ctx := make(map[string]any, len(data)+8)
+	for k, v := range data {
+		ctx[k] = v
+	}
+	if m, ok := rec.(map[string]any); ok {
+		for k, v := range m {
+			ctx[k] = v
+		}
+	}
+	ctx[name] = rec
+	return ctx
+}
+
 func renderString(tmpl string, data any) (string, error) {
 	return renderer.Render(tmpl, data)
 }
 
 // tabwriter formats rows with columns aligned by displayWidth. Accepts:
-//   - []string: one row per element, tab-separated columns.
-//   - [][]string or [][]any: explicit cells per row.
-//   - []any: each element is a row; either a string or a []any of cells.
+//   - []string: a single row per element, tab-separated columns. -
+//     [][]string or [][]any: explicit cells per row. - []any: each element
+//     is a row; either a string or a []any of cells.
 //
-// Default padding between columns is 2 spaces. ANSI escapes pass through.
+// ANSI escapes pass through.
 func tabwriter(v any) (string, error) {
 	rows, err := toRows(v)
 	if err != nil {
@@ -198,8 +313,8 @@ func dirExists(path string) bool {
 	return info.IsDir()
 }
 
-// filterSuffix returns elements from list that end with the given suffix.
-// Used in passthrough mode to locate specific files: {{.rest | filterSuffix ".cpp1.ii" | first}}.
+// filterSuffix returns elements from list that end with the given suffix. Used in passthrough
+// mode to locate specific files: {{.rest | filterSuffix ".cpp1.ii" | earliest}}.
 func filterSuffix(suffix string, list any) ([]string, error) {
 	items, err := toStringSlice(list)
 	if err != nil {
@@ -229,9 +344,9 @@ func filterPrefix(prefix string, list any) ([]string, error) {
 	return out, nil
 }
 
-// addQueryValue adds one declared parameter to values, per its Go type. A
-// nested slice repeats the key. An empty string is dropped, so an unset
-// optional parameter does not clutter the URL.
+// addQueryValue adds a single declared parameter to values, per its Go
+// type. A nested slice repeats the key. An empty string is dropped, so an
+// unset optional parameter does not clutter the URL.
 func addQueryValue(values url.Values, key string, v any) error {
 	switch val := v.(type) {
 	case nil:

@@ -11,8 +11,13 @@ import (
 )
 
 // defaultFormatCap is the byte threshold above which captureExecCapped flushes
-// to streaming and skips the format step. 32 MiB.
+// to streaming and skips the format step.
 const defaultFormatCap = 32 << 20
+
+// It is a page the terminal scrolls, not a screen, so it is tall enough that a
+// board of cards is never cut off. The blank rows under the content are
+// trimmed.
+const tmlPageHeight = 1000
 
 // userVerdict is the user-side decision about formatting. The author-side is
 // computed separately by rendering format.When; output is formatted iff both
@@ -37,13 +42,7 @@ func resolveFormat(ref *FormatRef, formats map[string]*Format) *Format {
 	return formats[ref.Name]
 }
 
-// userVerdictFromFlags consults the persistent flags and env vars in
-// precedence order:
-//  1. --no-format       -> userNo
-//  2. --format=<value>  -> raw=>userNo, always=>userAlways, auto=>(env or default)
-//  3. NO_FORMAT         -> userNo (any non-empty value, NO_COLOR-style)
-//  4. API_CLI_FORMAT    -> raw / always / auto
-//  5. default           -> userYes
+// default -> userYes
 func userVerdictFromFlags(c *cobra.Command) userVerdict {
 	root := c.Root().PersistentFlags()
 	if no, _ := root.GetBool("no-format"); no {
@@ -70,9 +69,19 @@ func userVerdictFromFlags(c *cobra.Command) userVerdict {
 	return userYes
 }
 
+// termSize is a terminal's dimensions.
+type termSize struct{ width, height int }
+
+// ttyOverride answers the terminal probes while a display captures the output
+// on its way to the screen.
+var ttyOverride *termSize
+
 // stdoutTTY reports whether execStdout is a terminal. Non-*os.File writers
 // (e.g. bytes.Buffer in tests) return false — exactly what tests want.
 func stdoutTTY() (bool, int) {
+	if ttyOverride != nil {
+		return true, ttyOverride.width
+	}
 	f, ok := execStdout.(*os.File)
 	if !ok {
 		return false, 0
@@ -134,9 +143,7 @@ type predicateKey struct {
 	ctx  uintptr
 }
 
-// ctxIdentity returns a stable identity for a context map. The map header's
-// pointer is stable for the lifetime of the map; we don't mutate ctx after
-// passing it in, so this is safe for one-invocation caching.
+// ctxIdentity returns a stable identity for a context map.
 func ctxIdentity(m map[string]any) uintptr {
 	if m == nil {
 		return 0
@@ -161,11 +168,11 @@ func parseInput(s, mode string) any {
 	}
 }
 
-// selectView picks the view to render. Selection rules:
-//  1. If viewFlag is non-empty, return the named view (or error).
-//  2. Else first view whose When predicate is truthy.
-//  3. Else first view with Default true.
-//  4. Else views[0].
+// selectView picks the view to render. If viewFlag is non-empty,
+//
+//	return the named view (or error). Else earliest view whose
+//	When predicate is truthy. Else earliest view with Default
+//	true.
 func selectView(views []View, ctx map[string]any, viewFlag string, cache map[predicateKey]bool) (*View, error) {
 	if viewFlag != "" {
 		for i := range views {
@@ -207,7 +214,7 @@ func selectView(views []View, ctx map[string]any, viewFlag string, cache map[pre
 // Formatting is suppressed when the user opts out (--no-format / --format=raw /
 // NO_FORMAT). A <fields> declaration otherwise always formats. A legacy
 // <format> additionally requires its author `when` predicate to be truthy.
-func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, fields *Fields, formatRef *FormatRef, formats map[string]*Format) (int, error) {
+func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, blocks []FieldsBlock, view *TML, formatRef *FormatRef, formats map[string]*Format) (int, error) {
 	verdict := userVerdictFromFlags(c)
 
 	streamRaw := func() int {
@@ -224,15 +231,40 @@ func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin strin
 
 	// --as forces a representation even when the leaf declared no <fields>:
 	// project nothing and let the data shape (or the chosen sink) decide.
-	if fields == nil {
-		if sink, _ := c.Root().PersistentFlags().GetString("as"); strings.TrimSpace(sink) != "" {
-			fields = &Fields{}
-		}
+	sink, _ := c.Root().PersistentFlags().GetString("as")
+	sink = strings.TrimSpace(sink)
+	if len(blocks) == 0 && sink != "" {
+		blocks = []FieldsBlock{{Fields: &Fields{}}}
 	}
 
-	if fields != nil {
-		logVerbose("format: applying <fields> auto-formatter")
-		return runFieldsFormatted(c, cmdTmpl, request, cwd, stdin, data, fields, verdict), nil
+	// Piped, the leaf falls through to whatever else it declared, and --as
+	// names a representation the user wants instead of the screen.
+	if view.Defined() && sink == "" {
+		isTTY, width, height := stdoutSize()
+		if verdict == userAlways {
+			isTTY = true
+		}
+		if isTTY {
+			if width <= 0 || height <= 0 {
+				width, height = 80, 24
+			}
+			// A single frame prints into a scrolling terminal, so it is a
+			// page rather than a screen: laying it out at the terminal's
+			// height would cut the content off at the bottom row and say
+			// nothing about it. Under a watch (ttyOverride) the screen IS the
+			// height, and the program owns it.
+			if ttyOverride == nil {
+				height = tmlPageHeight
+			}
+			logVerbose("format: rendering <tml> %s at %dx%d", view.Src, width, height)
+			return runTMLFormatted(cmdTmpl, request, cwd, stdin, data, view, width, height), nil
+		}
+		logVerbose("format: <tml> needs a terminal, falling through")
+	}
+
+	if len(blocks) > 0 {
+		logVerbose("format: applying <fields> auto-formatter (%d block(s))", len(blocks))
+		return runFieldsFormatted(c, cmdTmpl, request, cwd, stdin, data, blocks, verdict), nil
 	}
 
 	effFmt := resolveFormat(formatRef, formats)
@@ -278,7 +310,7 @@ func captureRun(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[stri
 //
 // The trailing newline is cosmetic — it keeps a response off the shell prompt —
 // so it goes only to a terminal. Redirected, the body is somebody's file, and a
-// byte they did not ask for is corruption: one appended newline is the
+// byte they did not ask for is corruption: a single appended newline is the
 // difference between a working archive and a failing checksum.
 func streamRequest(request *Request, data map[string]any) int {
 	out, code := runRequest(request, data, execStderr)
@@ -293,8 +325,10 @@ func streamRequest(request *Request, data map[string]any) int {
 }
 
 // runFieldsFormatted captures the leaf's JSON output and renders it through the
-// <fields> auto-formatter.
-func runFieldsFormatted(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, fields *Fields, verdict userVerdict) int {
+// <fields> auto-formatter. Every block whose when= predicate holds renders, in
+// order, so a single leaf shows a table and a detail view on different calls,
+// or tables on the same call. A leaf whose blocks all sit out prints the raw body.
+func runFieldsFormatted(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, blocks []FieldsBlock, verdict userVerdict) int {
 	out, overflowed, code := captureRun(cmdTmpl, request, cwd, stdin, data)
 	if overflowed {
 		logVerbose("format: output overflowed cap, streamed raw")
@@ -321,13 +355,90 @@ func runFieldsFormatted(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, s
 	if isTTY {
 		dropWidth = width
 	}
-	rendered, err := renderFields(fields, parsed, ctx, strings.TrimSpace(sink), dropWidth)
+	rendered, matched, err := renderFieldsBlocks(blocks, parsed, ctx, strings.TrimSpace(sink), dropWidth)
 	if err != nil {
 		fmt.Fprintln(execStderr, "error:", err)
 		return 1
 	}
+	if !matched {
+		logVerbose("format: no <fields> block matched, printing the raw body")
+		fmt.Fprint(execStdout, out)
+		return 0
+	}
 	fmt.Fprint(execStdout, rendered)
 	return 0
+}
+
+// runTMLFormatted captures the leaf's JSON output and draws a single frame of
+// the component. A watch turns this into a terminal program (tmlrun.go); on its
+// own it is a single frame on stdout, which is what makes the same declaration
+// testable without a terminal.
+func runTMLFormatted(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, view *TML, width, height int) int {
+	out, overflowed, code := captureRun(cmdTmpl, request, cwd, stdin, data)
+	if overflowed {
+		logVerbose("format: output overflowed cap, streamed raw")
+		return code
+	}
+	if code != 0 {
+		if out != "" {
+			fmt.Fprint(execStderr, out)
+		}
+		return code
+	}
+
+	parsed := parseInput(out, "json")
+	ctx := formatContext(parsed, data, true, width)
+	frame, err := renderTMLFrame(view, configDir, parsed, ctx, width, height)
+	if err != nil {
+		fmt.Fprintln(execStderr, "error:", err)
+		return 1
+	}
+	// A frame fills the viewport, and the blank rows under the content are the
+	// screen a program owns. Printed a single time into a scrolling terminal
+	// they are just a gap before the prompt, so this path stops at the last drawn row.
+	fmt.Fprintln(execStdout, strings.TrimRight(frame, " \n"))
+	return 0
+}
+
+// renderFieldsBlocks renders each block whose when= predicate holds, in order,
+// and joins the results. matched is false when no block applies, which leaves
+// the caller to print the body as it arrived.
+func renderFieldsBlocks(blocks []FieldsBlock, parsed any, ctx map[string]any, sink string, dropWidth int) (out string, matched bool, err error) {
+	cache := map[predicateKey]bool{}
+	var parts []string
+	for i, b := range blocks {
+		if b.When != "" {
+			ok, perr := renderPredicate(b.When, ctx, cache)
+			if perr != nil {
+				return "", false, fmt.Errorf("fields[%d] when: %w", i, perr)
+			}
+			logDebug("fields[%d]: when=%q => %v", i, b.When, ok)
+			if !ok {
+				continue
+			}
+		}
+		rendered, rerr := renderFields(b.Fields, parsed, ctx, sink, dropWidth)
+		if rerr != nil {
+			return "", false, rerr
+		}
+		parts = append(parts, rendered)
+	}
+	if len(parts) == 0 {
+		return "", false, nil
+	}
+	return joinBlocks(parts), true, nil
+}
+
+// joinBlocks stacks rendered blocks with a single blank line between them,
+// so tables on a single screen do not read as a single table.
+func joinBlocks(parts []string) string {
+	for i, p := range parts {
+		if i < len(parts)-1 && !strings.HasSuffix(p, "\n\n") {
+			parts[i] = strings.TrimRight(p, "\n") + "\n\n"
+		}
+	}
+	return strings.Join(parts, "")
+
 }
 
 // runFormatted executes the leaf via captureRun and renders the captured output

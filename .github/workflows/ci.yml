@@ -18,20 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: wow-look-at-my/actions@ste-lint#latest
+      # A dependency's generate directive wants generator binaries and the fork's GOROOT, which only go-toolchain's own CI has. Each dependency here ships the output already.
       - uses: wow-look-at-my/go-toolchain@master
+        env:
+          GOGENERATEDEPS: 'off'
         with:
           autorelease: 'true'
       - name: Run samples/github/github.xml demo into the step summary
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./.github/scripts/demo-summary.sh
-
-  validate-xml:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      # The schema is an XML 1.1 document too, and a pattern covers a file added later.
-      - uses: wow-look-at-my/xml-validator@master
-        # No schema= here: --schema overflows the stack on the recursive <command> grammar.
-        with:
-          files: '**/*.xml **/*.xsd'

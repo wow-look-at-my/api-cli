@@ -18,10 +18,9 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stderr))
 }
 
-// run is the process body, split out of main for testability. argv is the
-// slice of arguments (os.Args[1:] in production); errOut receives diagnostics.
+// run is the process body, split out of main for testability.
 func run(argv []string, errOut io.Writer) int {
-	cfgPath, mcpTransport, corsValue, envVars := preparseGlobalFlags(argv)
+	cfgPath, mcpTransport, corsValue, envVars, installMocks := preparseGlobals(argv)
 
 	if err := applyEnvVars(envVars); err != nil {
 		fmt.Fprintln(errOut, "error:", err)
@@ -49,9 +48,17 @@ func run(argv []string, errOut io.Writer) int {
 	// Bare invocation (no args) and help flags fall through to cobra so the
 	// user sees --help output. --mcp mode always requires a config, so don't
 	// exempt help invocations when --mcp is present (that would panic).
-	if cfg == nil && ((!isHelpInvocation(argv) && !isDocsInvocation(argv) && !isVersionInvocation(argv)) || mcpTransport != "") {
+	if cfg == nil && ((!isHelpInvocation(argv) && !isDocsInvocation(argv) && !isVersionInvocation(argv)) || mcpTransport != "" || installMocks != "") {
 		fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.xml in the current directory")
 		return 2
+	}
+
+	if installMocks != "" {
+		if err := installMockWrappers(cfg, cfgPath, installMocks, execStdout); err != nil {
+			fmt.Fprintln(errOut, "error:", err)
+			return 2
+		}
+		return 0
 	}
 
 	if mcpTransport != "" {
@@ -89,6 +96,7 @@ func newRoot(cfg *Config) *cobra.Command {
 	// transport went missing would otherwise fall back to the built-in client
 	// without saying so.
 	installTransports(cfg)
+	installConfigDir(cfg)
 	installDownloads(cfg)
 
 	root := &cobra.Command{
@@ -103,6 +111,7 @@ func newRoot(cfg *Config) *cobra.Command {
 	root.PersistentFlags().String("config", "", "Path to config file: XML (default: ./api.xml).")
 	root.PersistentFlags().String("mcp", "", `Run as MCP server. Value: "stdio", "http://<addr>", or "sse://<addr>".`)
 	root.PersistentFlags().String("cors", "strict", "CORS policy for MCP HTTP/SSE: disabled|permissive|strict|enabled.")
+	root.PersistentFlags().String("install-mocks", "", "Write one wrapper script per <mock> leaf into this directory, then exit.")
 	root.PersistentFlags().StringArray("var", nil, "Set an environment variable (KEY=VALUE). Repeatable.")
 	root.PersistentFlags().BoolP("quiet", "q", false, "Suppress execution count on stderr.")
 	root.PersistentFlags().BoolP("yes", "y", false, "Skip confirmation prompts.")
@@ -112,14 +121,14 @@ func newRoot(cfg *Config) *cobra.Command {
 	root.PersistentFlags().String("format", "auto", "Output formatting mode: raw|auto|always.")
 	root.PersistentFlags().String("view", "", "Select a named view from the active format (overrides selectors).")
 	root.PersistentFlags().String("as", "", "Force a <fields> representation: table|list|lines|raw|json|markdown|csv|timeline (default: auto).")
+	root.PersistentFlags().String("watch", "", "Re-run the command on an interval and repaint in place: a duration (2s) or seconds (2). Overrides the config's watch=; \"off\" runs once.")
 	root.PersistentFlags().Int("concurrency", defaultConcurrency, "Parallel downloads for <download> hand-offs.")
 	root.PersistentFlags().String("download-dir", ".", "Base directory for <download> destinations.")
-	root.PersistentFlags().Int("log-lines", 0, "Height of the download TUI's log region (default: min(15, half the terminal)).")
 	root.PersistentFlags().Bool("no-tui", false, "Disable the download TUI; report progress as plain lines.")
 
 	if cfg != nil {
 		for _, c := range cfg.Commands {
-			root.AddCommand(buildCommand(c, cfg.Vars, cfg.Command, cfg.Request, cfg.Cwd, cfg.Stdin, "", nil, cfg.Formats))
+			root.AddCommand(buildCommand(c, cfg.Vars, cfg.Preconditions, cfg.Command, cfg.Request, cfg.Cwd, cfg.Stdin, "", "", nil, cfg.Formats))
 		}
 	} else {
 		// Cobra's default help template only renders the flags/usage block
@@ -184,6 +193,13 @@ func isHelpInvocation(argv []string) bool {
 //
 // The defaults registered here mirror those on the real root in newRoot.
 func preparseGlobalFlags(argv []string) (configPath, mcpTransport, corsValue string, envVars []string) {
+	configPath, mcpTransport, corsValue, envVars, _ = preparseGlobals(argv)
+	return
+}
+
+// preparseGlobals is the whole pre-parse. preparseGlobalFlags is the narrower
+// view of it, for the callers that never install anything.
+func preparseGlobals(argv []string) (configPath, mcpTransport, corsValue string, envVars []string, installMocks string) {
 	pre := &cobra.Command{SilenceErrors: true, SilenceUsage: true}
 	pre.SetOut(io.Discard)
 	pre.SetErr(io.Discard)
@@ -193,12 +209,14 @@ func preparseGlobalFlags(argv []string) (configPath, mcpTransport, corsValue str
 	pre.Flags().String("mcp", "", "")
 	pre.Flags().String("cors", "strict", "")
 	pre.Flags().StringArray("var", nil, "")
+	pre.Flags().String("install-mocks", "", "")
 
 	_ = pre.ParseFlags(argv)
 	configPath, _ = pre.Flags().GetString("config")
 	mcpTransport, _ = pre.Flags().GetString("mcp")
 	corsValue, _ = pre.Flags().GetString("cors")
 	envVars, _ = pre.Flags().GetStringArray("var")
+	installMocks, _ = pre.Flags().GetString("install-mocks")
 	return
 }
 

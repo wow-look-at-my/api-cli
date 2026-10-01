@@ -46,7 +46,7 @@ func execCmdFull(t *testing.T, cfg *Config, argv ...string) (int, string, string
 	prevTransports, prevDefault := transports, defaultTransport
 	t.Cleanup(func() { transports, defaultTransport = prevTransports, prevDefault })
 	// Same for the <downloads> settings newRoot publishes, and for the shared
-	// queue: a queue built for one test's concurrency must not serve the next.
+	// queue: a queue built for a single test's concurrency must not serve the next.
 	prevDownloads := downloadDefaults
 	resetSharedQueue()
 	t.Cleanup(func() { downloadDefaults = prevDownloads; resetSharedQueue() })
@@ -199,7 +199,7 @@ func TestIntegration_ExampleConfigLoads(t *testing.T) {
 // --- Steps / result-reuse tests ---
 
 func TestIntegration_StepResultAvailableInFinalEntry(t *testing.T) {
-	// Step echoes JSON; the final command uses .result.first.value.
+	// Step echoes JSON; the final command uses .result.earliest.value.
 	cfg := &Config{
 		Name: "t",
 		Commands: []Command{{
@@ -217,7 +217,7 @@ func TestIntegration_StepResultAvailableInFinalEntry(t *testing.T) {
 }
 
 func TestIntegration_StepResultChained(t *testing.T) {
-	// Two steps: the second step uses the first's result in its entry, and the
+	// Steps: the next step uses the earliest's result in its entry, and the
 	// final command uses both.
 	cfg := &Config{
 		Name: "t",

@@ -198,10 +198,10 @@ func TestIntegration_AsTimeline(t *testing.T) {
 		Commands: []Command{{
 			Name:    "roadmap",
 			Command: &Cmd{Shell: true, Template: "printf '%s' '" + events + "'"},
-			Fields: &Fields{List: []Field{
+			Fields: fieldsBlocks(&Fields{List: []Field{
 				{Name: "label", Path: "name"},
 				{Name: "date", Path: "when"},
-			}},
+			}}),
 		}},
 	}
 	code, out := execCmd(t, cfg, "roadmap", "--as", "timeline")
