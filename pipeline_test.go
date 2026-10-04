@@ -54,8 +54,7 @@ func pipelineServer(t *testing.T, missing string) *httptest.Server {
 			writeJSON(w, map[string]any{"status": "done", "parts": parts})
 
 		case strings.HasPrefix(r.URL.Path, "/part/"):
-			// The body names its own part, so a wrong order is visible in the
-			// joined file rather than only in a byte count.
+			// The body names its own part, so a wrong order is visible in the joined file rather than only in a byte count.
 			fmt.Fprintf(w, "[%s]", strings.TrimPrefix(r.URL.Path, "/part/"))
 
 		default:

@@ -268,8 +268,7 @@ func TestIntegration_BackcompatNoFormatBlockBehavesAsBefore(t *testing.T) {
 
 func TestIntegration_OverflowSkipsFormatting(t *testing.T) {
 	t.Serial()
-	// Stress the cap by making it tiny and verifying that an overflow output
-	// streams unmodified instead of being formatted.
+	// Stress the cap by making it tiny and verifying that an overflow output streams unmodified instead.
 	prev := execStdout
 	t.Cleanup(func() { execStdout = prev })
 
@@ -279,8 +278,7 @@ func TestIntegration_OverflowSkipsFormatting(t *testing.T) {
 	t.Cleanup(func() { tmp.Close() })
 	execStdout = tmp
 
-	// Instead, use captureExecCapped directly to verify the overflow path
-	// here, since that's what runFormatted relies on.
+	// Instead, use captureExecCapped directly to verify the overflow path here, since that's what runFormatted relies on.
 	bigBody := strings.Repeat("X", 100)
 	out, overflowed, code := captureExecCapped(
 		&Cmd{Shell: true, Template: `printf '%s' '` + bigBody + `'`},

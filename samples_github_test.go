@@ -11,24 +11,11 @@ import (
 )
 
 // Regression coverage for the shipped GitHub sample (samples/github/github.xml).
-//
-// History: an earlier JSON version of this sample let `repo contents` inherit
-// the `repo` command's presentation spec, so a directory listing rendered as a
-// repo table (NAME STARS FORKS ...) with empty cells and a single file rendered
-// as a repo detail block — all missingkey sentinels, because contents records
-// ({name,path,sha,size,type}) carry none of the repo fields.
-//
-// The current XML model fixes this structurally: `<fields>` projections do NOT
-// inherit (only the legacy `<format>` does, and this sample defines none), and
-// `contents` declares no projection on purpose — so it renders its own response
-// (raw JSON over MCP; its own derived columns when a representation is forced).
-// These tests pin that behaviour against the real sample so a future edit that
-// slips a repo-shaped projection onto `contents` fails loudly.
 
 const githubSampleConfig = "samples/github/github.xml"
 
 // Canned GitHub "contents" API responses. Each carries a *url key so the test
-// also proves the request+jq noise filter actually ran (it must be stripped).
+// also proves the request+jq noise filter ran (it must be stripped).
 const (
 	ghDirListingJSON = `[
 		{"name":"README.md","path":"README.md","sha":"aaa111","size":4096,"type":"file","download_url":"https://example.invalid/README.md"},
@@ -52,8 +39,7 @@ func githubSampleWithServer(t *testing.T) *Config {
 	}))
 	t.Cleanup(srv.Close)
 
-	// Redirect the sample's base_url to the stub (its intended GHES override),
-	// force the real noise filter (not GITHUB_RAW=identity), and drop any token.
+	// Redirect the sample's base_url to the stub (its intended GHES override), force the real noise filter (not GITHUB_RAW=identity).
 	t.Setenv("GITHUB_API_URL", srv.URL)
 	t.Setenv("GITHUB_RAW", "")
 	t.Setenv("GITHUB_TOKEN", "")
@@ -86,9 +72,9 @@ func githubLeaf(t *testing.T, cfg *Config, name string) *mcpLeaf {
 	return nil
 }
 
-// assertNoRepoProjectionLeak fails if the output shows the old bug's symptoms:
-// missingkey sentinels, or the repo table's "stars"/"forks" columns appearing in
-// contents output.
+// assertNoRepoProjectionLeak fails if the output shows the bug's symptoms:
+// missingkey sentinels, or the repo table's "stars"/"forks" columns appearing
+// in contents output.
 func assertNoRepoProjectionLeak(t *testing.T, out string) {
 	t.Helper()
 	for _, bad := range []string{"<no value>", "<nil>", "stars", "forks"} {
@@ -110,7 +96,7 @@ func TestGithubSample_RepoContents_DirectoryListing_MCP(t *testing.T) {
 	assert.Contains(t, out, "llama")
 	assert.Contains(t, out, "file")
 	assert.Contains(t, out, "dir")
-	// The request + jq noise filter actually ran: *url keys are gone.
+	// The request + jq noise filter ran: *url keys are gone.
 	assert.NotContains(t, out, "download_url")
 	assert.NotContains(t, out, "example.invalid")
 	assertNoRepoProjectionLeak(t, out)

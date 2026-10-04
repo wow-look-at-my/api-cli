@@ -13,8 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Defaults for the shared queue. Concurrency is overridable in the config
-// (<downloads concurrency=>) and on the command line (--concurrency).
+// Defaults for the shared queue.
 const (
 	defaultConcurrency = 4
 	defaultRetries     = 3
@@ -26,15 +25,15 @@ type Downloads struct {
 	Concurrency int    `json:"concurrency,omitempty"`
 	Retries     int    `json:"retries,omitempty"`
 	Dir         string `json:"dir,omitempty"`
-	// RetriesSet distinguishes retries="0" -- a config that wants a failure
-	// reported immediately -- from an absent attribute, which takes the default.
+	// RetriesSet distinguishes retries="0" -- a config that wants a failure reported immediately -- from an absent attribute.
 	RetriesSet bool `json:"retriesSet,omitempty"`
 }
 
-// Download is a single hand-off on a leaf: the URL a step worked out, where to
-// put it, and the auth that reaches it. Every string is a template rendered
-// against the leaf's full data context (.arg, .flag, .env, .var, .entry,
-// .result), so a URL parsed out of an earlier step is just `.result.<step>.<path>`.
+// Download is a single hand-off on a leaf: the URL a step worked out, where
+// to put it, and the auth that reaches it. Every string is a template
+// rendered against the leaf's full data context (.arg, .flag, .env, .var,
+// .entry, .result), so a URL parsed out of an earlier step is
+// `.result.<step>.<path>`.
 //
 // With `over=`, the declaration repeats per record in that list: the record's
 // keys are promoted to the top level (like a <field expr=>) and the record
@@ -42,9 +41,7 @@ type Downloads struct {
 type Download struct {
 	Over string `json:"over,omitempty"`
 	When string `json:"when,omitempty"`
-	// Group and Order describe the bucket a <join> concatenates. Both are
-	// templates over the record, so a single declaration produces the
-	// parts of several outputs at the same time.
+	// Group and Order describe the bucket a <join> concatenates.
 	Group     string   `json:"group,omitempty"`
 	Order     string   `json:"order,omitempty"`
 	Join      *Join    `json:"join,omitempty"`
@@ -58,8 +55,6 @@ type Download struct {
 }
 
 // hashAlgos maps a <hash algo=> to the length of its digest in hex characters.
-// md5 and sha1 are here because real manifests still publish them, not because
-// they are a good choice for anything but catching a mangled transfer.
 var hashAlgos = map[string]int{
 	"md5":    32,
 	"sha1":   40,
@@ -78,14 +73,10 @@ type downloadSettings struct {
 	NoTUI       bool
 }
 
-// downloadDefaults holds the active config's <downloads> settings. Published by
-// installDownloads alongside the transport registry, for the same reason: it is
-// config data that every leaf may need and no call site would do anything with
-// but pass along.
+// downloadDefaults holds the active config's <downloads> settings.
 var downloadDefaults *Downloads
 
-// installDownloads publishes a config's <downloads> settings. Called by every
-// path that turns a config into runnable commands (newRoot, buildMCPServer).
+// installDownloads publishes a config's <downloads> settings.
 func installDownloads(cfg *Config) {
 	downloadDefaults = nil
 	if cfg != nil {
@@ -383,8 +374,7 @@ func downloadRecords(d *Download, data map[string]any, idx int) ([]map[string]an
 }
 
 // downloadCtx promotes a record's keys onto the data context and exposes the
-// record itself as .item, so a list of plain URL strings works as well as a
-// list of objects.
+// record itself as .item.
 func downloadCtx(data map[string]any, rec any) map[string]any {
 	return promoteCtx(data, rec, "item")
 }
@@ -446,8 +436,7 @@ func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSp
 		if join != nil && isDir {
 			return nil, fmt.Errorf("download[%d]: a joined part needs a <to> that names a file, and %q names a directory", idx, to)
 		}
-		// Resolved per URL: the program's argv sees .request.url, so each file
-		// gets its own rendered command.
+		// Resolved per URL: the program's argv sees .request.url, so each file gets its own rendered command.
 		transport, err := prepareDownloadTransport(d.Transport, u, headers, ctx)
 		if err != nil {
 			return nil, fmt.Errorf("download[%d]: %w", idx, err)
@@ -457,8 +446,7 @@ func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSp
 			Hash: digest, HashAlgo: d.HashAlgo, Transport: transport,
 		}
 		if join != nil {
-			// A single copy per file: a <url> that rendered several lines
-			// shares a single record, and the queue order then separates them.
+			// A single copy per file: a <url> that rendered several lines shares a single record.
 			part := *join
 			spec.Join = &part
 		}
@@ -482,8 +470,7 @@ func renderHash(d *Download, ctx map[string]any, idx int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("download[%d]: render hash: %w", idx, err)
 	}
-	// A digest often arrives as the earliest field of a `sha256sum`
-	// line ("<hex> <name>"), so read that field rather than the whole line.
+	// A digest often arrives as the earliest field of a `sha256sum` line ("<hex> <name>").
 	fields := strings.Fields(raw)
 	if len(fields) == 0 {
 		return "", nil

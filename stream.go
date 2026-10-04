@@ -11,30 +11,15 @@ import (
 	"github.com/wow-look-at-my/go-containers/set"
 )
 
-// Stream is a leaf's chunked-streaming action. The leaf's effective <run>
-// (shell, argv or request) supplies the bytes, this declaration cuts them into
-// chunks at a boundary, and each chunk goes to stdout as soon as it is whole.
-// Nothing upstream buffers the source, so the run works on a log, an audio
-// feed, or a video stream, and the bytes are treated as bytes rather than as
-// text.
-//
-// Boundaries are available. `mode="bytes"` (the default) emits chunks of
-// exactly `chunk=` bytes, with the last chunk the remainder. `mode="lines"`
-// emits a single chunk per newline-terminated line, of any length, and a final
-// line with no newline as a chunk of its own.
+// Stream is a leaf's chunked-streaming action.
 type Stream struct {
 	Mode  string `json:"mode,omitempty"`
 	Chunk string `json:"chunk,omitempty"`
-	// Step, when present, runs a single time per chunk: the chunk is its
-	// stdin and its stdout replaces the chunk. A chunk therefore reaches
-	// stdout transformed without the source ever being held in memory.
+	// Step, when present, runs a single time per chunk: the chunk is its stdin and its stdout replaces the chunk.
 	Step *StreamStep `json:"step,omitempty"`
 }
 
-// StreamStep is the optional per-chunk step. The chunk arrives on stdin unless
-// `stdin` renders something else, and the step sees where it sits in the run at
-// `.stream.index` (1-based), `.stream.offset` (bytes before this chunk) and
-// `.stream.size` (bytes in this chunk).
+// StreamStep is the optional per-chunk step.
 type StreamStep struct {
 	Command *Cmd   `json:"command,omitempty"`
 	Cwd     string `json:"cwd,omitempty"`
@@ -50,14 +35,10 @@ const (
 
 var streamModes = set.Of(streamModeBytes, streamModeLines)
 
-// streamReadBlock is how much a line-mode chunker reads per call. A line longer
-// than this still arrives whole: the chunker keeps reading until it reaches the
-// newline that ends the line.
+// streamReadBlock is how much a line-mode chunker reads per call.
 const streamReadBlock = 32 << 10
 
-// chunkSizeUnits maps a <stream chunk=> suffix to its multiplier. Both the
-// short and the long spelling are accepted, in any capitalization. An absent
-// suffix is a plain byte count.
+// chunkSizeUnits maps a <stream chunk=> suffix to its multiplier.
 var chunkSizeUnits = map[string]int{
 	"":   1,
 	"b":  1,
@@ -206,9 +187,7 @@ func streamTransportName(req *Request, transports map[string]*Transport) string 
 	return ""
 }
 
-// chunker yields a single chunk at a time from a source. It holds a single
-// chunk plus a single read block, so peak memory follows the chunk size rather
-// than the size of the source: a stream that never ends is fine.
+// chunker yields a single chunk at a time from a source.
 type chunker struct {
 	src  io.Reader
 	mode string
@@ -256,13 +235,9 @@ func (c *chunker) nextFixed() ([]byte, error) {
 	return chunk, nil
 }
 
-// nextLine returns a single newline-terminated line, newline included. A line
-// longer than the read block arrives whole, because the chunker keeps reading
-// until it reaches the newline. A final line with no newline is still a chunk.
+// nextLine returns a single newline-terminated line, newline included. A line longer than the read block arrives whole, because the chunker keeps reading until it reaches the newline. A final line with no newline is still a chunk.
 //
-// Each read is a single call rather than a fill of the buffer: a line source
-// that pauses mid-stream emits what it has, and a chunker that waited for a
-// full block would sit on it.
+// Each read is a single call rather than a fill of the buffer: a line source that pauses mid-stream emits what it has, and a chunker that waited for a full block would sit on it.
 func (c *chunker) nextLine() ([]byte, error) {
 	for {
 		if i := bytes.IndexByte(c.buf, '\n'); i >= 0 {

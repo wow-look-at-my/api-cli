@@ -8,12 +8,6 @@ import (
 )
 
 // parseConfigXML maps an XML config document to the Config model.
-//
-// api-dsl tokenizes the document into an order-preserving DOM (xnode), and this
-// file walks that DOM to build the structs. api-dsl also compiles the
-// placeholders (<value>/<if>/<for>) in element content to Go text/template
-// source, so the rest of the runtime renders them like any other template
-// string. Unknown elements and attributes are rejected to catch a typo early.
 func parseConfigXML(src []byte) (*Config, error) {
 	root, err := parseDOM(src)
 	if err != nil {

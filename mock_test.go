@@ -86,8 +86,7 @@ func TestMock_RecordIsACompileCommandsEntry(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(lines[0]), &entry))
 	assert.Equal(t, dir, entry.Directory)
-	// The whole command line, with the program at the front: a consumer replays
-	// these, and the leftovers alone are missing every flag the leaf declared.
+	// The whole command line, with the program at the front: a consumer replays these.
 	assert.Equal(t, []string{"cc", "-c", "src/foo.c"}, entry.Arguments)
 	assert.Equal(t, "src/foo.c", entry.File)
 	assert.Equal(t, "foo.o", entry.Output)

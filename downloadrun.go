@@ -12,12 +12,7 @@ import (
 	"golang.org/x/term"
 )
 
-// downloadSession is a single invocation's use of the shared downloader: the
-// batch it enqueues into, and the display it runs while that batch drains.
-//
-// The session opens before the leaf's steps run, not after, because the steps
-// are what work the URL out — their output belongs in the same log region as
-// the downloader's.
+// downloadSession is a single invocation's use of the shared downloader.
 type downloadSession struct {
 	settings downloadSettings
 	batch    *downloadBatch
@@ -209,10 +204,6 @@ func mcpRunDownloads(dls []Download, data map[string]any) (string, bool) {
 // openScratch gives the run a working directory of its own, published as
 // `.run.tmpdir`. Parts of a join live there until the join writes the output,
 // so nothing outside the config has to make a directory and pass it in.
-//
-// The returned function removes the directory. A run that keeps its parts (a
-// join without cleanup=, or no join at all) writes them under the download
-// directory instead, which this never touches.
 func openScratch(data map[string]any) (func(), error) {
 	dir, err := os.MkdirTemp("", "api-cli-")
 	if err != nil {

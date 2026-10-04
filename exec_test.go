@@ -71,8 +71,7 @@ func TestDoExec_RenderErrorReturns1(t *testing.T) {
 }
 
 func TestDoExec_ArgvShellNotInvoked(t *testing.T) {
-	// Argv form doesn't go through a shell, so shell metacharacters in
-	// rendered values stay literal — that's the safety guarantee.
+	// Argv form doesn't go through a shell.
 	out, _ := captureExecStreams(t)
 	c := &Cmd{Argv: []string{"echo", "{{.arg.x}}"}}
 	data := map[string]any{"arg": map[string]any{"x": "`touch /tmp/injected`"}}
@@ -82,8 +81,7 @@ func TestDoExec_ArgvShellNotInvoked(t *testing.T) {
 }
 
 func TestDoExec_ShellFormHonoursShellQuote(t *testing.T) {
-	// With shell form and shellquote, shell metacharacters in values are
-	// rendered as literal.
+	// With shell form and shellquote, shell metacharacters in values are rendered as literal.
 	out, _ := captureExecStreams(t)
 	c := &Cmd{Shell: true, Template: `echo {{shellquote .arg.x}}`}
 	data := map[string]any{"arg": map[string]any{"x": "`touch /tmp/injected`"}}
@@ -125,8 +123,7 @@ func TestDoExec_ArgvSpreadEmpty(t *testing.T) {
 }
 
 func TestDoExec_ArgvSpreadOnlyEmptyFails(t *testing.T) {
-	// If spread yields empty slots and there are no other elements, the
-	// argv is empty — a useful failure rather than running with no command.
+	// If spread yields empty slots and there are no other elements.
 	captureExecStreams(t)
 	c := &Cmd{Argv: []string{"{{spread .arg.files}}"}}
 	data := map[string]any{"arg": map[string]any{"files": []string{}}}

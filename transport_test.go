@@ -182,11 +182,7 @@ func TestTransport_RequestOptsOutToBuiltinClient(t *testing.T) {
 // Nothing can select a transport at runtime: how a request reaches its
 // endpoint is fixed by the config.
 func TestTransport_NoRuntimeOverrideFlag(t *testing.T) {
-	// newRoot PUBLISHES this config's registry process-wide, and this a single
-	// holds a default transport. Left installed, it takes over every request
-	// the rest of the suite makes, which lands as a body of "x" in a test that
-	// never asked for a transport at all. This test owns that registry state
-	// while it runs and puts it back after.
+	// newRoot PUBLISHES this config's registry process-wide, and this a single holds a default transport.
 	t.Serial()
 	prevTransports, prevDefault := transports, defaultTransport
 	t.Cleanup(func() { transports, defaultTransport = prevTransports, prevDefault })
@@ -318,9 +314,9 @@ func TestValidate_TransportErrors(t *testing.T) {
 }
 
 // The curl transport shipped in api.example.xml is documentation users will
-// copy, so pin the argv it actually builds — in particular that a body reaches
-// curl rather than being dropped, and that a GET grows no stray empty
-// arguments from the conditional spread.
+// copy, so pin the argv it builds — in particular that a body reaches curl
+// rather than being dropped, and that a GET grows no stray empty arguments
+// from the conditional spread.
 func TestExampleCurlTransportArgv(t *testing.T) {
 	cfg, err := Load("api.example.xml")
 	require.NoError(t, err)

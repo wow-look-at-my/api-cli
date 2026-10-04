@@ -8,19 +8,15 @@ import (
 	"strings"
 )
 
-// CorsLevel controls how the MCP HTTP/SSE server handles cross-origin
-// requests. Levels go from most-open (CorsDisabled) to most-locked
-// (CorsEnabled); the default is CorsStrict.
+// CorsLevel controls how the MCP HTTP/SSE server handles cross-origin requests.
 type CorsLevel int
 
 const (
-	// CorsDisabled is wide open: Access-Control-Allow-Origin: *, all
-	// methods, all headers, preflight always succeeds. No protection.
+	// CorsDisabled is wide open: Access-Control-Allow-Origin: *, all methods, all headers, preflight always succeeds.
 	CorsDisabled CorsLevel = iota
 	// Useful for browser dev tools.
 	CorsPermissive
-	// CorsStrict only allows requests whose Origin matches the server's
-	// bound host:port.
+	// CorsStrict only allows requests whose Origin matches the server's bound host:port.
 	CorsStrict
 	CorsEnabled
 )

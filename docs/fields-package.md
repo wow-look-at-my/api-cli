@@ -1,6 +1,6 @@
 # The `fields` package
 
-`github.com/wow-look-at-my/api-cli/fields` is the `<fields>` auto-formatter, importable without the CLI. A program gives it decoded JSON and a declaration. It gets back a table, a `Label: value` list, lines, raw text, JSON, Markdown, CSV, or a timeline. The package parses no XML, reads no flag, and touches no terminal, so a caller keeps its own configuration language.
+`github.com/wow-look-at-my/api-cli/fields` is the `<fields>` auto-formatter, importable without the CLI. A program gives it decoded JSON and a declaration. It gets back a table, a `Label: value` list, lines, raw text, JSON, Markdown, CSV, or a timeline. The package parses no XML, reads no flag, and touches no terminal. As a result, a caller keeps its own configuration language.
 
 ```go
 import "github.com/wow-look-at-my/api-cli/fields"
@@ -30,11 +30,11 @@ out, err := fields.Render(nil, f, body, map[string]any{"data": body}, "", 0)
 
 `table` and `markdown` fold every cell onto one line. A run of whitespace that holds a newline or a tab becomes one space. A value that holds neither is untouched, so ordinary spacing inside a cell survives.
 
-The reason is structural. A row is a line. A column is a position on that line. A cell that keeps its newlines puts every later column at the left margin, and a tab opens a column that the declaration never named. Both defeat a reader who scans down a column.
+The reason is structural. A row is a line. A column is a position on that line. A cell that keeps its newlines puts every later column at the left margin. A tab opens a column that the declaration never named. Both defeat a reader who scans down a column.
 
-A column carries two spaces of gutter, and a column wider than 50 columns carries three. `AlignColumns` applies that rule, so a caller that uses the aligner on its own gets it too. `tableWidth` reads the same rule, which keeps a wide column from pushing the table past the width the drop decision was given.
+A column carries spaces of gutter, and a column wider than 50 columns carries three. `AlignColumns` applies that rule, so a caller that uses the aligner on its own gets it too. `tableWidth` reads the same rule, which keeps a wide column from pushing the table past the width the drop decision was given.
 
-The `list` sink keeps the whole value instead, and indents the later lines under the first, so a paragraph reads as one value. `raw`, `json` and `csv` carry the value exactly, and `csv` quotes it per RFC 4180.
+The `list` sink keeps the whole value instead, and indents the later lines under the first. As a result, a paragraph reads as one value. `raw`, `json` and `csv` carry the value exactly, and `csv` quotes it per RFC 4180.
 
 To show less than the whole value, use `firstline="true"` for the first line, or `truncate="N"` for a prefix.
 

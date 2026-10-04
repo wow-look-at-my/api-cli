@@ -10,18 +10,13 @@ import (
 	"golang.org/x/term"
 )
 
-// defaultFormatCap is the byte threshold above which captureExecCapped flushes
-// to streaming and skips the format step.
+// defaultFormatCap is the byte threshold above which captureExecCapped flushes to streaming and skips the format step.
 const defaultFormatCap = 32 << 20
 
-// It is a page the terminal scrolls, not a screen, so it is tall enough that a
-// board of cards is never cut off. The blank rows under the content are
-// trimmed.
+// It is a page the terminal scrolls, not a screen, so it is tall enough that a board of cards is never cut off.
 const tmlPageHeight = 1000
 
-// userVerdict is the user-side decision about formatting. The author-side is
-// computed separately by rendering format.When; output is formatted iff both
-// sides agree.
+// userVerdict is the user-side decision about formatting.
 type userVerdict int
 
 const (
@@ -55,7 +50,6 @@ func userVerdictFromFlags(c *cobra.Command) userVerdict {
 	case "always":
 		return userAlways
 	case "auto", "":
-		// fall through to env
 	}
 	if v := os.Getenv("NO_FORMAT"); v != "" {
 		return userNo
@@ -72,8 +66,7 @@ func userVerdictFromFlags(c *cobra.Command) userVerdict {
 // termSize is a terminal's dimensions.
 type termSize struct{ width, height int }
 
-// ttyOverride answers the terminal probes while a display captures the output
-// on its way to the screen.
+// ttyOverride answers the terminal probes while a display captures the output on its way to the screen.
 var ttyOverride *termSize
 
 // stdoutTTY reports whether execStdout is a terminal. Non-*os.File writers
@@ -99,8 +92,7 @@ func stdoutTTY() (bool, int) {
 
 // formatContext builds the data passed to format predicates and view
 // templates. parsed is the decoded child stdout (nil before exec for
-// when-predicate evaluation). data is the leaf's full data context (.arg,
-// .flag, .env, .var, .entry, .result).
+// when-predicate evaluation).
 func formatContext(parsed any, data map[string]any, isTTY bool, width int) map[string]any {
 	ctx := map[string]any{
 		"data":  parsed,
@@ -229,16 +221,15 @@ func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin strin
 		return streamRaw(), nil
 	}
 
-	// --as forces a representation even when the leaf declared no <fields>:
-	// project nothing and let the data shape (or the chosen sink) decide.
+	// --as forces a representation even when the leaf declared no <fields>.
 	sink, _ := c.Root().PersistentFlags().GetString("as")
 	sink = strings.TrimSpace(sink)
 	if len(blocks) == 0 && sink != "" {
 		blocks = []FieldsBlock{{Fields: &Fields{}}}
 	}
 
-	// Piped, the leaf falls through to whatever else it declared, and --as
-	// names a representation the user wants instead of the screen.
+	// Piped, the leaf falls through to whatever else it declared, and --as names
+	// a representation.
 	if view.Defined() && sink == "" {
 		isTTY, width, height := stdoutSize()
 		if verdict == userAlways {
@@ -248,11 +239,7 @@ func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin strin
 			if width <= 0 || height <= 0 {
 				width, height = 80, 24
 			}
-			// A single frame prints into a scrolling terminal, so it is a
-			// page rather than a screen: laying it out at the terminal's
-			// height would cut the content off at the bottom row and say
-			// nothing about it. Under a watch (ttyOverride) the screen IS the
-			// height, and the program owns it.
+			// A single frame prints into a scrolling terminal.
 			if ttyOverride == nil {
 				height = tmlPageHeight
 			}
@@ -307,11 +294,6 @@ func captureRun(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[stri
 }
 
 // streamRequest performs a request and writes its output straight to stdout.
-//
-// The trailing newline is cosmetic — it keeps a response off the shell prompt —
-// so it goes only to a terminal. Redirected, the body is somebody's file, and a
-// byte they did not ask for is corruption: a single appended newline is the
-// difference between a working archive and a failing checksum.
 func streamRequest(request *Request, data map[string]any) int {
 	out, code := runRequest(request, data, execStderr)
 	if code != 0 {
@@ -393,9 +375,7 @@ func runTMLFormatted(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map
 		fmt.Fprintln(execStderr, "error:", err)
 		return 1
 	}
-	// A frame fills the viewport, and the blank rows under the content are the
-	// screen a program owns. Printed a single time into a scrolling terminal
-	// they are just a gap before the prompt, so this path stops at the last drawn row.
+	// A frame fills the viewport, and the blank rows under the content are the screen a program owns.
 	fmt.Fprintln(execStdout, strings.TrimRight(frame, " \n"))
 	return 0
 }
