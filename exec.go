@@ -11,7 +11,7 @@ import (
 )
 
 // execStdin / execStdout / execStderr are the I/O channels used when running
-// the rendered command. Package-level so tests can redirect them.
+// the rendered command.
 var (
 	execStdin  io.Reader = os.Stdin
 	execStdout io.Writer = os.Stdout
@@ -178,11 +178,8 @@ func captureExecCapped(c *Cmd, cwd, stdin string, data any, maxBytes int) (strin
 	return tee.buf.String(), false, 0
 }
 
-// cappedTee buffers writes up to max bytes. a single time the cap would be
-// exceeded by the next Write, it flushes the buffered prefix to out and
-// switches to passthrough mode, where every subsequent Write goes straight to
-// out. This gives the format path a "earliest 32MB or whatever fits" buffer
-// with a transparent fallback to streaming for larger outputs.
+// cappedTee buffers writes up to max bytes. a single time the cap will be
+// exceeded by the next Write.
 type cappedTee struct {
 	buf        *bytes.Buffer
 	out        io.Writer
@@ -207,11 +204,10 @@ func (c *cappedTee) Write(p []byte) (int, error) {
 	return c.buf.Write(p)
 }
 
-// parseResult tries to decode s as JSON. If s is valid JSON, the decoded value
-// is returned (arrays and objects remain structured so templates can index
-// into them). JSON numbers are normalized to int64 or float64 so that sprig
-// arithmetic helpers (mul, add, etc.) work without extra casting. If s is not
-// valid JSON, the trimmed raw string is returned.
+// parseResult tries to decode s as JSON. If s is valid JSON, the decoded
+// value is returned (arrays and objects remain structured so templates can
+// index into them). JSON numbers are normalized to int64 or float64 so that
+// sprig arithmetic helpers (mul, add, etc.) work without extra casting.
 func parseResult(s string) any {
 	s = strings.TrimSpace(s)
 	dec := json.NewDecoder(strings.NewReader(s))

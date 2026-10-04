@@ -13,23 +13,14 @@ import (
 	"github.com/wow-look-at-my/tml/sema"
 )
 
-// TML presents a leaf through a Terminal Markup Language component. The leaf
-// still runs its command or its request; this declares what the result looks
-// like on screen, in place of <fields>.
+// TML presents a leaf through a Terminal Markup Language component.
 type TML struct {
 	Src   string    `json:"src"`
 	Dark  bool      `json:"dark,omitempty"`
 	Props []TMLProp `json:"props,omitempty"`
 }
 
-// TMLProp is a single argument to the entry component. A component declares
-// its properties and rejects an argument it never declared, so the config
-// names every value it passes rather than offering the whole response and hoping.
-//
-// Text is a template. From reads a single value out of the response. Over
-// reads a list and Fields say which part of each element the item template
-// gets: an element carries exactly the fields named here, because a data
-// template rejects a field it did not declare.
+// TMLProp is a single argument to the entry component.
 type TMLProp struct {
 	Name   string     `json:"name"`
 	Text   string     `json:"text,omitempty"`
@@ -40,17 +31,6 @@ type TMLProp struct {
 
 // TMLField maps a single part of a list element to a single property
 // of the item template.
-//
-// Path reads a value out of the element. Expr computes a single instead,
-// against the element promoted to the top level and the whole context through
-// `$`, exactly as a <field expr=> does.
-//
-// Lines turns the value into a list of strings, which is the property type a data
-// template declares as string[] and walks with <For>. A log is the reason it
-// exists: the value is a single blob of output, and the card shows the tail of it.
-// Last keeps the final N entries, and Truncate clips each a single to a width the
-// card can hold, because TML does no wrapping of its own. Last and Truncate are
-// templates, so a flag sets them: `last="{{ .flag.lines }}"`.
 type TMLField struct {
 	Name     string `json:"name"`
 	Path     string `json:"path,omitempty"`
@@ -63,9 +43,7 @@ type TMLField struct {
 // Defined reports whether a leaf presents itself through TML.
 func (t *TML) Defined() bool { return t != nil && strings.TrimSpace(t.Src) != "" }
 
-// configDir is the directory the running config was read from. It is published
-// the way the transport registry is, by every path that turns a config into
-// runnable commands, because a leaf resolves its src against it.
+// configDir is the directory the running config was read from.
 var configDir string
 
 func installConfigDir(cfg *Config) {
@@ -186,8 +164,7 @@ func validateTML(t *TML, where string) error {
 	return nil
 }
 
-// tmlEntry resolves a src against the directory the config was loaded from, so
-// a relative path means what the author sees next to the config file.
+// tmlEntry resolves a src against the directory the config was loaded from.
 func tmlEntry(src, dir string) string {
 	if filepath.IsAbs(src) || dir == "" {
 		return src
@@ -195,11 +172,7 @@ func tmlEntry(src, dir string) string {
 	return filepath.Join(dir, src)
 }
 
-// loaded caches views by entry path, because a watch renders the same component
-// many times and every Load re-reads and re-checks the whole import graph. The
-// entry file's size and modification time key the cache, so editing the file
-// mid-watch reloads it. An imported file is NOT part of the key: change any of
-// those and restart.
+// loaded caches views by entry path, because a watch renders the same component many times and every Load re-reads.
 var loaded sync.Map
 
 type loadKey struct {
@@ -408,9 +381,7 @@ func truncateCells(s string, n int) string {
 	return string(out) + "…"
 }
 
-// tmlScalarValue renders a single decoded JSON value as the string a component
-// re-reads. A missing value is the empty string rather than an error, because a
-// row with a null column is data, not a broken config.
+// tmlScalarValue renders a single decoded JSON value as the string a component re-reads.
 func tmlScalarValue(v any) sema.Value { return sema.StringValue(tmlScalar(v)) }
 
 func tmlScalar(v any) string {

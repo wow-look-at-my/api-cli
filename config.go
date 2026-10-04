@@ -26,22 +26,19 @@ type Config struct {
 	Request     *Request       `json:"request,omitempty"`
 	Cwd         string         `json:"cwd,omitempty"`
 	Stdin       string         `json:"stdin,omitempty"`
-	// Preconditions gate every node under the config. A guard written here runs
-	// on each run in the tree, which is what keeps a single rule out of every leaf.
+	// Preconditions gate every node under the config.
 	Preconditions []string              `json:"preconditions,omitempty"`
 	Formats       map[string]*Format    `json:"formats,omitempty"`
 	Transports    map[string]*Transport `json:"transports,omitempty"`
 	Downloads     *Downloads            `json:"downloads,omitempty"`
 	Commands      []Command             `json:"commands,omitempty"`
-	// Dir is the directory the config was read from. A <tml src=> resolves
-	// against it, so a path in the config means what the author sees next to
-	// the file rather than wherever the shell happens to sit.
+	// Dir is the directory the config was read from.
 	Dir string `json:"-"`
 }
 
 // Command is a node in the CLI tree. A node is a leaf iff it has no
 // subcommands; leaves must have a command available (own or inherited). Group
-// nodes just print help.
+// nodes print help.
 //
 // `entry` is arbitrary user-defined JSON — its string leaves are
 // template-rendered against {arg, flag, env, var, result} and the result is
@@ -50,27 +47,6 @@ type Config struct {
 // `vars` merges into the ancestor chain, with the child winning on key
 // collision. `command`, if set, overrides the inherited command for this
 // subtree.
-//
-// `cwd`, if set, overrides the inherited working directory for this subtree.
-// Like `command`, it inherits along the tree (closest non-empty ancestor wins)
-// and is rendered as a Go template against the same data context as the
-// command it applies to.
-//
-// `stdin`, if set, overrides the inherited stdin template for this subtree.
-// The rendered string is fed to the child process's stdin. When empty/unset,
-// the child inherits the parent process's stdin.
-//
-// `runnable` makes a node with subcommands execute in its own right, which is
-// how a single name is both `tool [id]` and `tool sub`. Cobra reads the
-// earliest positional as a subcommand name, so every arg of a runnable node
-// needs a `pattern` that matches none of its subcommand names. `--` ends the
-// subcommand lookup, for a value that starts with a dash.
-//
-// `steps` run sequentially before the leaf's own run. A step runs a command or
-// a request — the same fork as `<run>` — and defaults to the leaf's effective
-// run when it declares neither. Each step's output is captured and parsed as
-// JSON (or kept as a raw string if not valid JSON), then stored in
-// `.result.<name>` for use by subsequent steps and the final run.
 type Command struct {
 	Name          string          `json:"name"`
 	Description   string          `json:"description,omitempty"`
@@ -98,18 +74,7 @@ type Command struct {
 }
 
 // Format is a presentation-layer renderer applied to a leaf command's stdout
-// before it reaches the user. Inspired by PowerShell's .format.ps1xml.
-//
-// `Input` selects how the captured stdout is parsed for the template:
-// "json" (default; uses parseResult), "lines" (split on \n), or "raw" (as-is).
-//
-// `When` is a Go-template predicate evaluated against the format context
-// (.tty, .width, .data, .arg, .flag, .env, .var, .entry, .result). Empty
-// defaults to "{{.tty}}" — format only on a TTY. Output is rendered iff the
-// predicate is truthy AND the user has not opted out (--no-format,
-// --format=raw, NO_FORMAT=1).
-//
-// `Views` are alternative renderings; selectView decides which a single applies.
+// before it reaches the user.
 type Format struct {
 	Input string `json:"input,omitempty"`
 	When  string `json:"when,omitempty"`
@@ -117,10 +82,6 @@ type Format struct {
 }
 
 // View is a single alternative rendering inside a Format.
-//
-//	--view=<name> from the user wins if set. Else earliest view whose
-//	`When` predicate renders truthy wins. Else earliest view with
-//	`Default: true`. Else earliest view in the slice.
 type View struct {
 	Name     string `json:"name"`
 	When     string `json:"when,omitempty"`
@@ -128,12 +89,7 @@ type View struct {
 	Template string `json:"template"`
 }
 
-// FormatRef is the type stored on Command.Format. JSON shape is either:
-//
-//   - A string: a name into Config.Formats (the named-reference form).
-//   - An object with `views`: an inline Format definition.
-//
-// Mirrors how *Cmd accepts string-or-array.
+// FormatRef is the type stored on Command.Format.
 type FormatRef struct {
 	Name   string  // set when JSON was a string
 	Inline *Format // set when JSON was an inline object
@@ -191,15 +147,9 @@ func (r *FormatRef) Defined() bool {
 type Step struct {
 	Name string `json:"name"`
 	When string `json:"when,omitempty"`
-	// Over repeats the step a single time per element of a list an earlier
-	// result holds. The step sees the element as `.item` and its position
-	// as `.index`, and the result is a list of {"item": element, "result":
-	// response} in the source order. So a single screen can show a row per
-	// build AND what another call says about each of them.
+	// Over repeats the step a single time per element of a list an earlier result holds.
 	Over string `json:"over,omitempty"`
-	// Until makes the step poll: it repeats its own run until this predicate
-	// renders truthy. The predicate sees the last body promoted to the top
-	// level, so an async job's `status` field is `.status`.
+	// Until makes the step poll: it repeats its own run until this predicate renders truthy.
 	Until    string `json:"until,omitempty"`
 	Interval string `json:"interval,omitempty"`
 	Attempts int    `json:"attempts,omitempty"`
@@ -215,15 +165,6 @@ type Step struct {
 }
 
 // Arg is a positional argument. Type is "string" or "int" (default string).
-//
-// If Variadic is true, the arg consumes all remaining positional values into a
-// []string (or []int) and must be the last entry in the args list. A required
-// variadic arg requires at least a single value; an optional variadic arg
-// accepts empty or more. Pattern is a regular expression every supplied value
-// must match. It is validation on a leaf, and it is what makes a runnable
-// parent unambiguous: the loader rejects a pattern that matches any of the
-// node's own subcommand names, so a value cobra reads as an argument can never
-// be a subcommand.
 type Arg struct {
 	Name        string `json:"name"`
 	Type        string `json:"type,omitempty"`
@@ -239,9 +180,6 @@ type Arg struct {
 // invocation time against {arg, flag, env, var}, so a flag default can be
 // derived from another arg or flag. Templated defaults only apply to the
 // "string" type.
-//
-// `Conflicts` lists sibling flag names that may not be set together; the CLI
-// rejects the invocation if more than a single is supplied.
 type Flag struct {
 	Name        string   `json:"name"`
 	Short       string   `json:"short,omitempty"`
@@ -252,16 +190,7 @@ type Flag struct {
 	Description string   `json:"description,omitempty"`
 }
 
-// Cmd is the executable form of a command. In JSON it may be either:
-//
-//   - A string: rendered as a template, then executed via "sh -c <rendered>".
-//     Best for pipelines and anything that benefits from shell features.
-//     The author is responsible for quoting interpolated values (use the
-//     `shellquote` helper).
-//
-//   - An array of strings: each element is rendered as a template, and the
-//     result is executed directly via exec (no shell). Safer — no quoting
-//     concerns — but no shell features.
+// Cmd is the executable form of a command.
 type Cmd struct {
 	Shell    bool     // true if the source was a scalar string
 	Template string   // source for the scalar (string) form
@@ -313,13 +242,9 @@ func (c *Cmd) Defined() bool {
 	return c.Shell || len(c.Argv) > 0
 }
 
-// Request is a earliest-class HTTP request, the alternative to a shell/argv Cmd
-// as a leaf's executable. It is built from a <run><request> element. Like Cmd
-// it inherits down the command tree: the closest ancestor that defines a <run>
-// (whether request or command) wins for a subtree.
+// Request is a earliest-class HTTP request, the alternative to a shell/argv Cmd as a leaf's executable. It is built from a <run><request> element. Like Cmd it inherits down the command tree: the closest ancestor that defines a <run> (whether request or command) wins for a subtree.
 //
-// Every string field is a Go template rendered against the leaf's data context
-// (.arg, .flag, .env, .var, .entry, .result) at invocation time.
+// Every string field is a Go template rendered against the leaf's data context (.arg, .flag, .env, .var, .entry, .result) at invocation time.
 type Request struct {
 	Method    string    `json:"method,omitempty"`    // template; defaults to GET
 	URL       string    `json:"url"`                 // template
@@ -330,20 +255,13 @@ type Request struct {
 	Response  *Response `json:"response,omitempty"`  // nil means stream the raw body
 	Transport string    `json:"transport,omitempty"` // registry name; empty means the config default
 
-	// AllowStatus lists the 4xx/5xx statuses that are an answer rather than a
-	// failure ("404" on a lookup that may miss).
+	// AllowStatus lists the 4xx/5xx statuses that are an answer rather than a failure ("404" on a lookup that may miss).
 	AllowStatus []int `json:"allowStatus,omitempty"`
 }
 
 // Transport is a user-supplied program that performs requests in place of the
 // built-in net/http client — for APIs whose authentication or wire format is
 // easier to delegate to an existing tool than to reproduce here.
-//
-// The program receives the fully-rendered request at `.request` (method, url,
-// body, headers, header_lines) on top of the leaf's own data context, so its
-// argv is written with the same placeholders as any other command.
-//
-// Stdin is the request body unless the transport declares its own `<stdin>`.
 type Transport struct {
 	Name     string `json:"name"`
 	Command  *Cmd   `json:"command,omitempty"`
@@ -358,9 +276,7 @@ func (r *Request) Defined() bool {
 	return r != nil && strings.TrimSpace(r.URL) != ""
 }
 
-// Param is a single query parameter. Name and Value are templates. When, if
-// non-empty, is a context path: the param is included only when it is truthy
-// (set by an enclosing <if test=>).
+// Param is a single query parameter. Name and Value are templates.
 type Param struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
@@ -376,24 +292,19 @@ type Header struct {
 }
 
 // Response shapes a JSON response body before output. "var.filter") — see
-// jqProgram. The program runs over the decoded body and the result(s) are
-// emitted as JSON.
+// jqProgram.
 type Response struct {
 	JQ string `json:"jq,omitempty"`
 }
 
-// Fields and Field are the fields package's own declarations. They are aliased
-// rather than redeclared so a <fields> element parses straight into the types
-// the renderer takes, and an importing program shares them.
+// Fields and Field are the fields package's own declarations.
 type (
 	Fields = fields.Fields
 	Field  = fields.Field
 )
 
 // When is a template predicate over the format context (.data, .tty, .width,
-// .arg, .flag, .result, ...); an empty When always renders. A leaf may declare
-// several blocks, and every block whose predicate holds renders, in document
-// order.
+// .arg, .flag, .result, ...); an empty When always renders.
 type FieldsBlock struct {
 	When   string  `json:"when,omitempty"`
 	Fields *Fields `json:"fields"`
@@ -402,16 +313,13 @@ type FieldsBlock struct {
 // reservedCommandNames are the names cobra owns.
 var reservedCommandNames = set.Of("help", "completion", "__complete", "docs")
 
-// validFlagTypes are the accepted <flag type=> values. The empty string
-// defaults to "string".
+// validFlagTypes are the accepted <flag type=> values. The empty string defaults to "string".
 var validFlagTypes = set.Of("", "string", "bool", "int", "string-slice")
 
-// validArgTypes are the accepted <arg type=> values. The empty string defaults
-// to "string".
+// validArgTypes are the accepted <arg type=> values. The empty string defaults to "string".
 var validArgTypes = set.Of("", "string", "int")
 
-// validFormatInputs are the accepted <format input=> values. The empty string
-// defaults to "json".
+// validFormatInputs are the accepted <format input=> values. The empty string defaults to "json".
 var validFormatInputs = set.Of("", "json", "lines", "raw")
 
 // Load reads and parses an XML config file. The XML element tree is mapped to
@@ -650,9 +558,8 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		}
 	}
 
-	// A node that runs must have something to do. A <download> is that something —
-	// the hand-off is the action, so it needs no run of its own. A <mock> is the
-	// same: standing in for a program is the action.
+	// A node that runs must have something to do. A <download> is that something
+	// — the hand-off is the action, so it needs no run of its own.
 	if c.executes() && !haveRun && len(c.Downloads) == 0 && c.Mock == nil {
 		return fmt.Errorf("%s: %s has no command/request/download/mock and no ancestor defines one", where, nodeKind(c))
 	}

@@ -135,8 +135,7 @@ func TestBuildBoard_OneCardPerBuildWithItsOwnLog(t *testing.T) {
 	code, out, errOut := execCmdFull(t, cfg, "builds", "--format=always")
 	require.Equal(t, 0, code, errOut)
 
-	// The list a single time, then a single detail call per element in the
-	// source order, then the leaf's own call.
+	// The list a single time, then a single detail call per element in the source order, then the leaf's own call.
 	require.Len(t, calls, 4)
 	assert.Contains(t, calls[0], "/list")
 	assert.Contains(t, calls[1], `{"id":"api"}`)

@@ -33,9 +33,7 @@ func TestRun_MissingConfigWithSubcommandReturns2(t *testing.T) {
 
 func TestRun_MissingConfigBareShowsHelp(t *testing.T) {
 	chdir(t, t.TempDir())
-	// Replay stdout so cobra's help goes somewhere we can inspect. cobra
-	// writes help to the command's OutOrStderr; without a config we get the
-	// default writer which is os.Stdout, so capture that.
+	// Replay stdout so cobra's help goes somewhere we can inspect. cobra writes help to the command's OutOrStderr.
 	prevStdout := os.Stdout
 	r, w, err := os.Pipe()
 	require.NoError(t, err)

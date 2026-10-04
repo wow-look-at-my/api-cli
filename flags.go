@@ -1,8 +1,7 @@
 package main
 
-// Declared <arg> and <flag> elements, on both sides of a run: registering them
-// on the cobra command, and collecting the invocation's values back out into
-// the .arg / .flag halves of the template context.
+// Declared <arg> and <flag> elements, on both sides of a run: registering
+// them on the cobra command.
 
 import (
 	"fmt"
@@ -93,9 +92,8 @@ func registerFlag(cmd *cobra.Command, f Flag) {
 	case "bool":
 		def, _ := f.Default.(bool)
 		cmd.Flags().BoolP(f.Name, f.Short, def, f.Description)
-		// Default-true bool: register a hidden --no-NAME companion that flips
-		// the flag back to false. Lets users say `--no-verbose` instead of the
-		// awkward `--verbose=false`.
+		// Default-true bool: register a hidden --no-NAME companion that flips the
+		// flag back to false.
 		if def {
 			neg := "no-" + f.Name
 			cmd.Flags().Bool(neg, false, "Disable --"+f.Name+".")

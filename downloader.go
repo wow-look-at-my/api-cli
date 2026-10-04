@@ -23,14 +23,12 @@ import (
 	"time"
 )
 
-// retryDelay separates attempts at a fixed cadence: a slow origin is not a
-// reason to wait exponentially longer for it. A var so tests need not sleep.
+// retryDelay separates attempts at a fixed cadence: a slow origin is not a reason to wait exponentially longer for it.
 var retryDelay = time.Second
 
 // downloadClient performs the transfers. Deliberately not httpClient: that a
 // single caps a whole request at 60s, which is a sane API deadline and a hard
-// ceiling on file size for a downloader. Here the deadlines cover connecting
-// and the wait for headers, and the body then takes as long as it takes.
+// ceiling on file size for a downloader.
 var downloadClient = &http.Client{
 	Transport: &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
@@ -39,8 +37,7 @@ var downloadClient = &http.Client{
 	},
 }
 
-// jobBuffer is the enqueue channel's depth. Past it, adding blocks until a
-// worker picks something up — backpressure, never a dropped file.
+// jobBuffer is the enqueue channel's depth.
 const jobBuffer = 1024
 
 // download states, stored as an int32 so the renderer can read them without
@@ -58,18 +55,14 @@ type downloadSpec struct {
 	URL     string
 	Dest    string
 	Headers []renderedHeader
-	// DestIsDir means Dest names a directory and the file name still has to
-	// come from the URL or the response's Content-Disposition.
+	// DestIsDir means Dest names a directory and the file name still has to come from the URL.
 	DestIsDir bool
-	// Hash is the expected digest as lowercase hex, empty when the declaration
-	// supplied none. HashAlgo names the algorithm that produced it.
+	// Hash is the expected digest as lowercase hex, empty when the declaration supplied none.
 	Hash     string
 	HashAlgo string
-	// Transport is the resolved program that fetches this file in place of the
-	// built-in client, or nil for the built-in client.
+	// Transport is the resolved program that fetches this file in place of the built-in client.
 	Transport *downloadTransport
-	// Join, when set, makes this file a single member of a group that
-	// becomes a single output a single time every member has landed.
+	// Join, when set, makes this file a single member of a group.
 	Join *joinPart
 }
 
@@ -95,8 +88,7 @@ type downloadItem struct {
 	err error
 }
 
-// label is the short name the display and the log use: the destination's file
-// name a single time the transfer has resolved it, and the URL's until then.
+// label is the short name the display and the log use.
 func (d *downloadItem) label() string {
 	if s := d.dest(); s != "" {
 		return filepath.Base(s)
@@ -123,8 +115,7 @@ func (d *downloadItem) Write(p []byte) (int, error) {
 }
 
 // downloadQueue is the shared downloader: a single worker pool for the
-// process, however many hand-offs feed it. Workers live for the process
-// lifetime, so an MCP server that serves many tool calls reuses the same pool.
+// process, however many hand-offs feed it.
 type downloadQueue struct {
 	concurrency int
 	retries     int
@@ -132,20 +123,14 @@ type downloadQueue struct {
 	jobs        chan *downloadItem
 }
 
-// downloadBatch is a single run's worth of work on the shared queue: the items
-// an invocation enqueued, and where that invocation's log lines go. Batches
-// share the pool, so concurrency is a property of the queue, not of a batch.
+// downloadBatch is a single run's worth of work on the shared queue: the
+// items an invocation enqueued, and where that invocation's log lines go.
 type downloadBatch struct {
 	q   *downloadQueue
 	log func(format string, args ...any)
-	// errOut receives a <transport> program's stderr. Held per batch rather
-	// than read from execStderr on a worker, so the display can swap the
-	// process's channels without a worker reading them mid-swap.
+	// errOut receives a <transport> program's stderr.
 	errOut io.Writer
-	// onDone is called with each finished item, whatever its outcome. The
-	// joiner watches it so a group concatenates the moment its own last part
-	// lands, rather than after the whole queue drains. Set before the
-	// earliest add: a worker can finish an item while the caller is still enqueuing.
+	// onDone is called with each finished item, whatever its outcome.
 	onDone func(*downloadItem)
 
 	wg    sync.WaitGroup
@@ -153,14 +138,11 @@ type downloadBatch struct {
 	items []*downloadItem
 }
 
-// theQueue is the process-wide queue. A hand-off is meant to reach a single
-// central downloader, so every enqueue in a process lands in the same pool
-// rather than in a pool per declaration.
+// theQueue is the process-wide queue.
 var theQueue *downloadQueue
 
-// sharedQueue returns the process-wide queue, creating it on earliest use with
-// the given settings. Later calls reuse the running pool: a single process
-// loads a single config, so concurrency is decided a single time.
+// sharedQueue returns the process-wide queue, creating it on earliest use
+// with the given settings.
 func sharedQueue(concurrency, retries int) *downloadQueue {
 	if theQueue == nil {
 		theQueue = newDownloadQueue(concurrency, retries)
@@ -168,8 +150,7 @@ func sharedQueue(concurrency, retries int) *downloadQueue {
 	return theQueue
 }
 
-// resetSharedQueue drops the process-wide queue so the next caller builds a
-// fresh pool. Tests use it between runs; production never does.
+// resetSharedQueue drops the process-wide queue so the next caller builds a fresh pool.
 func resetSharedQueue() { theQueue = nil }
 
 func newDownloadQueue(concurrency, retries int) *downloadQueue {
@@ -269,8 +250,7 @@ func (q *downloadQueue) run(item *downloadItem) {
 		if err == nil {
 			item.end.Store(time.Now().UnixNano())
 			item.state.Store(dlDone)
-			// Name the algorithm on success: a verification you cannot see
-			// happen is indistinguishable from a single that never ran.
+			// Name the algorithm on success: a verification you cannot see happen is indistinguishable from a single.
 			verified := ""
 			if item.spec.Hash != "" {
 				verified = ", " + item.spec.HashAlgo + " ok"
@@ -386,8 +366,7 @@ func openPart(item *downloadItem, name string) (*partFile, error) {
 			return nil, err
 		}
 	}
-	// Write through a .part sibling so an interrupted transfer never leaves a
-	// truncated file wearing the real name.
+	// Write through a .part sibling so an interrupted transfer never leaves a truncated file wearing the real name.
 	part := dest + ".part"
 	f, err := os.Create(part)
 	if err != nil {
@@ -498,8 +477,7 @@ func sanitizeFilename(name string) string {
 type downloadTotals struct {
 	Active, Queued, Done, Failed int
 	Bytes, Total                 int64
-	// TotalKnown is false when any download has not reported a length, which
-	// makes the aggregate total a floor rather than a target.
+	// TotalKnown is false when any download has not reported a length.
 	TotalKnown bool
 	Elapsed    time.Duration
 }
@@ -524,9 +502,7 @@ func tallyDownloads(items []*downloadItem, now time.Time) downloadTotals {
 			t.Queued++
 		}
 		if total < 0 {
-			// Only unfinished work leaves the aggregate open-ended. A finished
-			// download's bytes are its final contribution either way, so a run
-			// that ended with a failure still reports a settled total.
+			// Only unfinished work leaves the aggregate open-ended.
 			if state == dlActive || state == dlQueued {
 				t.TotalKnown = false
 			}
@@ -552,8 +528,7 @@ type itemProgress struct {
 	Speed       float64
 	ETA         time.Duration
 	HasETA      bool
-	// TotalIsFloor marks an aggregate whose denominator is incomplete because
-	// some download in it has not reported a length.
+	// TotalIsFloor marks an aggregate whose denominator is incomplete because some download.
 	TotalIsFloor bool
 	// Waiting is how long an in-flight item has gone without its first byte.
 	Waiting time.Duration

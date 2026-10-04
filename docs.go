@@ -11,8 +11,7 @@ import (
 //go:embed README.md
 var readmeDoc string
 
-// The grammar comes from the specification module, so this binary prints the
-// specification's own text rather than a copy of it.
+// The grammar comes from the specification module.
 var schemaDoc = spec.Schema
 
 //go:embed api.example.xml

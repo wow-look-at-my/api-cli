@@ -16,13 +16,11 @@ const (
 // pollSleep waits between attempts of a polling step and between retries.
 var pollSleep = time.Sleep
 
-// stepCapture runs a single step's command and returns its stdout and exit
-// code. The CLI and MCP paths differ in where stderr goes and whether the
-// child may inherit the process's stdin, so each supplies its own.
+// stepCapture runs a single step's command and returns its stdout and exit code.
 type stepCapture func(c *Cmd, cwd, stdin string, data any) (string, int)
 
 // stepOutcome reports how a run of steps ended. output carries the failing
-// step's stdout (empty on success) for callers that report it to the user.
+// step's stdout (empty on success) for callers that report it.
 type stepOutcome struct {
 	executions int
 	output     string
@@ -110,9 +108,8 @@ func runSteps(steps []Step, data map[string]any, results map[string]any, cmdTmpl
 	return oc, nil
 }
 
-// pollContext is what `until=` is evaluated against: the run's own context with
-// the last response promoted onto it, so an async job's status field reads as
-// `.status`. The whole body stays reachable as `.body`.
+// pollContext is what `until=` is evaluated against: the run's own context
+// with the last response promoted onto it.
 func pollContext(data map[string]any, body any) map[string]any {
 	return promoteCtx(data, body, "body")
 }

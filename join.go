@@ -18,15 +18,12 @@ const (
 	joinGapError = "error"
 )
 
-// Join is the <join> child of a <download>: the a single file every member
-// of a group becomes. The parts are the transfer's unit and the join is the
-// caller's, so the config names both and nothing outside it has to know the
-// layout the parts landed in.
+// Join is the <join> child of a <download>: the a single file every member of
+// a group becomes.
 type Join struct {
 	To      string `json:"to"`
 	Cleanup bool   `json:"cleanup,omitempty"`
-	// Contiguous reports a gap in the group's numeric order: "warn" logs it,
-	// "error" fails the run and writes nothing.
+	// Contiguous reports a gap in the group's numeric order: "warn" logs it, "error" fails the run and writes nothing.
 	Contiguous string `json:"contiguous,omitempty"`
 }
 
@@ -134,13 +131,7 @@ type joinPart struct {
 	Contiguous string
 }
 
-// joiner concatenates each group of parts into its output. A group joins as
-// soon as its own last member lands, so a run of many items writes its
-// earliest output while the rest are still transferring.
-//
-// Membership is decided at plan time, so the joiner knows every group's size
-// before the earliest transfer starts. It therefore needs no registration
-// step racing against a download that finishes earliest.
+// joiner concatenates each group of parts into its output.
 type joiner struct {
 	log func(string, ...any)
 

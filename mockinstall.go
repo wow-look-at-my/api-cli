@@ -45,9 +45,7 @@ func installMockWrappers(cfg *Config, configPath, dir string, out io.Writer) err
 		return fmt.Errorf("%s declares no <mock> leaf, so there is nothing to install", configPath)
 	}
 
-	// Leaves that share a name install a single script, and the later leaf
-	// silently wins. A build that then calls the wrong stand-in is very hard to
-	// read back.
+	// Leaves that share a name install a single script, and the later leaf silently wins.
 	seen := map[string][]string{}
 	for _, w := range wrappers {
 		if prev, dup := seen[w.name]; dup {
@@ -61,8 +59,7 @@ func installMockWrappers(cfg *Config, configPath, dir string, out io.Writer) err
 	if err != nil {
 		return fmt.Errorf("--install-mocks: locate this binary: %w", err)
 	}
-	// A wrapper outlives the shell that wrote it, and a build tool runs it from
-	// whatever directory it likes. Both paths are therefore absolute.
+	// A wrapper outlives the shell that wrote it, and a build tool runs it from whatever directory it likes.
 	absConfig, err := filepath.Abs(configPath)
 	if err != nil {
 		return fmt.Errorf("--install-mocks: %s: %w", configPath, err)

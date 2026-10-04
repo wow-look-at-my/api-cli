@@ -15,8 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// writeJSON encodes v as the response body. A manifest carries server URLs and
-// digests, so it is marshaled rather than formatted into a string.
+// writeJSON encodes v as the response body.
 func writeJSON(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
@@ -93,7 +92,6 @@ func TestIntegration_DownloadUnderAnInheritedWatchRunsOnce(t *testing.T) {
 	assert.Equal(t, "first", string(one))
 
 	// The flag asks for the same thing on purpose, and that stays an error.
-	// Cobra reports the error itself, so only the exit code is visible here.
 	require.NoError(t, os.Remove(filepath.Join(dir, "one.txt")))
 	code, _, _ = execCmdFull(t, cfg, "assets", "grab", "--download-dir", dir, "--watch", "2s")
 	assert.Equal(t, 1, code)
@@ -141,8 +139,7 @@ func TestIntegration_DownloadHandsStepURLsToTheQueue(t *testing.T) {
 		[]string{filepath.Join(dir, "one.txt"), filepath.Join(dir, "two.txt")},
 		strings.Fields(strings.TrimSpace(out)))
 	assert.Contains(t, errOut, "downloaded 2/2 files")
-	// A single line per file that landed, named by the file rather than by its
-	// full destination path, and no line at all for a start.
+	// A single line per file that landed, named by the file rather than by its full destination path.
 	assert.Contains(t, errOut, "downloaded one.txt (5 B)")
 	assert.Contains(t, errOut, "downloaded two.txt (11 B)")
 	assert.NotContains(t, errOut, "downloading ")
@@ -173,8 +170,7 @@ func TestIntegration_DownloadFailureIsLoudAndNonZero(t *testing.T) {
 }
 
 func TestIntegration_DownloadVerifiesDigestsFromTheStep(t *testing.T) {
-	// The manifest carries a digest per asset; any of them is wrong, which is
-	// the case the feature exists for.
+	// The manifest carries a digest per asset; any of them is wrong, which is the case the feature exists for.
 	good := sha256.Sum256([]byte("first"))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -293,8 +289,7 @@ func TestIntegration_DownloadLeafIgnoresAnInheritedRun(t *testing.T) {
 	swapDownloadClient(t, srv)
 	dir := t.TempDir()
 
-	// The ancestor's <run> would write a marker file if a <download> leaf ran
-	// it on the way to the queue.
+	// The ancestor's <run> would write a marker file if a <download> leaf ran it on the way to the queue.
 	marker := filepath.Join(dir, "ran-the-command")
 	cfg, err := loadStr(t, `<config name="dl">
 		<run>touch `+marker+`</run>

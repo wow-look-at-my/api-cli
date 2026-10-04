@@ -10,8 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// version is stamped at build time with -ldflags "-X main.version=...". An
-// unstamped build falls back to the module version; see buildVersion.
+// version is stamped at build time with -ldflags "-X main.version=...".
 var version string
 
 func main() {
@@ -42,12 +41,9 @@ func run(argv []string, errOut io.Writer) int {
 		cfg = loaded
 	}
 
-	// No config and user invoked a real subcommand — they need a config.
-	// A version request is answered by the binary itself, so it joins the
-	// help invocations that a missing config must not turn away.
-	// Bare invocation (no args) and help flags fall through to cobra so the
-	// user sees --help output. --mcp mode always requires a config, so don't
-	// exempt help invocations when --mcp is present (that would panic).
+	// No config and user invoked a real subcommand — they need a config. A
+	// version request is answered by the binary itself, so it joins the help
+	// invocations that a missing config must not turn away.
 	if cfg == nil && ((!isHelpInvocation(argv) && !isDocsInvocation(argv) && !isVersionInvocation(argv)) || mcpTransport != "" || installMocks != "") {
 		fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.xml in the current directory")
 		return 2
@@ -91,10 +87,7 @@ func newRoot(cfg *Config) *cobra.Command {
 		}
 	}
 
-	// Installed here rather than at load time so every path that turns a
-	// config into runnable commands publishes the registry — a request whose
-	// transport went missing would otherwise fall back to the built-in client
-	// without saying so.
+	// Installed here rather than at load time so every path that turns a config into runnable commands publishes the registry.
 	installTransports(cfg)
 	installConfigDir(cfg)
 	installDownloads(cfg)
@@ -105,9 +98,7 @@ func newRoot(cfg *Config) *cobra.Command {
 		Version:      buildVersion(),
 		SilenceUsage: true,
 	}
-	// Declared so --help lists them. In MCP mode we extract --config /
-	// --mcp / --cors from argv before the cobra tree exists; see
-	// preparseGlobalFlags.
+	// Declared so --help lists them.
 	root.PersistentFlags().String("config", "", "Path to config file: XML (default: ./api.xml).")
 	root.PersistentFlags().String("mcp", "", `Run as MCP server. Value: "stdio", "http://<addr>", or "sse://<addr>".`)
 	root.PersistentFlags().String("cors", "strict", "CORS policy for MCP HTTP/SSE: disabled|permissive|strict|enabled.")
@@ -131,10 +122,8 @@ func newRoot(cfg *Config) *cobra.Command {
 			root.AddCommand(buildCommand(c, cfg.Vars, cfg.Preconditions, cfg.Command, cfg.Request, cfg.Cwd, cfg.Stdin, "", "", nil, cfg.Formats))
 		}
 	} else {
-		// Cobra's default help template only renders the flags/usage block
-		// for Runnable commands (or commands with subcommands). Without a
-		// config we have neither, so give the root a RunE that prints help —
-		// otherwise bare invocation and `--help` would emit just the Short.
+		// Cobra's default help template only renders the flags/usage block for
+		// Runnable commands (or commands with subcommands).
 		root.RunE = func(c *cobra.Command, args []string) error {
 			return c.Help()
 		}
@@ -143,8 +132,7 @@ func newRoot(cfg *Config) *cobra.Command {
 	return root
 }
 
-// isVersionInvocation reports whether argv asks for the version. The answer
-// comes from the binary, so it must not depend on finding a config.
+// isVersionInvocation reports whether argv asks for the version.
 func isVersionInvocation(argv []string) bool {
 	for _, a := range argv {
 		if a == "--version" {
@@ -169,8 +157,7 @@ func buildVersion() string {
 }
 
 // isHelpInvocation reports whether argv is a plain help request: no args at
-// all, or any form of the help flag/subcommand. Used to decide whether a
-// missing config is fatal or should fall through to cobra's usage screen.
+// all, or any form of the help flag/subcommand.
 func isHelpInvocation(argv []string) bool {
 	if len(argv) == 0 {
 		return true
@@ -183,14 +170,8 @@ func isHelpInvocation(argv []string) bool {
 	return false
 }
 
-// preparseGlobalFlags pulls --config, --mcp, and --cors out of argv with
-// a throwaway cobra.Command. We need these values before the real root
-// tree exists, because --mcp decides whether we even build that tree.
-// FParseErrWhitelist.UnknownFlags lets the parse skip over subcommand
-// flags it doesn't know about; positional args (subcommand names) fall
-// through harmlessly.
-//
-// The defaults registered here mirror those on the real root in newRoot.
+// preparseGlobalFlags pulls --config, --mcp, and --cors out of argv with a
+// throwaway cobra.Command.
 func preparseGlobalFlags(argv []string) (configPath, mcpTransport, corsValue string, envVars []string) {
 	configPath, mcpTransport, corsValue, envVars, _ = preparseGlobals(argv)
 	return

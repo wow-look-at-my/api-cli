@@ -17,9 +17,7 @@ import (
 	apidsl "github.com/wow-look-at-my/api-dsl"
 )
 
-// spreadSentinel (NUL) delimits elements in spread output; spreadEndSentinel
-// (SOH) terminates a spread region. These are reserved internal markers —
-// spread() rejects elements containing either byte.
+// spreadSentinel (NUL) delimits elements in spread output; spreadEndSentinel (SOH) terminates a spread region.
 const spreadSentinel = "\x00"
 const spreadEndSentinel = "\x01"
 
@@ -41,29 +39,24 @@ func cliFuncs() template.FuncMap {
 		"filterPrefix": filterPrefix,
 		"collect":      collectPath,
 		"stem":         stem,
-		// The path-segment rule, as a pattern= a config names and as a predicate
-		// a <precondition> reads. See guards.go.
+		// The path-segment rule, as a pattern= a config names and as a predicate a <precondition> reads. See guards.go.
 		"segmentPattern": segmentPattern,
 		"safeSegments":   safeSegments,
 	}
 }
 
 // stem is a path without its directory and without its extension: the piece a
-// build tool names an artifact after. "src/foo/bar.cpp" becomes "bar", so an
-// output path reads {{ stem .mock.file }}.o.
+// build tool names an artifact after.
 func stem(p string) string {
 	base := filepath.Base(p)
 	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
-// renderer executes every template this tool renders. It is read-only after
-// construction, and safe for concurrent use.
+// renderer executes every template this tool renders. It is read-only after construction, and safe for concurrent use.
 var renderer = apidsl.NewRenderer(cliFuncs())
 
-// The width-aware aligner and the <fields> renderer live in the fields package,
-// which is importable on its own. These aliases keep this CLI's call sites
-// reading as they did, and cliRenderer is what a field's expr and a footer
-// evaluate with: the shared renderer plus the helpers above.
+// The width-aware aligner and the <fields> renderer live in the fields
+// package, which is importable on its own.
 var (
 	padRight     = fields.PadRight
 	padLeft      = fields.PadLeft
@@ -85,9 +78,6 @@ func renderFields(f *Fields, parsed any, ctx map[string]any, sink string, width 
 // asList normalizes a context value to the elements a repetition walks. A step
 // result is a []any and a variadic arg is a []string, so both `over=` sites
 // accept either rather than only the JSON shape.
-//
-// A string is not a list. Iterating a single gives a record per byte, which is
-// never what a config meant by over=.
 func asList(v any) ([]any, bool) {
 	switch t := v.(type) {
 	case nil:
@@ -145,10 +135,6 @@ func collectPath(path string, v any) ([]any, error) {
 // name is a context path. A template is rendered and its output read as JSON,
 // which is how a config reshapes a fan-out result without leaving the config:
 // `over="{{ toJson (collect "result.parts" .result.listing) }}"`.
-//
-// The next return is false when the path is not there at all. The caller
-// decides what that means, because a missing path and an empty list are
-// different mistakes.
 func overSource(data map[string]any, expr string) (any, bool, error) {
 	if !strings.Contains(expr, "{{") {
 		v, ok := fields.Lookup(data, expr)
@@ -185,12 +171,7 @@ func renderString(tmpl string, data any) (string, error) {
 	return renderer.Render(tmpl, data)
 }
 
-// tabwriter formats rows with columns aligned by displayWidth. Accepts:
-//   - []string: a single row per element, tab-separated columns. -
-//     [][]string or [][]any: explicit cells per row. - []any: each element
-//     is a row; either a string or a []any of cells.
-//
-// ANSI escapes pass through.
+// tabwriter formats rows with columns aligned by displayWidth.
 func tabwriter(v any) (string, error) {
 	rows, err := toRows(v)
 	if err != nil {
@@ -252,8 +233,6 @@ func toRows(v any) ([]string, error) {
 //
 // Output format: \x00elem1\x00elem2\x01 (NUL-delimited, SOH-terminated).
 // Elements must not contain \x00 or \x01; spread returns an error if they do.
-//
-// Accepted shapes: nil, []string, []int, []any (each element stringified).
 func spread(v any) (string, error) {
 	parts, err := toStringSlice(v)
 	if err != nil {
@@ -293,9 +272,7 @@ func toStringSlice(v any) ([]string, error) {
 	}
 }
 
-// fileExists reports whether path exists and is a regular file. Errors other
-// than "not exist" surface as false (template helpers shouldn't error on
-// permission issues during a precondition check).
+// fileExists reports whether path exists and is a regular file.
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -380,8 +357,7 @@ func addQueryValue(values url.Values, key string, v any) error {
 }
 
 // shellQuote wraps s in single quotes for safe interpolation into a POSIX sh
-// command line. Each embedded single quote is escaped by closing the quoted
-// run, emitting an escaped quote, and reopening (see the replacement below).
+// command line.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
@@ -391,8 +367,6 @@ func shellQuote(s string) string {
 // unchanged; object keys are never rendered. Returns a Go value (map, slice,
 // string, json.Number, bool, nil) suitable for exposure to a subsequent
 // template render as `.entry`.
-//
-// Returns nil if raw is empty or explicitly null.
 func renderEntry(raw json.RawMessage, data any) (any, error) {
 	if len(raw) == 0 {
 		return nil, nil

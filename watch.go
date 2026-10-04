@@ -14,16 +14,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// A frame is a single whole run of the leaf -- steps, entry, request and
-// formatter -- captured into a buffer instead of the terminal, then painted
-// over the frame before it.
-//
-// The repaint uses the same ANSI sequences as the download display. It needs no
-// terminal library, because a frame is a fixed-height block of plain lines.
+// A frame is a single whole run of the leaf -- steps, entry, request and formatter -- captured into a buffer instead of the terminal.
 
-// watchMinInterval is the floor on a watch interval. A shorter interval
-// repaints faster than a terminal can draw, and it hammers whatever the leaf
-// calls.
+// watchMinInterval is the floor on a watch interval.
 const watchMinInterval = 100 * time.Millisecond
 
 // parseWatchInterval reads an interval: a Go duration, or a plain number of
@@ -99,8 +92,7 @@ func runWatch(title string, every time.Duration, body func() error) error {
 	}()
 
 	if tty {
-		// The frames are the display. Formatting decides on the real terminal
-		// behind the buffer, not on the buffer.
+		// The frames are the display. Formatting decides on the real terminal behind the buffer, not on the buffer.
 		ttyOverride = &termSize{width: width, height: height}
 		defer func() { ttyOverride = nil }()
 		fmt.Fprint(out, ansiHideCur)

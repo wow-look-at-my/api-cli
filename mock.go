@@ -8,27 +8,15 @@ import (
 	"github.com/wow-look-at-my/go-containers/set"
 )
 
-// Mock is the <mock> element on a leaf: a declarative stand-in for a real
-// program. The leaf's argv arrives through passthrough mode, <input> names the
-// parts of it that matter, <output> writes the files the caller expects to find
-// afterwards, and <record> appends a single line per invocation to a log.
-//
-// A build tool decides what to do next from the files on disk and their
-// timestamps. So a mock compiler that writes its declared outputs satisfies
-// make without compiling anything, and a whole toolchain can be stood up this
-// way before a single line of the real work exists.
-//
-// A leaf that declares <mock> and a <run> is a thin wrapper instead: the
-// records and outputs happen, then the real program runs. That is how a
-// compile_commands.json falls out of an ordinary build.
+// Mock is the <mock> element on a leaf: a declarative stand-in for a real program. The leaf's argv arrives through passthrough mode, <input> names the parts of it that matter, <output> writes the files the caller expects to find afterwards, and <record>
+// appends a single line per invocation to a log.
 type Mock struct {
 	Inputs  []MockInput  `json:"inputs,omitempty"`
 	Outputs []MockOutput `json:"outputs,omitempty"`
 	Records []MockRecord `json:"records,omitempty"`
 	// Exit is a template for the exit code.
 	Exit string `json:"exit,omitempty"`
-	// Stdout and Stderr are templates written before the outputs land, for a
-	// tool whose callers read its output rather than its files.
+	// Stdout and Stderr are templates written before the outputs land.
 	Stdout string `json:"stdout,omitempty"`
 	Stderr string `json:"stderr,omitempty"`
 }
@@ -36,16 +24,12 @@ type Mock struct {
 // MockInput names a single part of the incoming argv. Match is a Go regular
 // expression tested against each element of .rest in order, so the declaration
 // reads as the shape of the command line rather than as an index into it.
-//
-// The resolved value lands at .mock.<name>: the earliest match, or every
-// match when variadic= is set.
 type MockInput struct {
 	Name     string `json:"name"`
 	Match    string `json:"match"`
 	Variadic bool   `json:"variadic,omitempty"`
 	Required bool   `json:"required,omitempty"`
-	// Default is a template used when nothing matches. It is the alternative to
-	// required=, for an argument the real tool also defaults.
+	// Default is a template used when nothing matches.
 	Default string `json:"default,omitempty"`
 
 	re *regexp.Regexp // compiled at load
@@ -54,10 +38,6 @@ type MockInput struct {
 // MockOutput is a single file the mock writes. Path is a template, and the
 // element's text content is the file's body — also a template, and empty by
 // default, because a build tool reads a mock artifact's timestamp rather than its bytes.
-//
-// With over=, the declaration repeats per element of a list, exactly as a
-// <download over=> does: the element's keys are promoted and the element itself
-// is .item.
 type MockOutput struct {
 	Over   string `json:"over,omitempty"`
 	When   string `json:"when,omitempty"`
@@ -69,20 +49,16 @@ type MockOutput struct {
 	Mode string `json:"mode,omitempty"`
 }
 
-// MockRecord appends a single line to a file per invocation. The default body
-// is a compile_commands.json entry for this call, which is the reason the
-// element exists: point every tool in a build at a single record file, and the
-// build writes its own compilation database on the way past.
+// MockRecord appends a single line to a file per invocation.
 type MockRecord struct {
 	When string `json:"when,omitempty"`
 	Path string `json:"path"`
 	Text string `json:"text,omitempty"`
 }
 
-// defaultRecordText is a single compile_commands.json entry. It is the default
-// body of a <record>, so a mock toolchain produces a compilation database with
-// no template written by hand. The JSON is built by the template rather than
-// by Go, so an author who wants a different shape overrides the whole body.
+// defaultRecordText is a single compile_commands.json entry. It is the
+// default body of a <record>, so a mock toolchain produces a compilation
+// database with no template written by hand.
 const defaultRecordText = `{"directory":{{ .mock.cwd | toJson }},` +
 	`"arguments":{{ .mock.argv | toJson }},` +
 	`"file":{{ .mock.file | toJson }},` +

@@ -116,8 +116,7 @@ func TestTimeline_WidthFromContext(t *testing.T) {
 		{Name: "label", Path: "name"},
 		{Name: "date", Path: "when"},
 	}}
-	// tty=false keeps color off so the axis line is plain (no ANSI escapes to
-	// inflate the rune count); width is applied independently of color.
+	// tty=false keeps color off so the axis line is plain (no ANSI escapes to inflate the rune count).
 	out, err := renderFields(f, parsed, tctx(parsed, false, 40), "timeline", 0)
 	require.NoError(t, err)
 	line := axisLine(out)
