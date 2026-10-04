@@ -18,7 +18,7 @@ import (
 func TestShippedConfigsValidateAgainstTheGrammar(t *testing.T) {
 	paths, err := filepath.Glob("*.example.xml")
 	require.NoError(t, err)
-	paths = append(paths, "samples/github/github.xml", "samples/ci/ci.xml")
+	paths = append(paths, "samples/github/github.xml", "samples/ci/ci.xml", "samples/hf-inference/hf-inference.xml")
 
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {

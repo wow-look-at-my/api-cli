@@ -63,6 +63,7 @@ Do not add a new third-party dependency without a clear cause.
 | `cors.go` / `debug.go` / `docs.go` | CORS middleware for MCP HTTP/SSE; verbose/debug logging; the `docs` subcommand (embeds `README.md` and `api.example.xml`, and prints the grammar from `spec.Schema`). |
 | `api.example.xml`              | Reference config (jsonplaceholder); loaded by `TestExampleConfigsLoad`. Exercises the grammar end to end, including a non-default `curl` transport, a request-step chain (`posts by-user`), and a step-to-queue download hand-off (`archive`). |
 | `samples/github/github.xml`     | Read-only GitHub REST API wrapper in XML: first-class requests, jq noise-trimming, fields views. Used by the CI demo; loaded by `TestGithubSampleLoads`. |
+| `samples/hf-inference/hf-inference.xml` | The Hugging Face Inference Endpoints API (v2): list, get, create, update, delete, pause, resume, scale-to-zero, logs. `samples_hf_inference_test.go` runs it against a local stub. |
 | `*_test.go`                     | Unit + integration tests. `integration_test.go` has `execCmd`/`execCmdFull`; `request_test.go`/`request_integration_test.go` use httptest via `swapHTTPClient`. |
 
 ## The XML config model
