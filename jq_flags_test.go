@@ -82,7 +82,7 @@ func jqPostsServer(t *testing.T) *httptest.Server {
 }
 
 // jqPostsConfig declares the same leaf again: `inline` writes the jq program in
-// the attribute, `viavar` keeps it in a <var> and points jq= at that path. Both
+// the attribute. `viavar` keeps it in a <var> and points jq= at that path. Both
 // forms must see this invocation's flags.
 func jqPostsConfig(url string) *Config {
 	const program = `[.[] | select(.title | contains("{{ .flag.contains }}"))][0:{{ .flag.limit }}]`
@@ -194,7 +194,7 @@ func TestMcpExecLeaf_JQSeesFlags(t *testing.T) {
 	}
 }
 
-// --- vars see this invocation's flags, not just jq ---
+// --- vars see this invocation's flags, not jq ---
 
 func TestIntegration_VarSeesFlag(t *testing.T) {
 	cfg := &Config{

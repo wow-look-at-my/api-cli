@@ -14,10 +14,6 @@ import (
 
 // downloadSession is a single invocation's use of the shared downloader: the
 // batch it enqueues into, and the display it runs while that batch drains.
-//
-// The session opens before the leaf's steps run, not after, because the steps
-// are what work the URL out — their output belongs in the same log region as
-// the downloader's.
 type downloadSession struct {
 	settings downloadSettings
 	batch    *downloadBatch
@@ -135,8 +131,8 @@ func reportJoins(errs []error, code int) int {
 }
 
 // reportDownloads writes the run's outcome. On a terminal the display already
-// showed each file, so only the summary follows it; through a pipe the
-// destination paths go to stdout, a single per line, for whatever reads them next.
+// showed each file, so only the summary follows it. Through a pipe the destination
+// paths go to stdout, a single per line, for whatever reads them next.
 func reportDownloads(items []*downloadItem, elapsed time.Duration, tty bool) int {
 	var bytes int64
 	ok, failed := 0, 0
@@ -207,12 +203,8 @@ func mcpRunDownloads(dls []Download, data map[string]any) (string, bool) {
 }
 
 // openScratch gives the run a working directory of its own, published as
-// `.run.tmpdir`. Parts of a join live there until the join writes the output,
-// so nothing outside the config has to make a directory and pass it in.
-//
-// The returned function removes the directory. A run that keeps its parts (a
-// join without cleanup=, or no join at all) writes them under the download
-// directory instead, which this never touches.
+// `.run.tmpdir`. Parts of a join live there until the join writes the output.
+// Nothing outside the config has to make a directory and pass it in.
 func openScratch(data map[string]any) (func(), error) {
 	dir, err := os.MkdirTemp("", "api-cli-")
 	if err != nil {

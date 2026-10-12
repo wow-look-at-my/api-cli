@@ -1,13 +1,6 @@
 package main
 
-// MCP over stdio. A client that closes stdin right after its last request still
-// wants that request's answer, so this file holds the EOF back until every
-// request it read has a response on the way out.
-//
-// The reason it has to: the jsonrpc2 layer under the SDK refuses every write as
-// soon as the reader reports EOF. A client that writes its calls and closes in
-// the same breath therefore loses the answers, and the server reports "server is
-// closing: EOF" and exits 1.
+// MCP over stdio.
 
 import (
 	"bytes"
@@ -58,9 +51,7 @@ func (p *pendingCalls) answered(id string) {
 	}
 }
 
-// waitIdle blocks until nothing is outstanding. A handler that never returns
-// holds the session open exactly as it did before, because the session already
-// waited for its own handlers to drain.
+// waitIdle blocks until nothing is outstanding.
 func (p *pendingCalls) waitIdle() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -136,8 +127,7 @@ func (w *answerWriter) Close() error {
 }
 
 // ndjsonLines splits a byte stream into the newline-delimited messages the
-// protocol is made of. A raw newline cannot appear inside an encoded JSON value,
-// so a line is a single whole message.
+// protocol is made of.
 type ndjsonLines struct {
 	buf []byte
 }
@@ -158,7 +148,7 @@ func (s *ndjsonLines) feed(p []byte, fn func(rpcMessage)) {
 }
 
 // rpcMessage is the part of a JSON-RPC message that decides what it is. An id
-// beside a method is a call. An id with no method is that call's answer.
+// beside a method is a call.
 type rpcMessage struct {
 	ID     json.RawMessage `json:"id"`
 	Method string          `json:"method"`

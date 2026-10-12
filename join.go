@@ -18,15 +18,12 @@ const (
 	joinGapError = "error"
 )
 
-// Join is the <join> child of a <download>: the a single file every member
-// of a group becomes. The parts are the transfer's unit and the join is the
-// caller's, so the config names both and nothing outside it has to know the
-// layout the parts landed in.
+// Join is the <join> child of a <download>: the a single file every member of
+// a group becomes.
 type Join struct {
 	To      string `json:"to"`
 	Cleanup bool   `json:"cleanup,omitempty"`
-	// Contiguous reports a gap in the group's numeric order: "warn" logs it,
-	// "error" fails the run and writes nothing.
+	// Contiguous reports a gap in the group's numeric order: "warn" logs it, "error" fails the run and writes nothing.
 	Contiguous string `json:"contiguous,omitempty"`
 }
 
@@ -53,8 +50,8 @@ func buildJoin(n *xnode) (*Join, error) {
 	return j, nil
 }
 
-// validateJoin checks a single declaration's join grammar. group= and order=
-// only mean something to a join, so a declaration that carries them without a
+// validateJoin checks a single declaration's join grammar. group=. It order=
+// only mean something to a join. A declaration that carries them without a
 // single is a config that expects a concatenation nobody asked for.
 func validateJoin(d *Download, where string) error {
 	if d.Join == nil {
@@ -84,7 +81,7 @@ func validateJoin(d *Download, where string) error {
 // belongs to, where that bucket lands, and its place in the order.
 //
 // A value that is not a number fails here: concatenating in the wrong order
-// produces a plausible file that is silently wrong, which is worse than no file
+// produces a plausible file that is silently wrong. This is worse than no file
 // at all.
 func planJoin(d *Download, ctx map[string]any, dir string, idx int) (*joinPart, error) {
 	if d.Join == nil {
@@ -134,13 +131,7 @@ type joinPart struct {
 	Contiguous string
 }
 
-// joiner concatenates each group of parts into its output. A group joins as
-// soon as its own last member lands, so a run of many items writes its
-// earliest output while the rest are still transferring.
-//
-// Membership is decided at plan time, so the joiner knows every group's size
-// before the earliest transfer starts. It therefore needs no registration
-// step racing against a download that finishes earliest.
+// joiner concatenates each group of parts into its output.
 type joiner struct {
 	log func(string, ...any)
 
@@ -227,8 +218,8 @@ func (j *joiner) wait() []error {
 }
 
 // finish writes a single group's output. A group short a member is not written
-// at all: half a file that carries the real name reads as a complete capture,
-// and nothing downstream can tell the difference.
+// at all: half a file that carries the real name reads as a complete capture.
+// Nothing downstream can tell the difference.
 func (j *joiner) finish(g *joinGroup) error {
 	sort.SliceStable(g.members, func(a, b int) bool {
 		return g.members[a].spec.Join.Order < g.members[b].spec.Join.Order

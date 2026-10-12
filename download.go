@@ -13,8 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Defaults for the shared queue. Concurrency is overridable in the config
-// (<downloads concurrency=>) and on the command line (--concurrency).
+// Defaults for the shared queue.
 const (
 	defaultConcurrency = 4
 	defaultRetries     = 3
@@ -26,25 +25,23 @@ type Downloads struct {
 	Concurrency int    `json:"concurrency,omitempty"`
 	Retries     int    `json:"retries,omitempty"`
 	Dir         string `json:"dir,omitempty"`
-	// RetriesSet distinguishes retries="0" -- a config that wants a failure
-	// reported immediately -- from an absent attribute, which takes the default.
+	// RetriesSet distinguishes retries="0" -- a config that wants a failure reported immediately -- from an absent attribute.
 	RetriesSet bool `json:"retriesSet,omitempty"`
 }
 
-// Download is a single hand-off on a leaf: the URL a step worked out, where to
-// put it, and the auth that reaches it. Every string is a template rendered
-// against the leaf's full data context (.arg, .flag, .env, .var, .entry,
-// .result), so a URL parsed out of an earlier step is just `.result.<step>.<path>`.
+// Download is a single hand-off on a leaf: the URL a step worked out, where
+// to put it, and the auth that reaches it. Every string is a template
+// rendered against the leaf's full data context (.arg, .flag, .env, .var,
+// .entry, .result), so a URL parsed out of an earlier step is
+// `.result.<step>.<path>`.
 //
-// With `over=`, the declaration repeats per record in that list: the record's
+// With `over=`, the declaration repeats per record in that list. The record's
 // keys are promoted to the top level (like a <field expr=>) and the record
 // itself is available as `.item`.
 type Download struct {
 	Over string `json:"over,omitempty"`
 	When string `json:"when,omitempty"`
-	// Group and Order describe the bucket a <join> concatenates. Both are
-	// templates over the record, so a single declaration produces the
-	// parts of several outputs at the same time.
+	// Group and Order describe the bucket a <join> concatenates.
 	Group     string   `json:"group,omitempty"`
 	Order     string   `json:"order,omitempty"`
 	Join      *Join    `json:"join,omitempty"`
@@ -58,8 +55,6 @@ type Download struct {
 }
 
 // hashAlgos maps a <hash algo=> to the length of its digest in hex characters.
-// md5 and sha1 are here because real manifests still publish them, not because
-// they are a good choice for anything but catching a mangled transfer.
 var hashAlgos = map[string]int{
 	"md5":    32,
 	"sha1":   40,
@@ -78,14 +73,10 @@ type downloadSettings struct {
 	NoTUI       bool
 }
 
-// downloadDefaults holds the active config's <downloads> settings. Published by
-// installDownloads alongside the transport registry, for the same reason: it is
-// config data that every leaf may need and no call site would do anything with
-// but pass along.
+// downloadDefaults holds the active config's <downloads> settings.
 var downloadDefaults *Downloads
 
-// installDownloads publishes a config's <downloads> settings. Called by every
-// path that turns a config into runnable commands (newRoot, buildMCPServer).
+// installDownloads publishes a config's <downloads> settings.
 func installDownloads(cfg *Config) {
 	downloadDefaults = nil
 	if cfg != nil {
@@ -260,7 +251,7 @@ func validateDownloadSettings(d *Downloads) error {
 }
 
 // validateDownloads checks a command's <download> declarations: they are the
-// node's action, so they need a node that runs, and their output is file paths
+// node's action, so they need a node that runs. Their output is file paths
 // rather than records for a formatter to shape.
 func validateDownloads(c *Command, where string, transports map[string]*Transport) error {
 	if len(c.Downloads) == 0 {
@@ -334,8 +325,8 @@ func planDownloads(dls []Download, data map[string]any, dir string) ([]downloadS
 			}
 			for _, spec := range specs {
 				// Records rendering a single file name is a <to> that forgot
-				// to vary — caught here rather than after N transfers have
-				// overwritten each other into a single file.
+				// to vary — caught here rather than. This holds after N
+				// transfers have overwritten each other into a single file.
 				if !spec.DestIsDir {
 					if prev, dup := claimed[spec.Dest]; dup {
 						return nil, fmt.Errorf("download[%d]: %s and %s would both write %s; give <to> something that varies per record",
@@ -356,7 +347,7 @@ func planDownloads(dls []Download, data map[string]any, dir string) ([]downloadS
 }
 
 // downloadRecords expands `over=` into a single render context per record. A
-// path that resolves to nothing is a config error, not an empty run: silently
+// path that resolves to nothing is a config error, not an empty run. Silently
 // downloading empty files is exactly how a renamed field goes unnoticed. An
 // empty list, on the other hand, legitimately means "nothing matched".
 func downloadRecords(d *Download, data map[string]any, idx int) ([]map[string]any, error) {
@@ -383,15 +374,14 @@ func downloadRecords(d *Download, data map[string]any, idx int) ([]map[string]an
 }
 
 // downloadCtx promotes a record's keys onto the data context and exposes the
-// record itself as .item, so a list of plain URL strings works as well as a
-// list of objects.
+// record itself as .item.
 func downloadCtx(data map[string]any, rec any) map[string]any {
 	return promoteCtx(data, rec, "item")
 }
 
 // planOne renders a single declaration against a single record. A <url> that
 // renders to several lines yields several downloads — which is what a <for>
-// loop inside it produces — and then <to> names the directory they share.
+// loop inside it produces. Then <to> names the directory they share.
 func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSpec, error) {
 	rawURL, err := renderString(d.URL, ctx)
 	if err != nil {
@@ -403,7 +393,7 @@ func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSp
 	}
 	// Checked here rather than at the socket: a <url> built from a mistyped
 	// path renders to the template engine's placeholder, and "unsupported
-	// protocol scheme" some seconds later does not point at the typo.
+	// protocol scheme". Some seconds later does not point at the typo.
 	for _, u := range urls {
 		if parsed, err := url.Parse(u); err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 			return nil, fmt.Errorf("download[%d]: <url> rendered %q, which is not an http(s) URL", idx, u)
@@ -446,8 +436,7 @@ func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSp
 		if join != nil && isDir {
 			return nil, fmt.Errorf("download[%d]: a joined part needs a <to> that names a file, and %q names a directory", idx, to)
 		}
-		// Resolved per URL: the program's argv sees .request.url, so each file
-		// gets its own rendered command.
+		// Resolved per URL: the program's argv sees .request.url, so each file gets its own rendered command.
 		transport, err := prepareDownloadTransport(d.Transport, u, headers, ctx)
 		if err != nil {
 			return nil, fmt.Errorf("download[%d]: %w", idx, err)
@@ -457,8 +446,7 @@ func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSp
 			Hash: digest, HashAlgo: d.HashAlgo, Transport: transport,
 		}
 		if join != nil {
-			// A single copy per file: a <url> that rendered several lines
-			// shares a single record, and the queue order then separates them.
+			// A single copy per file.
 			part := *join
 			spec.Join = &part
 		}
@@ -469,10 +457,10 @@ func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSp
 
 // renderHash renders the expected digest for a single record and normalizes it.
 //
-// An empty render means this record carries no digest — which is how a <hash>
+// An empty render means this record carries no digest. Which is how a <hash>
 // body wrapped in an <if test=> opts a single record of an `over=` list out.
-// Anything else must be a digest of the right shape: a manifest field that got
-// renamed renders as the template engine's placeholder, and silently not
+// Anything else must be a digest of the right shape. A manifest field that got
+// renamed renders as the template engine's placeholder. And silently not
 // verifying is the a single outcome a verification feature must never have.
 func renderHash(d *Download, ctx map[string]any, idx int) (string, error) {
 	if d.Hash == "" {
@@ -482,8 +470,7 @@ func renderHash(d *Download, ctx map[string]any, idx int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("download[%d]: render hash: %w", idx, err)
 	}
-	// A digest often arrives as the earliest field of a `sha256sum`
-	// line ("<hex> <name>"), so read that field rather than the whole line.
+	// A digest often arrives as the earliest field of a `sha256sum` line ("<hex> <name>").
 	fields := strings.Fields(raw)
 	if len(fields) == 0 {
 		return "", nil
@@ -498,8 +485,8 @@ func renderHash(d *Download, ctx map[string]any, idx int) (string, error) {
 }
 
 // downloadDest resolves where a file lands. An empty <to> means "the download
-// directory, named by the server"; a <to> ending in "/" or naming an existing
-// directory means the same with an explicit directory; anything else is the
+// directory, named by the server". A <to> ending in "/" or naming an existing
+// directory means the same with an explicit directory. Anything else is the
 // exact file path.
 func downloadDest(dir, to string, multi bool) (string, bool) {
 	if to == "" {

@@ -86,8 +86,7 @@ func TestMock_RecordIsACompileCommandsEntry(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(lines[0]), &entry))
 	assert.Equal(t, dir, entry.Directory)
-	// The whole command line, with the program at the front: a consumer replays
-	// these, and the leftovers alone are missing every flag the leaf declared.
+	// The whole command line, with the program at the front: a consumer replays these.
 	assert.Equal(t, []string{"cc", "-c", "src/foo.c"}, entry.Arguments)
 	assert.Equal(t, "src/foo.c", entry.File)
 	assert.Equal(t, "foo.o", entry.Output)
@@ -208,7 +207,7 @@ func TestMock_OwnRunMakesItAThinWrapper(t *testing.T) {
 	assert.JSONEq(t, `{"file":"src/foo.c"}`, strings.TrimSpace(readFile(t, filepath.Join(dir, "db.jsonl"))))
 }
 
-// An INHERITED run is not the leaf's own, so it stays where it is: a mock leaf
+// An INHERITED run is not the leaf's own. It stays where it is: a mock leaf
 // under a parent that declares a run does not fire that run on the way past.
 func TestMock_InheritedRunDoesNotFire(t *testing.T) {
 	dir := t.TempDir()

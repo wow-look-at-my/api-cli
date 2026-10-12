@@ -10,8 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fieldsBlocks wraps a single declaration as the single block a leaf carries.
-// Most tests declare a single shape, and this keeps them reading that way.
+// fieldsBlocks wraps a single declaration as the block a leaf carries.
 func fieldsBlocks(f *Fields) []FieldsBlock {
 	return []FieldsBlock{{Fields: f}}
 }

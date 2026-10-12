@@ -69,8 +69,7 @@ func runMCP(transport string, cfg *Config, corsLevel CorsLevel) int {
 type mcpInherit struct {
 	prefix string
 	vars   map[string]any
-	// pre accumulates down the tree rather than overriding, exactly as it does in
-	// buildCommand.
+	// pre accumulates down the tree rather than overriding, exactly as it does in buildCommand.
 	pre     []string
 	cmd     *Cmd
 	request *Request

@@ -218,7 +218,7 @@ func TestValidate_StepRequestNeedsURL(t *testing.T) {
 	assert.Contains(t, err.Error(), "<request> requires a <url>")
 }
 
-// A leaf whose only run is a request still reports a missing step run clearly.
+// A leaf whose only run is a request still reports a missing step run.
 func TestSteps_NoRunAvailable(t *testing.T) {
 	cfg := &Config{
 		Name: "t",
@@ -228,8 +228,7 @@ func TestSteps_NoRunAvailable(t *testing.T) {
 			Command: &Cmd{Shell: true, Template: "true"},
 		}},
 	}
-	// Clear the leaf's own run after validation so the step has nothing to
-	// inherit — the shape validation cannot reach.
+	// Clear the leaf's own run after validation so the step has nothing to inherit — the shape validation cannot reach.
 	cfg.Commands[0].Command = nil
 	var oc stepOutcome
 	oc, err := runSteps(cfg.Commands[0].Steps, map[string]any{}, map[string]any{}, nil, nil, "", "", captureExec, execStderr)

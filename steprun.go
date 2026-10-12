@@ -52,8 +52,8 @@ type untilExhausted struct{ msg string }
 func (e *untilExhausted) Error() string { return e.msg }
 
 // action performs the step's action a single time, or, with `until=`, until
-// the predicate holds: an async job that answers "pending" is polled here
-// rather than in a shell loop around the whole program.
+// the predicate holds. This is an async job that answers "pending" is
+// polled here rather than in a shell loop around the whole program.
 //
 // A failed run comes back as a *callFailure. The error return is for a config
 // problem and for an exhausted poll.
@@ -169,9 +169,10 @@ func (r *stepRunner) runOnce() (string, *callFailure, error) {
 // `.index`. The result pairs each element with its own response, in the
 // source order.
 //
-// A failing element fails the whole step unless on-error="skip": a screen
-// with some builds silently missing reads as a shorter queue, not as a broken
-// run. So a skip is always named, and the caller exits non-zero with a summary.
+// A failing element fails the whole step. This happens unless on-error="skip":
+// a screen with some builds silently missing reads as a shorter queue, not as a
+// broken run. So a skip is always named, and the caller exits non-zero with a
+// summary.
 func (r *stepRunner) runOver(results map[string]any) (bool, error) {
 	step, data := r.step, r.data
 	found, ok, err := overSource(data, step.Over)
@@ -236,7 +237,7 @@ func (r *stepRunner) runOver(results map[string]any) (bool, error) {
 }
 
 // itemLabel names an element in an error and on the progress line: a string
-// or a number as itself, a record or a list as compact JSON. The clip keeps a
+// or a number as itself. A record or a list as compact JSON. The clip keeps a
 // large record from flooding the line.
 func itemLabel(element any) string {
 	var s string

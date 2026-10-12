@@ -201,7 +201,7 @@ func rawFieldValue(rnd Renderer, fld Field, rec record, ctx map[string]any) (any
 	return lookupValue(rec.obj, fld.Path), nil
 }
 
-// exprData builds the data context for a field expr: the whole format context,
+// exprData builds the data context for a field expr. The whole format context,
 // with the record's own fields promoted to the top level (so `.field` is the
 // record), plus `.key`/`.value` for map-entry rows. `$` therefore reaches
 // `.var`, `.data`, etc.

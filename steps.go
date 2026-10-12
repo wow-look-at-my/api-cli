@@ -16,9 +16,7 @@ const (
 // pollSleep waits between attempts of a polling step and between retries.
 var pollSleep = time.Sleep
 
-// stepCapture runs a single step's command and returns its stdout and exit
-// code. The CLI and MCP paths differ in where stderr goes and whether the
-// child may inherit the process's stdin, so each supplies its own.
+// stepCapture runs a single step's command and returns its stdout and exit code.
 type stepCapture func(c *Cmd, cwd, stdin string, data any) (string, int)
 
 // stepOutcome reports how a run of steps ended. output carries the failing
@@ -51,7 +49,7 @@ func reportSkips(w io.Writer, skips []stepSkips) bool {
 // in results under the step's name. Steps see prior results through data, so a
 // later step's entry, url, or command can read `.result.<name>`.
 //
-// A step runs whichever of command/request it declares; declaring neither
+// A step runs whichever of command/request it declares. Declaring neither
 // inherits the leaf's effective run, which is how a step reuses the ancestor
 // <request> with nothing but a different <entry>. cwdTmpl/stdinTmpl are the
 // leaf's, likewise overridable per step.
@@ -110,9 +108,8 @@ func runSteps(steps []Step, data map[string]any, results map[string]any, cmdTmpl
 	return oc, nil
 }
 
-// pollContext is what `until=` is evaluated against: the run's own context with
-// the last response promoted onto it, so an async job's status field reads as
-// `.status`. The whole body stays reachable as `.body`.
+// pollContext is what `until=` is evaluated against: the run's own context
+// with the last response promoted onto it.
 func pollContext(data map[string]any, body any) map[string]any {
 	return promoteCtx(data, body, "body")
 }

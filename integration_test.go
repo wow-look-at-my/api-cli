@@ -40,13 +40,10 @@ func execCmdFull(t *testing.T, cfg *Config, argv ...string) (int, string, string
 	prevVerbose, prevDebug := verboseMode, debugMode
 	verboseMode, debugMode = false, false
 	t.Cleanup(func() { verboseMode = prevVerbose; debugMode = prevDebug })
-	// newRoot installs cfg's transports into package state; put back whatever
-	// was there so a config with a default transport can't leak into the next
-	// test's requests.
+	// newRoot installs cfg's transports into package state.
 	prevTransports, prevDefault := transports, defaultTransport
 	t.Cleanup(func() { transports, defaultTransport = prevTransports, prevDefault })
-	// Same for the <downloads> settings newRoot publishes, and for the shared
-	// queue: a queue built for a single test's concurrency must not serve the next.
+	// Same for the <downloads> settings newRoot publishes, and for the shared queue.
 	prevDownloads := downloadDefaults
 	resetSharedQueue()
 	t.Cleanup(func() { downloadDefaults = prevDownloads; resetSharedQueue() })
@@ -278,7 +275,6 @@ func TestIntegration_StepInheritsAncestorCommand(t *testing.T) {
 			Steps: []Step{{
 				Name:  "s",
 				Entry: json.RawMessage(`{"v":"hello"}`),
-				// No Command — uses root command.
 			}},
 			// No Command override — also uses root command.
 			Entry: json.RawMessage(`{"v":"{{.result.s.k}}"}`),
@@ -286,8 +282,7 @@ func TestIntegration_StepInheritsAncestorCommand(t *testing.T) {
 	}
 	code, out := execCmd(t, cfg, "run")
 	require.Equal(t, 0, code)
-	// Step: printf '{"k":"hello"}' → .result.s = {k: "hello"}
-	// Final: printf '{"k":"hello"}' (leaf entry resolves .result.s.k = "hello")
+	// Step: printf '{"k":"hello"}' → .result.s = {k: "hello"}.
 	assert.Equal(t, `{"k":"hello"}`, out)
 }
 

@@ -1,8 +1,8 @@
 // Package fields renders a declarative field list as a table, a "Label: value"
-// list, lines, raw text, JSON, Markdown, CSV, or a timeline, choosing a default
-// from the data's shape. api-cli drives it from a <fields> element, and it is
-// importable on its own so another program can present decoded JSON the same
-// way without adopting the XML config language.
+// list, lines, raw text, JSON, Markdown, CSV, or a timeline. Those fields are
+// choosing a default from the data's shape. api-cli drives it from a <fields>
+// element. It is importable on its own so another program can present decoded
+// JSON the same way without adopting the XML config language.
 package fields
 
 // Renderer evaluates a Go template against a data map. The caller supplies it.

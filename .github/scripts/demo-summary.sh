@@ -1,23 +1,5 @@
 #!/usr/bin/env bash
-# Generates a markdown showcase of samples/github/github.xml into
-# $GITHUB_STEP_SUMMARY. For each public endpoint, the script captures
-# Outputs and emits them with byte counts so the savings are obvious:
-#
-#   RAW — the unfiltered GitHub API response. Bloated with `*_url`
-#                       template links and `url`/`html_url` self-links.
-#                       This is what you get if you `curl` the API
-#                       directly. URL-STRIPPED — same response after our
-#                       `jq` walk drops every key ending in `url`. Still
-#                       valid JSON; this is what `api-cli ... --no-format`
-#                       (or piping the output) gives you. FORMATTED —
-#                       the table/detail view rendered through the
-#                       format/views system in `api-cli`.
-#
-# CONFIDENTIALITY: every endpoint is a *public* GitHub resource
-# (octocat, golang/go, cli/cli, plus the rate-limit endpoint which only
-# returns numeric counters). The script never echoes headers, env vars,
-# or auth tokens; api-cli's command rendering only sends headers, never
-# prints them.
+# Generates a markdown showcase of samples/github/github.xml into $GITHUB_STEP_SUMMARY.
 
 set -euo pipefail
 
@@ -30,9 +12,8 @@ if [[ ! -x "$artifact" ]]; then
     exit 1
 fi
 
-# `go-toolchain matrix` builds a single fat APE. An APE rewrites its own header
-# on earliest exec, so the file stops matching its checksum. Run a throwaway
-# copy and leave the artifact pristine.
+# `go-toolchain matrix` builds a single fat APE. An APE rewrites its own
+# header on earliest exec, so the file stops matching its checksum.
 bin="$(mktemp -d)/api-cli"
 cp "$artifact" "$bin"
 chmod +x "$bin"
@@ -55,9 +36,8 @@ pct_smaller() {
     }'
 }
 
-# demo TITLE -- ARGV... Renders a single section: header, output
-# blocks (raw / stripped / formatted), each preceded by a byte
-# count.
+# demo TITLE -- ARGV... Renders a single section: header, output blocks (raw /
+# stripped / formatted), each preceded by a byte count.
 demo() {
     local title="$1"
     shift
