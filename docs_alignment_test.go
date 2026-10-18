@@ -115,8 +115,7 @@ func TestDocs_DeclaredTypesAreDocumented(t *testing.T) {
 	}
 }
 
-// documentedNonPersistent are flags the README's table lists that cobra owns
-// rather than newRoot: --version comes from root.Version.
+// documentedNonPersistent are flags the README's table lists that cobra owns rather than newRoot.
 var documentedNonPersistent = set.Of("version")
 
 func TestDocs_GlobalFlagsTableMatchesTheRoot(t *testing.T) {

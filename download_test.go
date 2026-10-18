@@ -269,16 +269,16 @@ func TestPlanDownloads_MalformedHashIsAnError(t *testing.T) {
 		})
 	}
 
-	// And the placeholder really is what a missing field renders as, so the
-	// case above is the real a single and not a straw man.
+	// And the placeholder is what a missing field renders as, so the case above
+	// is the real a single and not a straw man.
 	_, err := planDownloads([]Download{{
 		URL: "https://h/f", Hash: "{{.result.list.typo}}", HashAlgo: "sha256",
 	}}, planData(), ".")
 	assert.ErrorContains(t, err, "is not a 64-character hex digest")
 }
 
-// A digest is optional per record: an <if> around the <hash> body renders empty
-// for a record that has none, and that record simply is not verified.
+// A digest is optional per record. An <if> around the <hash> body renders
+// empty for a record that has none, and that record is not verified.
 func TestPlanDownloads_HashCanBeEmptyPerRecord(t *testing.T) {
 	data := planData()
 	data["result"].(map[string]any)["assets"] = []any{
@@ -319,8 +319,7 @@ func TestPlanDownloads_EmptyURLIsAnError(t *testing.T) {
 }
 
 func TestPlanDownloads_NonHTTPURLIsAnError(t *testing.T) {
-	// A mistyped path renders to the template engine's placeholder rather than
-	// to nothing, so the check has to be on the shape of the URL.
+	// A mistyped path renders to the template engine's placeholder rather than to nothing.
 	_, err := planDownloads([]Download{{URL: "https://h/{{.result.list.typo}}/f"}}, planData(), ".")
 	assert.NoError(t, err, "a missing leaf inside an otherwise valid URL is the author's business")
 
@@ -398,8 +397,7 @@ func TestResolveDownloadSettings(t *testing.T) {
 	require.NoError(t, root.PersistentFlags().Set("concurrency", "2"))
 	require.NoError(t, root.PersistentFlags().Set("download-dir", "elsewhere"))
 	require.NoError(t, root.PersistentFlags().Set("no-tui", "true"))
-	// newRoot(nil) cleared the registry; put the config settings back so the
-	// test proves the flags win over them rather than over the defaults.
+	// newRoot(nil) cleared the registry.
 	installDownloads(&Config{Downloads: &Downloads{Concurrency: 8, Dir: "out"}})
 	assert.Equal(t, downloadSettings{Concurrency: 2, Retries: 3, Dir: "elsewhere", NoTUI: true},
 		resolveDownloadSettings(root))

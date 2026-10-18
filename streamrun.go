@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// streamSource is the leaf's run, opened as a byte stream rather than executed
-// to completion: the chunker pulls from it, so the source is never captured.
+// streamSource is the leaf's run, opened as a byte stream rather than
+// executed to completion: the chunker pulls from it.
 type streamSource struct {
 	cmd  *exec.Cmd
 	pipe io.ReadCloser
@@ -87,15 +87,12 @@ func (s *streamSource) close() (int, error) {
 	return 0, nil
 }
 
-// streamExit reports a source that failed before any chunk was read, so the
-// caller can exit with the source's own code.
+// streamExit reports a source that failed before any chunk was read, so the caller can exit with the source's own code.
 type streamExit struct{ code int }
 
 func (e *streamExit) Error() string { return fmt.Sprintf("source exited %d", e.code) }
 
-// abandon stops a source the run has finished with early. A chunk whose step
-// failed ends the leaf while the producer is still writing into a pipe nobody
-// reads, and waiting on that producer would hang on a full pipe.
+// abandon stops a source the run has finished with early.
 func (s *streamSource) abandon() {
 	if s.body != nil {
 		s.body.Close()
@@ -108,21 +105,20 @@ func (s *streamSource) abandon() {
 	s.cmd.Wait()
 }
 
-// runStream runs a leaf's <stream> declaration: the source is the leaf's own
-// run, the chunker cuts it, the optional step transforms a single chunk at a
+// runStream runs a leaf's <stream> declaration. The source is the leaf's own
+// run. The chunker cuts it, the optional step transforms a single chunk at a
 // time, and each finished chunk goes to stdout.
 //
 // Chunks are written as they are produced, so a source that pauses after its
-// earliest chunk has already put that chunk in front of the user. Nothing
-// here holds more than a single chunk, and the write adds no bytes: the
-// concatenated chunks are the source, byte for byte.
+// earliest chunk has already put that chunk. That chunk is in front of the
+// user. Nothing here holds more than a single chunk, and the write adds no
+// bytes: the concatenated chunks are the source, byte for byte.
 func runStream(st *Stream, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any) int {
 	size := 0
 	if st.Mode == streamModeBytes {
 		parsed, err := parseChunkSize(st.Chunk)
 		if err != nil {
-			// validate() rejects an unusable size at load time, so this is a
-			// config that bypassed it.
+			// validate() rejects an unusable size at load time, so this is a config that bypassed it.
 			fmt.Fprintln(execStderr, "error:", err)
 			return 1
 		}
@@ -141,8 +137,7 @@ func runStream(st *Stream, cmdTmpl *Cmd, request *Request, cwd, stdin string, da
 	chunks := newChunker(src.reader(), st.Mode, size)
 	code := pumpChunks(chunks, st, data)
 	if code != 0 {
-		// The leaf stops here, so the source is stopped with it rather than
-		// left writing into a pipe with no reader.
+		// The leaf stops here, so the source is stopped with it rather than left writing into a pipe with no reader.
 		src.abandon()
 		return code
 	}
@@ -151,8 +146,7 @@ func runStream(st *Stream, cmdTmpl *Cmd, request *Request, cwd, stdin string, da
 		fmt.Fprintln(execStderr, "error:", closeErr)
 		return 1
 	}
-	// The source's own exit code is the leaf's, exactly as it is on the
-	// unstreamed path.
+	// The source's own exit code is the leaf's, exactly as it is on the unstreamed path.
 	return srcCode
 }
 
@@ -208,8 +202,7 @@ func applyStreamStep(step *StreamStep, chunk []byte, index, offset int, data map
 		return nil, fmt.Errorf("stream step: render cwd: %w", err)
 	}
 
-	// The step's own command sees where the chunk sits, so a step can name its
-	// position as well as transform the bytes.
+	// The step's own command sees where the chunk sits, so a step can name its position as well as transform the bytes.
 	argv, err := resolveArgv(step.Command, ctx)
 	if err != nil {
 		return nil, fmt.Errorf("stream step: %w", err)
@@ -230,7 +223,7 @@ func applyStreamStep(step *StreamStep, chunk []byte, index, offset int, data map
 	return out, nil
 }
 
-// streamCtx layers where a chunk sits in the run onto the leaf context, so a
+// streamCtx layers where a chunk sits in the run onto the leaf context. A
 // per-chunk step can name its position: `.stream.index`, `.stream.offset` and
 // `.stream.size`.
 func streamCtx(data map[string]any, index, offset, size int) map[string]any {

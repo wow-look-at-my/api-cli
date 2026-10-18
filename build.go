@@ -15,7 +15,6 @@ import (
 )
 
 // exitCode is set by a leaf's RunE to the exit status of the child process.
-// main reads it after rootCmd.Execute() returns.
 var exitCode int
 
 var confirmYes = regexp.MustCompile(`^[yY]([eE][sS])?$`)
@@ -68,8 +67,7 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []str
 		var count cobra.PositionalArgs
 		switch total := len(node.Args); {
 		case total == 0 && node.Runnable:
-			// A runnable node with no args takes none: an unmatched positional is
-			// a mistyped subcommand, and cobra says so.
+			// A runnable node with no args takes none: an unmatched positional is a mistyped subcommand, and cobra says so.
 			count = cobra.NoArgs
 		case total == 0:
 			count = nil
@@ -90,13 +88,9 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []str
 		registerConflicts(cmd, node.Flags)
 	}
 
-	// Resolve effective vars, run (command or request), cwd, stdin, and format
-	// for this subtree. A node's <run> overrides the inherited any of either
-	// kind: defining a command clears an inherited request and vice versa, so
-	// the closest ancestor with any <run> wins.
+	// Resolve effective vars, run (command or request), cwd, stdin, and format for this subtree.
 	effectiveVars := mergeVars(inheritedVars, node.Vars)
-	// Preconditions accumulate rather than override: a guard an ancestor declared
-	// applies to every run under it, and this node's own guards follow it.
+	// Preconditions accumulate rather than override: a guard an ancestor declared applies to every run under it.
 	effectivePre := inheritedPreconditions(inheritedPre, node.Preconditions)
 	effectiveCmd := inheritedCmd
 	effectiveRequest := inheritedRequest
@@ -166,20 +160,6 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []str
 //	the effective command template against the full context and execute it,
 //	streaming output to the user. If more than a single command was executed
 //	and --quiet is not set, print the execution count to stderr.
-//
-// cwdTmpl is the effective working-directory template for this leaf; an empty
-// string means "use the calling process's cwd". Each step inherits cwdTmpl
-// unless the step itself sets `cwd`. The cwd template is rendered fresh per
-// execution against the current data context (so .result and .entry are
-// available where appropriate).
-//
-// stdinTmpl is the effective stdin template for this leaf; an empty string
-// means "inherit the parent process's stdin". Each step inherits stdinTmpl
-// unless the step itself sets `stdin`. The stdin template is rendered fresh
-// per execution against the current data context.
-//
-// watch is the effective watch= interval. It is the leaf's own or an ancestor's.
-// The --watch flag overrides it.
 func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any, cmdTmpl *Cmd, request *Request, cwdTmpl, stdinTmpl, confirmTmpl, watch string, formatRef *FormatRef, formats map[string]*Format) error {
 	verboseMode, _ = c.Root().PersistentFlags().GetBool("verbose")
 	dbg, _ := c.Root().PersistentFlags().GetBool("debug")
@@ -193,8 +173,7 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		return err
 	}
 	// A group's watch= can reach a <download> leaf. The transfer cannot repeat.
-	// The group's setting was never about that leaf. The flag that asks the
-	// same is still an error.
+	// The group's setting was never about that leaf.
 	if every > 0 && !fromFlag && len(node.Downloads) > 0 {
 		fmt.Fprintf(execStderr, "warning: watch=%s ignored: a <download> leaf runs one time\n", watch)
 		every = 0
@@ -306,9 +285,7 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 		}
 	}
 
-	// A <download> leaf takes over the output channels before its steps run:
-	// the steps are what work the URL out, so their output belongs in the same
-	// log region as the transfers they feed.
+	// A <download> leaf takes over the output channels before its steps run.
 	var session *downloadSession
 	if len(node.Downloads) > 0 {
 		clean, serr := openScratch(data)
@@ -337,9 +314,7 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 	}()
 	if oc.code != 0 {
 		exitCode = oc.code
-		// The steps failed, so nothing reaches the queue. Take the display down
-		// earliest: what follows belongs on the terminal, not in a log region
-		// that has stopped updating.
+		// The steps failed, so nothing reaches the queue.
 		session.close()
 		reportExecutions(c, executions)
 		return nil
@@ -356,9 +331,9 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 	logDebug("leaf %q: entry: %s", node.Name, jsonCompact(entry))
 
 	// A <mock> stands in for a program, so it is the leaf's action too. Its own
-	// <run> is the exception: that shape is a thin wrapper, which records
-	// the call and then runs the real tool. An INHERITED run stays where it is,
-	// exactly as it does for a download, so a mock leaf under a parent that
+	// <run> is the exception: that shape is a thin wrapper, which records the
+	// call and then runs the real tool. An INHERITED run stays where it is,
+	// exactly as it does for a download. A mock leaf under a parent that
 	// declares a run does not fire that run on the way past.
 	if node.Mock != nil {
 		logVerbose("leaf %q: standing in for a program", node.Name)
@@ -375,7 +350,7 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 	}
 
 	// The hand-off is the leaf's action: a <download> leaf never runs a command
-	// of its own, so an ancestor's <run> stays where it is instead of firing an
+	// of its own. An ancestor's <run> stays where it is instead of firing an
 	// unrelated request on the way to the queue.
 	if session != nil {
 		logVerbose("leaf %q: handing %d download declaration(s) to the queue", node.Name, len(node.Downloads))
@@ -417,9 +392,7 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 	return nil
 }
 
-// renderCwd renders a cwd template against data. An empty template short-
-// circuits to the empty string ("no override"), so we don't pay template
-// machinery on the common no-cwd path.
+// renderCwd renders a cwd template against data.
 func renderCwd(tmpl string, data any) (string, error) {
 	if tmpl == "" {
 		return "", nil
@@ -427,9 +400,7 @@ func renderCwd(tmpl string, data any) (string, error) {
 	return renderString(tmpl, data)
 }
 
-// renderStdin renders a stdin template against data. An empty template short-
-// circuits to the empty string ("no override" — the child inherits the parent
-// process's stdin).
+// renderStdin renders a stdin template against data.
 func renderStdin(tmpl string, data any) (string, error) {
 	if tmpl == "" {
 		return "", nil
@@ -447,16 +418,9 @@ func reportExecutions(c *cobra.Command, n int) {
 	}
 }
 
-// resolveContext assembles a leaf's data context from its non-flag half (base:
-// .arg, .env, and .rest in passthrough mode), the flags this invocation
-// supplies, and the merged vars.
+// resolveContext assembles a leaf's data context from its non-flag half (base: .arg, .env, and .rest in passthrough mode), the flags this invocation supplies, and the merged vars.
 //
-// Vars resolve again, because both halves depend on each other: a templated
-// flag default reads .var, and a var reads .flag. Pass a single runs without
-// flags purely to feed those defaults. Pass runs again over the original
-// templates a single time gather has produced the whole flag map, cobra's
-// declared defaults included. Everything downstream — a URL, an entry, a jq
-// program kept in a <var> — therefore sees this run's flags.
+// Vars resolve again, because both halves depend on each other: a templated flag default reads .var, and a var reads .flag. Pass a single runs without flags purely to feed those defaults. Pass runs again over the original templates a single time gather has produced the whole flag map, cobra's declared defaults included. Everything downstream — a URL, an entry, a jq program kept in a <var> — therefore sees this run's flags.
 func resolveContext(vars, base map[string]any, gather func(preFlag map[string]any) (map[string]any, error)) (map[string]any, error) {
 	preFlag := maps.Clone(base)
 	preFlag["flag"] = map[string]any{}
@@ -484,18 +448,17 @@ func resolveContext(vars, base map[string]any, gather func(preFlag map[string]an
 // maxVarPasses caps the fixpoint iteration that resolves inter-var references.
 const maxVarPasses = 10
 
-// renderVars runs each string leaf of the merged vars map through the template
-// engine with the given context. Vars may reference other vars: each pass makes
-// the previous pass's resolved values available at `.var`, iterating to a
-// fixpoint (capped at maxVarPasses). The original templates are re-rendered each
-// pass, so already-resolved text is never double-processed. Non-string values
-// pass through.
+// renderVars runs each string leaf of the merged vars map through the
+// template engine with the given context. Vars may reference other vars: each
+// pass makes the pass's resolved values available at `.var`, iterating to a
+// fixpoint (capped at maxVarPasses). The original templates are re-rendered
+// each pass, so already-resolved text is never double-processed. Non-string
+// values pass through.
 func renderVars(vars map[string]any, data map[string]any) (map[string]any, error) {
 	if len(vars) == 0 {
 		return map[string]any{}, nil
 	}
-	// Round-trip via JSON so we can reuse the entry walker. This preserves
-	// the structure exactly and handles nested maps/slices of strings.
+	// Round-trip via JSON so we can reuse the entry walker.
 	raw, err := json.Marshal(vars)
 	if err != nil {
 		return nil, err

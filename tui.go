@@ -15,8 +15,7 @@ import (
 	"github.com/wow-look-at-my/tml/sema"
 )
 
-// The download TUI is a tml.Live region pinned to the bottom of the screen:
-// the counts, the running step, a row per in-flight transfer.
+// The download TUI is a tml.Live region pinned to the bottom of the screen.
 
 // Cursor controls for the watch painter.
 const (
@@ -174,7 +173,7 @@ func percentText(fraction float64) string {
 }
 
 // sizesText renders "downloaded / total". A total that is only a floor — some
-// download in the tally never reported a length — is marked with "+" rather
+// download in the tally never reported a length. It is marked with "+" rather
 // than presented as the finish line.
 func sizesText(p itemProgress) string {
 	if p.Waiting > 0 {

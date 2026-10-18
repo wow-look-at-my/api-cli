@@ -43,8 +43,7 @@ func TestCwd_CaptureExecHonoursDir(t *testing.T) {
 }
 
 func TestCwd_EmptyMeansProcessCwd(t *testing.T) {
-	// An empty cwd argument should leave cmd.Dir untouched, i.e. the child
-	// runs in the calling process's working directory.
+	// An empty cwd argument should leave cmd.Dir untouched.
 	captureExecStreams(t)
 	c := &Cmd{Shell: true, Template: `pwd`}
 	out, code := captureExec(c, "", "", map[string]any{})
@@ -186,8 +185,7 @@ func TestIntegration_StepCwdOverridesLeaf(t *testing.T) {
 				Cwd:     stepDir,
 				Command: &Cmd{Shell: true, Template: `cat marker`},
 			}},
-			// The leaf's own command runs in leafDir; its output proves the
-			// step's override was scoped to the step.
+			// The leaf's own command runs in leafDir; its output proves the step's override was scoped to the step.
 			Command: &Cmd{Shell: true, Template: `printf '%s|%s' {{.result.where}} $(cat marker)`},
 		}},
 	}
@@ -225,10 +223,7 @@ func TestIntegration_CwdRenderErrorFails(t *testing.T) {
 			Command: &Cmd{Shell: true, Template: `true`},
 		}},
 	}
-	// A broken cwd template surfaces as a RunE error from cobra; our
-	// execCmdFull harness collapses any cobra-level error into exit 1.
-	// (The "render cwd: ..." text goes through cobra's err writer, which the
-	// test harness routes to io.Discard.)
+	// A broken cwd template surfaces as a RunE error from cobra.
 	code, _, _ := execCmdFull(t, cfg, "x")
 	assert.Equal(t, 1, code)
 }
@@ -247,8 +242,8 @@ func TestIntegration_CwdMissingDirFails(t *testing.T) {
 }
 
 func TestIntegration_EntryFieldStillForbiddenOnGroup(t *testing.T) {
-	// Sanity: cwd on a group is fine; entry is still leaf-only. Just confirming
-	// we didn't accidentally regress group validation.
+	// Sanity: cwd on a group is fine; entry is still leaf-only. confirming we
+	// didn't accidentally regress group validation.
 	cfg := &Config{
 		Name:    "t",
 		Command: &Cmd{Shell: true, Template: `true`},
