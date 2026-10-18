@@ -10,7 +10,6 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/wow-look-at-my/api-cli-spec v0.0.0
 	github.com/wow-look-at-my/api-dsl v0.0.0
-	github.com/wow-look-at-my/ascii-timeline v0.0.0
 	golang.org/x/term v0.43.0
 	golang.org/x/text v0.37.0
 )
