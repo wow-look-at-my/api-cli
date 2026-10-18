@@ -4,7 +4,7 @@ A declarative command-line alias system. You write an **XML** config that descri
 
 It is a *hybrid* tool. HTTP requests are first-class (`<run><request>`, with no `curl` or `jq` subprocess). The general shell and argv execution engine stays, so non-HTTP aliases (git, tar, ...) work as well.
 
-Two example configs ship in this repo:
+Example configs ship in this repo:
 
 - [`api.example.xml`](./api.example.xml) -- a minimal demo against `jsonplaceholder.typicode.com`.
 - [`samples/github/github.xml`](./samples/github/github.xml) -- a real, read-only wrapper for the GitHub REST API, with table and detail views. It trims the noise hard: `jq` drops each `*url` field, which cuts the response by 50-70%. See [GitHub example](#github-example) below.
@@ -59,7 +59,7 @@ Every leaf renders its templates against a data context:
 | `.rest`    | Passthrough leftovers (passthrough mode only).                               |
 | `.run`     | This invocation. `.run.tmpdir` is a scratch directory a `<download>` leaf gets, removed when the run ends. |
 
-A leaf runs what its closest `<run>` ancestor gives it, then presents the output. `<run>` comes in three forms.
+A leaf runs what its closest `<run>` ancestor gives it, then presents the output. `<run>` comes in multiple forms.
 
 - **A request** -- `<run><request>...</request></run>` makes an HTTP call. See [Requests](#requests).
 - **A shell command** -- `<run>echo hi {{.arg.x}}</run>` runs through `/bin/sh -c`.
@@ -180,7 +180,7 @@ The program gets the fully rendered request on top of the leaf's usual context. 
 | `.request.header_lines` | `["Accept: application/json", ...]`, for splatting. |
 
 - **The body goes to the program's stdin** unless the transport declares its own `<stdin>`. Stdin is explicit either way. A transport never inherits your terminal, so a program that reads stdin cannot hang and wait for one.
-- **A non-zero exit fails the request**, as a 4xx from the built-in client does. The program's stderr passes through untouched. The error also shows the start of its stdout, because that is often the error page.
+- **A non-zero exit fails the request**, as a 4xx from the built-in client does. The program's stderr passes through untouched. The error also shows the start of its stdout, because that is frequently the error page.
 - **Which transport runs**: the request's `transport=` attribute, then the registry's `default="true"` entry, then the built-in client. There is no override at run time. How a request reaches its endpoint is a property of that endpoint, not a user preference. The name `http` belongs to the built-in client, so `transport="http"` on one request opts that request out of a default transport. That is the public endpoint in an otherwise internal API.
 - `<cwd>` sets the program's working directory. A transport's `<run>` must be a command. It is the thing that performs a request. It cannot be one.
 
@@ -194,7 +194,7 @@ An empty `spread` contributes no argument at all. That makes it the way to write
 
 ## Downloads
 
-A step can work a URL out: parse it from a listing, sign it, or follow a redirect. It then hands the URL to a shared downloader in place of printing it. One queue serves the whole run. It fetches four files at a time by default. It also carries the auth the steps established.
+A step can work a URL out: parse it from a listing, sign it, or follow a redirect. It then hands the URL to a shared downloader in place of printing it. One queue serves the whole run. It fetches files at a time by default. It also carries the auth the steps established.
 
 ```xml
 <downloads concurrency="8" dir="./out"/>
@@ -235,13 +235,13 @@ A start is never announced. The slot already says that a transfer runs. A separa
 
 In a pipe there is no display. The `downloaded` lines stay on stderr, and the destination paths go to stdout, one per line, for whatever reads them next.
 
-The steps that feed a `<download>` report their progress too. On a terminal, the block holds one live line for the step that runs. It names the element, the poll attempt, and the `.status` field of the last response when the body has one. A retry shows as `retry 1/3`.
+The steps that feed a `<download>` report their progress too. On a terminal, the block holds one live line for the step that runs. It names the element, the poll try, and the `.status` field of the last response when the body has one. A retry shows as `retry 1/3`.
 
 ```
 jobs 7/20 JOB-7  attempt 4/30  status=pending
 ```
 
-Without the display (`--no-tui`, or stdout in a pipe), stderr gets one line per element when it finishes, such as `jobs 7/20 JOB-7: done`. A long poll also adds one line for every ten attempts that leave `until=` false. No line appears per attempt.
+Without the display (`--no-tui`, or stdout in a pipe), stderr gets one line per element when it finishes, such as `jobs 7/20 JOB-7: done`. A long poll also adds one line for every ten attempts that leave `until=` false. No line appears per try.
 
 - **`<download>` is the leaf's action.** It runs after the steps, and it stands in for the leaf's `<run>`. An inherited request therefore does not fire on the way.
 - **`when=`** is a Go-template predicate. A falsy render (empty, `false`, `0` or `no`) skips that declaration, so one leaf can carry a conditional set.
@@ -251,10 +251,10 @@ Without the display (`--no-tui`, or stdout in a pipe), stderr gets one line per 
 - **`<to>`** is a file path. It is a directory when it ends in `/`, when it names an existing directory, or when it serves several URLs. Leave it empty for the download directory, named by the URL or by the response's `Content-Disposition`.
 - **A relative `<to>` resolves under the download directory** (`dir=`, or `--download-dir`). An absolute one stands as it is.
 - **Auth rides along.** `<header>` and `<cookie>` render against the same context and take `<if test=>`. The cookies fold into one `Cookie` header.
-- **Mistakes fail before the first byte.** The plan step reports a `<url>` that renders to anything but an `http(s)` URL. It also reports two records whose `<to>` renders one file path. A mistyped path is therefore not a timeout minutes later, and a `<to>` that forgot to vary does not overwrite itself N times.
+- **Mistakes fail before the first byte.** The plan step reports a `<url>` that renders to anything but an `http(s)` URL. It also reports records whose `<to>` renders one file path. A mistyped path is therefore not a timeout minutes later, and a `<to>` that forgot to vary does not overwrite itself N times.
 - **Failures are loud.** A 4xx is the answer. A 5xx or a network fault retries at a fixed one-second cadence. A transfer that still fails names its URL on stderr and exits non-zero, while the other files carry on.
 - Bytes land in a `.part` sibling first, so an interrupted transfer never leaves a truncated file under the real name.
-- **No resume.** Every attempt starts at byte zero. A leftover `.part` is overwritten rather than continued.
+- **No resume.** Every try starts at byte zero. A leftover `.part` is overwritten rather than continued.
 
 ### Joining the parts back: `<join>`
 
@@ -270,7 +270,7 @@ An API that hands out a capture in numbered parts wants those parts back as one 
 ```
 
 - **`group=`** buckets the members. Every record that renders the same group becomes one output. Leave it out for a single bucket.
-- **`order=`** is the position inside the bucket. It is read as a **number**. A capture that numbers its parts 2, 3 and 10 therefore joins in that order, never as 10, 2, 3. A value that is not a number fails the run before the first byte. Without `order=`, the queue order stands in for one.
+- **`order=`** is the position inside the bucket. It is read as a **number**. A capture that numbers its parts 2, 3 and 10 therefore joins in that order, not as 10, 2, 3. A value that is not a number fails the run before the first byte. Without `order=`, the queue order stands in for one.
 - **`to=`** is the output file. It is a template over the same record, so one declaration writes one file per group. A relative path resolves under the download directory, exactly as `<to>` does.
 - **A group joins as soon as its own last part lands.** A run of many items writes its first output while the rest still transfer.
 - **The join streams.** A bucket larger than memory is fine.
@@ -294,15 +294,15 @@ A `<download>` reaches its URL as a `<request>` does. It goes over the built-in 
 
 - **Selection matches requests**: the `transport=` attribute, then the registry's `default="true"` entry, then the built-in client. A config whose endpoints all need the program therefore needs it for its files too, and says nothing extra. `transport="http"` opts one download back to the built-in client.
 - **The program gets the same `.request` context** -- `method`, `url`, `headers` and `header_lines` -- so one program serves requests and downloads alike. `method` is `GET`, and there is no body. A download adds `progress_fd`, the fd for [progress reports](#reporting-progress-from-a-transport).
-- **Its stdout streams into the file** rather than into a buffered response body. That is the one difference between the two paths. It is also why a file larger than memory is fine. The `.part` sibling, the byte count and the digest check are the same code on both.
-- **A non-zero exit fails the download, and the queue retries it.** A program owns its own exit codes. curl says 22 for a 404 and 7 for a refused connection. This path therefore cannot tell an answer from a hiccup, unlike the built-in client, and it lets the attempt limit end the transfer. Its stderr is emitted above the slots.
+- **Its stdout streams into the file** rather than into a buffered response body. That is the difference between the paths. It is also why a file larger than memory is fine. The `.part` sibling, the byte count and the digest check are the same code on both.
+- **A non-zero exit fails the download, and the queue retries it.** A program owns its own exit codes. curl says 22 for a 404 and 7 for a refused connection. This path therefore cannot tell an answer from a hiccup, unlike the built-in client, and it lets the try limit end the transfer. Its stderr is emitted above the slots.
 - The size is unknown at the start, because there is no `Content-Length`. That file's row drops the bar and the percentage. It reports the bytes and the rate. A file with no bytes yet reads `waiting mm:ss`, which is the time since its transfer started. A frame where no file reported a length drops both columns outright. The total is marked as a floor. The program can supply both numbers itself on the [progress fd](#reporting-progress-from-a-transport).
 
 ### Reporting progress from a transport
 
-A program that holds the body until it finishes writes nothing to stdout mid-transfer. On Linux, api-cli then measures it from outside: the row shows the bytes the program and its child processes have read, from `/proc/<pid>/io`. That count includes protocol overhead and the program's own startup reads. As a result, it is close but not exact. Other systems have no `/proc`. The row reads `waiting` until the file lands.
+A program that holds the body until it finishes writes nothing to stdout mid-transfer. On Linux, api-cli then measures it from outside: the row shows the bytes the program and its child processes read, from `/proc/<pid>/io`. That count includes protocol overhead and the program's own startup reads. As a result, it is close but not exact. Other systems have no `/proc`. The row reads `waiting` until the file lands.
 
-The progress fd gives the exact number on every system. Wire it up whenever the program you delegate to does not stream its output. A report replaces the `/proc` estimate for that transfer.
+The progress fd gives the exact number on every system. Wire it up when the program you delegate to does not stream its output. A report replaces the `/proc` estimate for that transfer.
 
 api-cli gives every download transport a pipe on file descriptor 3. The variable `API_CLI_PROGRESS_FD` names it in the program's environment, and `.request.progress_fd` names it in the templates. The program writes one JSON object per line:
 
@@ -313,7 +313,7 @@ api-cli gives every download transport a pipe on file descriptor 3. The variable
 ```
 
 - **`done`** is the bytes received so far, and **`total`** is the file's size. Each is optional. A line needs at least one. A report replaces the previous one. It never adds to it.
-- **Stdout is still the file.** The final byte count, the `.part` rename and the digest come from stdout alone. A report only drives the row while the transfer is open.
+- **Stdout is still the file.** The last byte count, the `.part` rename and the digest come from stdout alone. A report only drives the row while the transfer is open.
 - **A bad line fails the download.** An unknown key, a missing value or a negative number stops the transfer with an error that names the line. The queue does not retry it, because the same program sends the same line again.
 - **A program that never writes to the fd is fine.** The row falls back to the `/proc` estimate on Linux, and to the stdout count elsewhere.
 
@@ -360,7 +360,7 @@ Write a report at most a few times a second. The display repaints every 100 ms, 
 
 - `algo=` is `sha256` (the default), `sha512`, `sha1`, or `md5`.
 - The body is a template like any other. The digest therefore usually comes from the same manifest record as the URL, or from a step that fetched a `.sha256` file.
-- **A mismatch is final.** The bytes arrived intact, so a second fetch cannot change the digest. The run reports the expected value and the actual value, then exits non-zero.
+- **A mismatch is last.** The bytes arrived intact. A second fetch cannot change the digest. The run reports the expected value and the actual value, then exits non-zero.
 - A success names the algorithm that passed: `downloaded x.iso (6.0 MiB, sha256 ok)`. A check you cannot see happen is one you cannot trust.
 - **The digest must look like a digest.** A renamed manifest field renders as the template engine's placeholder. The plan step rejects that before it fetches anything, rather than leave the file unverified in silence. A `sha256sum` line (`<hex>  <name>`) is acceptable, in any capitalization.
 - **To make the check optional per record**, render the body empty for a record that carries no digest: `<hash><if test="sha256"><value name="sha256"/></if></hash>`.
@@ -394,7 +394,7 @@ The leaf's own `<run>` supplies the bytes. It may be a shell command, an argv co
 | `<cwd>` / `<stdin>` | Optional. The step's working directory, and its stdin when something other than the chunk should arrive. |
 
 - **`chunk=` takes a size.** A plain byte count (`4096`) or a unit: `b`, `k`, `kb`, `m`, `mb`, `g`, `gb`, in any capitalization. `4kb`, `64k` and `4mb` all work. It is required in byte mode. An absent, unreadable or zero size is a load error that names the attribute. A boundary the author did not mean shows up much later as missing or doubled bytes.
-- **A line longer than any buffer still arrives whole.** The chunker reads on until it reaches the newline. A final line with no newline is a chunk of its own.
+- **A line longer than any buffer still arrives whole.** The chunker reads on until it reaches the newline. A last line with no newline is a chunk of its own.
 - **The per-chunk step is how a stream is transformed.** It sees one chunk. A filter, a decoder, or a line marker therefore costs one chunk of memory rather than one source of memory. A step that exits non-zero fails the leaf with a non-zero exit and a message naming the chunk. The raw chunk is not emitted, because a stream that quietly drops a region reads as a shorter stream.
 - **The step can name where it is.** `.stream.index` is the chunk's number, starting at 1. `.stream.offset` is the byte count before it. `.stream.size` is its own byte count.
 - **Nothing is added.** The chunks concatenate to the source, byte for byte. Nothing is inserted between them, and no trailing newline is added. A binary source -- NUL bytes and invalid UTF-8 included -- comes back unchanged. The same declaration therefore carries a log, a PCM stream, or a video.
@@ -439,9 +439,11 @@ Automatic representation, by data shape:
 | array of scalars | `lines` | `json` |
 | scalar / non-JSON | `raw` | -- |
 
-A table column carries two spaces of gutter. A column wider than 50 columns carries three, because the eye loses a long run of prose against a two-space gap. The width that decides a column drop counts the same gutter.
+A table column carries spaces of gutter. A column wider than 50 columns carries three, because the eye loses a long run of prose against a two-space gap. The width that decides a column drop counts the same gutter.
 
-**A `table` or `markdown` cell is one line.** A row is a line. A column is a position on that line. So a run of whitespace that holds a newline or a tab becomes one space. A value with neither is untouched. The `list` sink keeps the whole value and indents its later lines under the first. `raw`, `json` and `csv` carry it exactly. Use `firstline="true"` or `truncate="N"` to show less.
+**A `table` or `markdown` cell is one line.** A row is a line. A column is a position on that line. So a run of whitespace that holds a newline or a tab becomes one space. A value with neither is untouched. The `list` sink keeps the whole value and indents its later lines under the first.
+
+`raw`, `json` and `csv` carry it exactly. Use `firstline="true"` or `truncate="N"` to show less.
 
 A map is one record unless some field reads `@key` or `@value`. That is the signal to walk it entry by entry. An array of scalars is `lines` only when the leaf declares no `<field>`. One declared field keeps the table shape.
 
@@ -458,13 +460,13 @@ A map is one record unless some field reads `@key` or `@value`. That is the sign
 
 `<fields over="path"/>` selects where the records live, in place of the whole body: `data.items`, a map for `@key` and `@value`, or `data.names` for scalars. The path reads against the body first (`items`), then against the whole context (`data.items`), so either spelling reaches the same records. A numeric step indexes a list (`pages.0.rows`). `footer=` adds a trailing summary line to the human sinks.
 
-**A path that names nothing is an error**, and so is one that names a scalar. The run exits non-zero and names the path. An empty table over exit 0 reads as an API that returned nothing, which is how a renamed field costs an afternoon. An empty **list** is a real answer. It stays quiet.
+**A path that names nothing is an error**, and so is one that names a scalar. The run exits non-zero and names the path. An empty table over the first exit reads as an API that returned nothing, which is how a renamed field costs an afternoon. An empty **list** is a real answer. It stays quiet.
 
 A request leaf with **no** `<fields>` at all prints its JSON body, as jq shaped it. Add `--as=table` to project nothing and to table the raw keys.
 
 ### More than one shape on one leaf
 
-A leaf can declare several `<fields>` blocks. Each block whose `when=` predicate holds renders, in document order, and a block with no `when=` always renders. That covers the two cases one static block cannot.
+A leaf can declare several `<fields>` blocks. Each block whose `when=` predicate holds renders, in document order, and a block with no `when=` always renders. That covers the cases one static block cannot.
 
 ```xml
 <command name="thing" description="List things, or show one.">
@@ -481,7 +483,7 @@ A leaf can declare several `<fields>` blocks. Each block whose `when=` predicate
 </command>
 ```
 
-The first case is an optional arg that changes the response shape. The second is a dashboard. One block reads the leaf body. A second block reads `.result.<step>`. Two tables then share the screen, with a blank line between them.
+The first case is an optional arg that changes the response shape. The second is a dashboard. One block reads the leaf body. A second block reads `.result.<step>`. Tables then share the screen, with a blank line between them.
 
 `when=` is a Go-template predicate over the format context. It reads `.data`, `.tty` and `.width`, plus the leaf context (`.arg`, `.flag`, `.var`, `.entry`, `.result`). A leaf whose blocks all sit out prints the raw body, exactly as a leaf with no `<fields>` does. `--as=<sink>` applies to every block that renders.
 
@@ -543,9 +545,11 @@ go1.25rc1  Jun 10, 2026   12044
 
 A frame is one whole run of the leaf: the steps, the entry, the request and the formatter. Nothing is cached between frames, so a `<var>`, a step result and the response are all fresh each time. The frame keeps the real terminal size. A `<fields>` table therefore stays a table under a watch, rather than falling back to the piped representation.
 
-The output of the leaf and its diagnostics both land in the frame. A failed run reports the failure in place. The watch then continues. Ctrl-C ends the watch, leaves the last frame on screen and exits 130. A frame taller than the terminal is clipped. The last row then says how many lines it dropped. Redirected output gets no repainting: the frames append, which makes `--watch 5s ... > log` a poll log.
+The output of the leaf and its diagnostics both land in the frame. A failed run reports the failure in place. The watch then continues. Ctrl-C ends the watch, leaves the last frame on screen and exits 130. A frame taller than the terminal is clipped. The last row then says how many lines it dropped.
 
-Two leaves refuse to repeat. A `<download>` leaf transfers a file one time. `--watch` on it is an error. A leaf with a `confirm` prompt needs `--yes`, because the prompt draws into the frame where nobody can answer it.
+Redirected output gets no repainting: the frames append, which makes `--watch 5s ... > log` a poll log.
+
+Leaves refuse to repeat. A `<download>` leaf transfers a file one time. `--watch` on it is an error. A leaf with a `confirm` prompt needs `--yes`, because the prompt draws into the frame where nobody can answer it.
 
 A config can make the repeat the default. `watch="5s"` on a `<command>` says the node runs on that interval unless the flag says otherwise. It takes the same values as the flag. The loader holds it to the same floor. It inherits like `confirm=`, so one attribute on a group covers every screen under it.
 
@@ -581,7 +585,7 @@ A config can make the repeat the default. `watch="5s"` on a `<command>` says the
 
 The component is an ordinary `.tml` file next to the config. `src` resolves against the config's own directory, and an `<Import>` inside it resolves against the component's directory.
 
-A `<prop>` fills one declared property, and it takes exactly one source:
+A `<prop>` fills one declared property. It takes exactly one source:
 
 | Form | Value |
 | --- | --- |
@@ -604,7 +608,7 @@ Every value crosses as text, and the component re-reads it as the type it declar
 
 `over=` reads the response body first and the whole context second, exactly as a `<fields>` projection does. That is how a step result reaches the screen: `over="result.releases"` is the list a `<step name="releases">` fetched.
 
-A screen needs a terminal. Piped, the leaf falls through to whatever else it declared, which is the raw body or a `<format>` view. `--as=<sink>` names a representation the user wants instead, so it wins and the leaf goes through `<fields>`. `--format=always` draws the screen anyway, at 80 by 24, which is how a screen is testable without a terminal. A leaf declares `<tml>` or `<fields>`, never both.
+A screen needs a terminal. Piped, the leaf falls through to whatever else it declared, which is the raw body or a `<format>` view. `--as=<sink>` names a representation the user wants instead, so it wins and the leaf goes through `<fields>`. `--format=always` draws the screen anyway, at 80 by 24, which is how a screen is testable without a terminal. A leaf declares `<tml>` or `<fields>`, not both.
 
 A one-shot frame lays out in a tall viewport rather than the terminal's, because it prints into a terminal that scrolls. A board of cards is therefore never cut off at the last row. The blank rows under the content are trimmed. Under a watch the screen IS the height. The program owns it.
 
@@ -762,7 +766,7 @@ A pattern has to be known before any value arrives, so `.arg` and `.flag` are em
 
 A leaf that sets `passthrough="true"` accepts arbitrary positional args, which is everything after `--` in the wrapper script. It then does its own minimal flag extraction.
 
-1. The parser recognizes a declared `<flag>` only, by name or by `short=`, with one or two leading dashes. Both `-o` and `--o` match.
+1. The parser recognizes a declared `<flag>` only, by name or by `short=`, with one or leading dashes. Both `-o` and `--o` match.
 2. It collects everything else into `.rest`, a `[]string`. That covers an unknown flag, its value, and a bare positional.
 3. An extracted flag does NOT appear in `.rest`, so `{{spread .rest}}` rebuilds the original command line minus the captured flags.
 4. A bare `--`, and everything after it, goes into `.rest` verbatim. The wrapped command can mean something by it.
@@ -843,7 +847,7 @@ The engine publishes these keys next to the named ones.
 | `.mock.file`   | The first input that resolved to something.                  |
 | `.mock.outputs` | Every path this call writes. `.mock.output` is the first.   |
 
-An `<input>` matches `.rest`, never `.mock.argv`. A declared `<flag>` is already pulled out of the leftovers, and reading it back off the command line defeats the declaration.
+An `<input>` matches `.rest`, not `.mock.argv`. A declared `<flag>` is already pulled out of the leftovers, and reading it back off the command line defeats the declaration.
 
 ### What an output writes
 
@@ -853,7 +857,7 @@ An `<input>` matches `.rest`, never `.mock.argv`. A declared `<flag>` is already
 - `over=` repeats the declaration per element of a list, exactly as a `<download over=>` does. One `<output>` therefore covers a compiler called with many sources.
 - `from=` copies an existing file, for a stand-in that has to parse downstream. A declaration never carries both `from=` and a body.
 - `mode=` is octal and defaults to `0644`. A linker stand-in wants `0755`.
-- A path that two records both render is an error. It names an `over=` whose path template forgot to vary.
+- A path that records both render is an error. It names an `over=` whose path template forgot to vary.
 
 ### What a record writes
 
@@ -881,7 +885,7 @@ An **inherited** `<run>` is not the leaf's own. It stays where it is, exactly as
 
 A leaf can declare `<steps>`, which are stages that run before the leaf's own run. Each step's output is captured and exposed at `.result.<name>`, for a later step and for the leaf's own `entry` and run. That gives you indirection, such as a name resolved to an ID and then used. It also gives you joins and fan-out pipelines.
 
-A step runs a command or a request, the same fork as `<run>`. A step that declares neither one inherits the leaf's effective run. Two chained calls against an inherited `<request>` therefore need nothing but a second `<entry>`.
+A step runs a command or a request, the same fork as `<run>`. A step that declares neither one inherits the leaf's effective run. Chained calls against an inherited `<request>` therefore need nothing but a second `<entry>`.
 
 ```xml
 <command name="user-posts" description="List posts for a user looked up by username.">
@@ -913,7 +917,7 @@ Mix the two freely. A `<step><run>` can be a shell command while the leaf makes 
 
 ### One guard for a whole subtree
 
-`<preconditions>` is the one setting that accumulates instead of overriding. Declare it on `<config>` and every run in the tree carries it. Declare it on a group node and its subtree carries it.
+`<preconditions>` is the setting that accumulates instead of overriding. Declare it on `<config>` and every run in the tree carries it. Declare it on a group node and its subtree carries it.
 
 ```xml
 <config name="github">
@@ -968,10 +972,10 @@ An API that answers `status: pending` needs a poll, not a call. A step with `unt
 ```
 
 - **The predicate sees the last response**, with its keys promoted to the top level. An async job's own `status` field is therefore `.status`. The whole body stays at `.body`, and the rest of the run context is there too.
-- **`.result.<name>` is the body that satisfied the predicate**, never one of the answers before it.
+- **`.result.<name>` is the body that satisfied the predicate**, not one of the answers before it.
 - **`interval=`** is a duration such as `500ms` or `2s`. It defaults to one second, and it never grows: a slow job is not a reason to wait longer and longer for it.
 - **`attempts=`** caps the poll at 60 by default. A poll that runs out fails the run and prints the last response. The reason is therefore the body itself rather than a bare timeout.
-- **A non-zero exit ends the poll at once**, after the step's `retries=`. A job that reports a failure has answered, and asking again cannot change it.
+- **A non-zero exit ends the poll at once**, after the step's `retries=`. A job that reports a failure answered, and asking again cannot change it.
 - **`over=` and `until=` compose.** A repeated step polls each element in turn, which is how one invocation lists N items whose listings are all jobs.
 
 ### Retrying a step: `retries=` and `on-error=`
@@ -987,7 +991,7 @@ A flaky endpoint needs a second try, not a shell loop. `retries="N"` runs a fail
 - **A failure is any failed run.** A command fails on a non-zero exit. A request fails on an HTTP error status or a network fault. It also fails on a `<transport>` that exits non-zero, or a body that is not JSON under `jq=`.
 - **The retries run one second apart, at a fixed cadence.** The delay never grows. The download queue uses the same delay.
 - **The default is `0`**, which fails at once. A negative value is a load error.
-- **A poll retries each attempt.** A retried attempt does not use up an `attempts=` slot. A poll that runs out of attempts is final, and nothing retries it.
+- **A poll retries each try.** A retried try does not use up an `attempts=` slot. A poll that runs out of attempts is last, and nothing retries it.
 - **With `over=`, each element gets its own retries.**
 
 `on-error=` decides what a repeated step does with an element that still fails. It takes `fail` (the default) or `skip`. It needs `over=`. On a step without `over=`, it is a load error.
@@ -1002,7 +1006,7 @@ jobs: 2 of 20 items skipped: JOB-3, JOB-11
 
 ## Legacy formats and views
 
-The older explicit `<format>` and `<view>` system stays next to `<fields>`, for a case that needs full control of the rendered template. PowerShell's `.format.ps1xml` is its ancestor. A leaf uses `<fields>` *or* `<format>`, never both.
+The older explicit `<format>` and `<view>` system stays next to `<fields>`, for a case that needs full control of the rendered template. PowerShell's `.format.ps1xml` is its ancestor. A leaf uses `<fields>` *or* `<format>`, not both.
 
 ```xml
 <formats>
@@ -1112,7 +1116,9 @@ Each row is something the grammar does not do, and the shape to write instead. E
 
 ## Config schema
 
-The grammar is an XSD that [api-cli-spec](https://github.com/wow-look-at-my/api-cli-spec) owns, and `api-cli docs schema` prints it. Write it out and check a config against it with [xml-validator](https://github.com/wow-look-at-my/xml-validator): `api-cli docs schema > api.xsd && xml-validator --schema api.xsd ./api.xml`. The test suite checks every config this repo ships that way. This repo keeps no copy of the schema. The loader stays authoritative at run time. It enforces the rules a schema cannot state. One example is the rule that a leaf needs a run, its own or an ancestor's. api-cli-spec lists all of those rules.
+The grammar is an XSD that [api-cli-spec](https://github.com/wow-look-at-my/api-cli-spec) owns, and `api-cli docs schema` prints it. Write it out and check a config against it with [xml-validator](https://github.com/wow-look-at-my/xml-validator): `api-cli docs schema > api.xsd && xml-validator --schema api.xsd ./api.xml`. The test suite checks every config this repo ships that way. This repo keeps no copy of the schema. The loader stays authoritative at run time. It enforces the rules a schema cannot state.
+
+One example is the rule that a leaf needs a run, its own or an ancestor's. api-cli-spec lists all of those rules.
 
 ### Top-level elements
 
@@ -1197,7 +1203,7 @@ One predicate covers both cases. `{{ .arg.id }}` is truthy when the arg is prese
 | `--download-dir <path>` | | `.`     | Base directory for `<download>` destinations. |
 | `--no-tui`        |       | false   | Report download progress as plain lines instead of drawing the display. |
 
-Two env vars apply, at a lower precedence than the flags. Any value of `NO_FORMAT` turns formatting off. `API_CLI_FORMAT` takes `raw`, `auto` or `always`.
+Env vars apply, at a lower precedence than the flags. Any value of `NO_FORMAT` turns formatting off. `API_CLI_FORMAT` takes `raw`, `auto` or `always`.
 
 ## CORS levels
 
@@ -1254,7 +1260,7 @@ source <(./api-cli completion bash)
 - **Subcommands**: `user get|repos|orgs`, `repo get|issues|issue|prs|pr|pr-diff|pr-comments|releases|release|commits|commit|branches|tags|contents|readme|languages|topics`, `org get|members|repos`, `search repos|code|issues|users`, `rate-limit`.
 - **Token-aware**: picks up `$GITHUB_TOKEN` / `$GH_TOKEN` automatically (5000 vs 60 req/hr).
 - **Enterprise-ready**: set `$GITHUB_API_URL` for GitHub Enterprise Server.
-- **Noise stripping**: each response goes through an embedded `jq` `walk`. It drops `*url` links, `node_id`s, `reactions`, `permissions`, duplicate counts and more. That often cuts about 80% of the bytes. `GITHUB_RAW=1` opts out.
+- **Noise stripping**: each response goes through an embedded `jq` `walk`. It drops `*url` links, `node_id`s, `reactions`, `permissions`, duplicate counts and more. That frequently cuts about 80% of the bytes. `GITHUB_RAW=1` opts out.
 - **Fields views**: list endpoints become tables, single objects become `Label: value` lists, automatically by data shape.
 
 ```sh
