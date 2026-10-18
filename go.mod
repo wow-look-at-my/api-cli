@@ -1,6 +1,6 @@
 module github.com/wow-look-at-my/api-cli
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
@@ -21,6 +21,8 @@ require (
 	github.com/spf13/pflag v1.0.9
 	github.com/wow-look-at-my/tml v0.0.0
 )
+
+require github.com/wow-look-at-my/ansi-optimizer v0.0.0 // indirect
 
 require (
 	charm.land/lipgloss/v2 v2.0.6 // indirect

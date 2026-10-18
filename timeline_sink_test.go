@@ -25,7 +25,7 @@ func TestTimeline_ExprAndDefaultApply(t *testing.T) {
 	f := &Fields{List: []Field{
 		{Name: "label", Expr: "{{.d}} milestone"},
 		{Name: "date", Path: "d"},
-		{Name: "color", Default: "magenta"},
+		{Name: "color", Path: "hue", Default: "magenta"},
 	}}
 	out, err := renderFields(f, parsed, map[string]any{"data": parsed}, "timeline", 0)
 	require.NoError(t, err)
