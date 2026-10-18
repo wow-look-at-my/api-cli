@@ -491,7 +491,7 @@ The first case is an optional arg that changes the response shape. The second is
 
 ### Timeline
 
-`--as=timeline` renders the records as a horizontal ASCII timeline with annotations. It runs the [`ascii-timeline`](https://github.com/wow-look-at-my/ascii-timeline) executable, which must be on `PATH` (install the apt or brew package `ascii-timeline`). Without it the run fails with an error that says so. Each record becomes one event, and the **field name** selects what that field contributes.
+`--as=timeline` renders the records as a horizontal ASCII timeline with annotations. It runs the [`ascii-timeline`](https://github.com/wow-look-at-my/ascii-timeline) executable, which must be on `PATH`. The apt and brew packages of api-cli depend on it, so they install it too. Without it the run fails with an error that says so. Each record becomes one event, and the **field name** selects what that field contributes.
 
 | Field name    | Event role                                              |
 |---------------|---------------------------------------------------------|
