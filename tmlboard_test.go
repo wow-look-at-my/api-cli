@@ -15,8 +15,9 @@ import (
 	"github.com/wow-look-at-my/tml/sema"
 )
 
-// The build-board case: a list call, a single call per element for its log,
-// and a single card per build carrying attributes plus the tail of that log.
+// The build-board case: a list call, a single call per element for its log.
+// This also covers a single card per build carrying attributes plus the tail
+// of that log.
 //
 // Every server here closes through t.Cleanup rather than a defer, so it
 // outlives the swapped client that points at it. A defer closes it and the
@@ -61,7 +62,7 @@ func writeBoardComponent(t *testing.T) string {
 }
 
 // fakeCI answers a list call and a per-build detail call, in the shape a CI
-// server takes: the list names the runs, and the detail carries the log as a
+// server takes: the list names the runs. The detail carries the log as a
 // single entry per stage.
 func fakeCI(t *testing.T, calls *[]string) *httptest.Server {
 	t.Helper()
@@ -135,8 +136,7 @@ func TestBuildBoard_OneCardPerBuildWithItsOwnLog(t *testing.T) {
 	code, out, errOut := execCmdFull(t, cfg, "builds", "--format=always")
 	require.Equal(t, 0, code, errOut)
 
-	// The list a single time, then a single detail call per element in the
-	// source order, then the leaf's own call.
+	// The list a single time, then a single detail call per element in the source order, then the leaf's own call.
 	require.Len(t, calls, 4)
 	assert.Contains(t, calls[0], "/list")
 	assert.Contains(t, calls[1], `{"id":"api"}`)

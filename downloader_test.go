@@ -194,8 +194,7 @@ func TestDownloadQueue_VerifiesEveryAlgorithm(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(body)
 	}))
-	// Cleanup, not defer: the subtests below run in parallel, so they start
-	// after this function returns and a deferred Close beats them to it.
+	// Cleanup, not defer: the subtests below run in parallel.
 	t.Cleanup(srv.Close)
 
 	dir := t.TempDir()

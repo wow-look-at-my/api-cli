@@ -268,9 +268,8 @@ func TestWithCORS_Enabled_PreflightForbidden(t *testing.T) {
 // No-Origin requests (server-to-server) --------------------------------------
 
 func TestWithCORS_NoOrigin_AlwaysPassesThrough(t *testing.T) {
-	// Requests with no Origin header (server-to-server, curl, MCP SDKs)
-	// pass through unconditionally and get no CORS headers — they don't
-	// need any.
+	// Requests with no Origin header (server-to-server, curl, MCP SDKs) pass
+	// through unconditionally and get no CORS headers — they don't need any.
 	for _, level := range []CorsLevel{CorsDisabled, CorsPermissive, CorsStrict, CorsEnabled} {
 		h := withCORS(okHandler(), level, "127.0.0.1:8080")
 		rec := httptest.NewRecorder()

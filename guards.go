@@ -1,8 +1,7 @@
 package main
 
 // The pieces a config guards its inputs with: the path-segment rule, and the
-// load-time resolution that lets a pattern= name a <var> instead of repeating a
-// regular expression.
+// load-time resolution that lets a pattern= name.
 
 import (
 	"fmt"
@@ -12,30 +11,24 @@ import (
 )
 
 // A path segment is a single component of a path: unreserved characters only,
-// and never "." or "..". A value that matches can neither split a path nor climb
-// out of it, which is the guard a traversal argument needs.
+// and never "." or "..".
 const (
 	segmentChars = `A-Za-z0-9._~-`
 	segmentSafe  = `A-Za-z0-9_~-` // the same set without the dot
 )
 
-// segmentPatternText spells that rule as an anchored RE2 expression. RE2 has no
-// lookahead, so the ban on "." and ".." becomes a split by length: a lone
-// character that is not a dot, a pair that is not both dots, and any longer run
-// of the set.
+// segmentPatternText spells that rule as an anchored RE2 expression.
 var segmentPatternText = `^(?:[` + segmentSafe + `]|[` + segmentSafe + `][` + segmentChars + `]|\.[` + segmentSafe + `]|[` + segmentChars + `]{3,})$`
 
 var segmentRe = regexp.MustCompile(segmentPatternText)
 
-// segmentPattern hands that expression to a template, so a pattern= states the
-// rule by name and no config carries a copy of the regular expression.
+// segmentPattern hands that expression to a template, so a pattern= states the rule by name and no config carries a copy of the regular expression.
 func segmentPattern() string { return segmentPatternText }
 
-// safeSegments is the same rule as a predicate, for a <precondition> or an <if>.
-// It reads several values, and a value that is a list contributes each element.
-// An empty value is an absent value, and an absent value has nothing to check. A
-// guard written over a whole tree therefore stays quiet on a leaf that declares
-// no such arg.
+// safeSegments is the same rule as a predicate, for a <precondition> or an
+// <if>. It reads several values, and a value that is a list contributes each
+// element. An empty value is an absent value, and an absent value has nothing
+// to check.
 func safeSegments(values ...any) bool {
 	for _, v := range values {
 		if list, ok := asList(v); ok {

@@ -14,16 +14,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// A frame is a single whole run of the leaf -- steps, entry, request and
-// formatter -- captured into a buffer instead of the terminal, then painted
-// over the frame before it.
-//
-// The repaint uses the same ANSI sequences as the download display. It needs no
-// terminal library, because a frame is a fixed-height block of plain lines.
+// A frame is a single whole run of the leaf -- steps, entry, request and formatter -- captured into a buffer instead of the terminal.
 
-// watchMinInterval is the floor on a watch interval. A shorter interval
-// repaints faster than a terminal can draw, and it hammers whatever the leaf
-// calls.
+// watchMinInterval is the floor on a watch interval.
 const watchMinInterval = 100 * time.Millisecond
 
 // parseWatchInterval reads an interval: a Go duration, or a plain number of
@@ -82,7 +75,7 @@ func watchInterval(c *cobra.Command, configured string) (time.Duration, bool, er
 // title heads each frame, next to the interval and the time of the frame.
 //
 // The leaf writes to the terminal through execStdout and execStderr. A frame
-// swaps both for a single buffer, so a step's diagnostic lands in the frame
+// swaps both for a single buffer. A step's diagnostic lands in the frame
 // beside the output it explains rather than scrolling the display away.
 func runWatch(title string, every time.Duration, body func() error) error {
 	tty, width, height := stdoutSize()
@@ -99,8 +92,7 @@ func runWatch(title string, every time.Duration, body func() error) error {
 	}()
 
 	if tty {
-		// The frames are the display. Formatting decides on the real terminal
-		// behind the buffer, not on the buffer.
+		// The frames are the display. Formatting decides on the real terminal behind the buffer, not on the buffer.
 		ttyOverride = &termSize{width: width, height: height}
 		defer func() { ttyOverride = nil }()
 		fmt.Fprint(out, ansiHideCur)
@@ -157,7 +149,7 @@ type watchPainter struct {
 
 // paint draws the header, a rule, and the body. The block is clipped to the
 // terminal: a wrapped line would break the count this repaint moves the cursor
-// by, and the frame would walk down the screen.
+// by. The frame would walk down the screen.
 func (p *watchPainter) paint(header, bodyText string) {
 	lines := p.frame(header, bodyText)
 	if !p.tty {

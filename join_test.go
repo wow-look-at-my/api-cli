@@ -68,7 +68,7 @@ func TestJoin_PartNeedsItsOwnFile(t *testing.T) {
 	assert.Contains(t, err.Error(), "a joined part needs its own <to>")
 }
 
-// A join orders by number, so a key that is not a single is a load-time
+// A join orders by number. A key that is not a single is a load-time
 // answer rather than a file concatenated in the wrong order.
 func TestJoin_OrderMustBeNumeric(t *testing.T) {
 	d := Download{

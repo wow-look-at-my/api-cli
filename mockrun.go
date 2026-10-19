@@ -14,13 +14,11 @@ import (
 
 var reservedMockNames = set.Of("argv", "prog", "cwd", "file", "output", "outputs")
 
-// defaultMockMode is the mode of a mock artifact. A build tool reads the
-// timestamp, so the bytes and the bits both only have to be plausible.
+// defaultMockMode is the mode of a mock artifact.
 const defaultMockMode fs.FileMode = 0o644
 
-// mockFile is a single planned write: the path rendered, the body decided, and
-// nothing touched on disk yet. Planning every output before writing any is what
-// lets a <record> name the files this call is about to produce.
+// mockFile is a single planned write: the path rendered, the body decided,
+// and nothing touched on disk yet.
 type mockFile struct {
 	path   string
 	body   string
@@ -33,9 +31,7 @@ type mockFile struct {
 // result at .mock. It runs before anything is written, because an output path
 // is usually derived from an input.
 func resolveMockInputs(m *Mock, prog string, raw []string, data map[string]any) error {
-	// An input matches the LEFTOVERS, because a declared <flag> was already
-	// pulled out of them and reading it back off the command line would defeat
-	// the declaration.
+	// An input matches the LEFTOVERS.
 	rest, _ := asList(data["rest"])
 	leftovers := make([]string, 0, len(rest))
 	for _, el := range rest {
@@ -48,8 +44,6 @@ func resolveMockInputs(m *Mock, prog string, raw []string, data map[string]any) 
 	}
 
 	// .mock.argv is the WHOLE command line, with the program name at the front.
-	// A record is a compile_commands.json entry, and a consumer replays those
-	// arguments: the leftovers alone are missing every flag the leaf declared.
 	argv := make([]string, 0, len(raw)+1)
 	if prog != "" {
 		argv = append(argv, prog)
@@ -106,8 +100,7 @@ func resolveMockInputs(m *Mock, prog string, raw []string, data map[string]any) 
 		}
 	}
 
-	// .mock.file is the earliest input that resolved to something, which is
-	// the source file in every compile-tool shape this exists for.
+	// .mock.file is the earliest input that resolved to something.
 	mock["file"] = first
 	logVerbose("mock: inputs %s", jsonCompact(mock))
 	return nil
@@ -241,9 +234,7 @@ func writeMockBody(f mockFile) error {
 	if _, err := io.WriteString(fh, f.body); err != nil {
 		return fmt.Errorf("mock: %s: %w", f.path, err)
 	}
-	// A file that already existed keeps its old mode through O_CREATE, and a
-	// linker stand-in that produces a non-executable binary breaks the next
-	// step of the build.
+	// A file that already existed keeps.
 	if err := os.Chmod(f.path, f.mode); err != nil {
 		return fmt.Errorf("mock: %s: %w", f.path, err)
 	}
@@ -279,7 +270,7 @@ func copyMockFile(f mockFile) error {
 }
 
 // appendMockRecords writes a single line per <record>. The append is the whole
-// point: every tool in a parallel build points at a single file, and each call
+// point: every tool in a parallel build points at a single file. Each call
 // adds its own line without reading what is already there.
 func appendMockRecords(m *Mock, data map[string]any) error {
 	for i := range m.Records {
@@ -336,9 +327,8 @@ func runMock(m *Mock, prog string, raw []string, data map[string]any, out, errw 
 	if err != nil {
 		return 1, err
 	}
-	// The records land before the run: a wrapper around a real tool must log
-	// the call even when the tool that follows fails, because a failed compile
-	// is exactly the compile somebody wants the command line of.
+	// The records land before the run: a wrapper around a real tool must log the
+	// call even when the tool that follows fails.
 	if err := appendMockRecords(m, data); err != nil {
 		return 1, err
 	}
@@ -399,7 +389,7 @@ func mockWhen(when string, data map[string]any) (bool, error) {
 }
 
 // mockRecordsOf expands an over= into a single context per element, the same
-// contract a <download over=> carries: the element's keys are promoted and the
+// contract a <download over=> carries. The element's keys are promoted and the
 // element itself is .item.
 func mockRecordsOf(over string, data map[string]any, idx int) ([]map[string]any, error) {
 	if over == "" {

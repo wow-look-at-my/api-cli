@@ -1,11 +1,7 @@
 package main
 
-// A runnable parent: a node that has subcommands and also executes, so a single
-// name serves `tool [id]` and `tool sub`. Cobra decides between both by reading
-// the earliest positional as a subcommand name, so the split is only
-// unambiguous when no argument value can spell a subcommand. That is what
-// `pattern=` buys: the loader rejects a pattern that matches any of the node's
-// own subcommand names, and the run rejects a value the pattern does not match.
+// A runnable parent: a node that has subcommands and also executes, so a
+// single name serves `tool [id]` and `tool sub`.
 
 import (
 	"fmt"
@@ -41,9 +37,7 @@ func validateRunnable(c *Command, where string) error {
 		return fmt.Errorf("%s: runnable= and passthrough= cannot both hold: passthrough takes every argument, which leaves nothing to name a subcommand", where)
 	}
 
-	// The node's own subcommands in declaration order, then the names cobra
-	// owns. A config author reads the earliest match, so it must be the name
-	// they are most likely to have meant.
+	// The node's own subcommands in declaration order, then the names cobra owns.
 	names := make([]string, 0, len(c.Commands)+reservedCommandNames.Len())
 	for _, sub := range c.Commands {
 		names = append(names, sub.Name)

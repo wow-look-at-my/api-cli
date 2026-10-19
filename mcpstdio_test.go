@@ -56,7 +56,7 @@ func TestMCPStdio_AnswersTheLastCallWhenStdinClosesAtOnce(t *testing.T) {
 	assert.Contains(t, out, "pong")
 }
 
-// Several calls back to back land the same way, so the hold-back waits for the
+// Several calls back to back land the same way. The hold-back waits for the
 // whole batch rather than for whichever answer happens to be earliest.
 func TestMCPStdio_AnswersEveryCallWhenStdinClosesAtOnce(t *testing.T) {
 	cfg, err := parseConfigXML([]byte(`<config name="t">

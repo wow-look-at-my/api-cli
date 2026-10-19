@@ -11,8 +11,8 @@ import (
 // and lists by index. The DSL's own lookup walks maps alone, which a body that
 // nests lists outgrows.
 //
-// found is false when a step names nothing, which a JSON null does not do: a
-// caller that must fail loud needs to tell them apart.
+// found is false when a step names nothing, which a JSON null does not do.
+// This is a caller that must fail loud needs to tell them apart.
 func lookupData(data any, path string) (value any, found bool) {
 	cur := data
 	for _, seg := range strings.Split(path, ".") {
@@ -141,7 +141,7 @@ func resolveRecords(f *Fields, parsed any, ctx map[string]any) ([]record, string
 	}
 }
 
-// fieldsWalkMap reports whether a field reads @key or @value, which asks for a
+// fieldsWalkMap reports whether a field reads @key or @value. This asks for a
 // map to be walked entry by entry instead of read as a lone record.
 func fieldsWalkMap(f *Fields) bool {
 	for _, fld := range f.List {

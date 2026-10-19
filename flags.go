@@ -1,8 +1,6 @@
 package main
 
-// Declared <arg> and <flag> elements, on both sides of a run: registering them
-// on the cobra command, and collecting the invocation's values back out into
-// the .arg / .flag halves of the template context.
+// Declared <arg> and <flag> elements, on both sides of a run.
 
 import (
 	"fmt"
@@ -93,9 +91,8 @@ func registerFlag(cmd *cobra.Command, f Flag) {
 	case "bool":
 		def, _ := f.Default.(bool)
 		cmd.Flags().BoolP(f.Name, f.Short, def, f.Description)
-		// Default-true bool: register a hidden --no-NAME companion that flips
-		// the flag back to false. Lets users say `--no-verbose` instead of the
-		// awkward `--verbose=false`.
+		// Default-true bool: register a hidden --no-NAME companion that flips the
+		// flag back to false.
 		if def {
 			neg := "no-" + f.Name
 			cmd.Flags().Bool(neg, false, "Disable --"+f.Name+".")
@@ -119,7 +116,6 @@ func registerFlag(cmd *cobra.Command, f Flag) {
 				}
 			}
 		}
-		// StringArray (not StringSlice) so commas in values are preserved.
 		cmd.Flags().StringArrayP(f.Name, f.Short, def, f.Description)
 	}
 	if f.Required {
@@ -150,10 +146,10 @@ func registerConflicts(cmd *cobra.Command, flags []Flag) {
 
 // gatherArgs builds the .arg sub-map by converting positional args to their
 // declared types. A variadic arg (always last) collects all remaining values
-// into a typed slice; an unsupplied optional variadic arg yields an empty
+// into a typed slice. An unsupplied optional variadic arg yields an empty
 // slice so templates can range over it without nil checks.
 //
-// A template that reads it therefore sees a string, which is what a helper like
+// A template that reads it therefore sees a string. This is what a helper like
 // urlpath needs, instead of the nil that missingkey=empty renders as "<no
 // value>".
 func gatherArgs(node Command, args []string) (map[string]any, error) {

@@ -199,7 +199,7 @@ func TestStep_RejectsBadRetriesAndOnError(t *testing.T) {
 	}
 }
 
-// The predicate reads the body it just got, and the whole body stays reachable.
+// The predicate reads the body it got, and the whole body stays reachable.
 func TestPoll_UntilSeesTheBodyAndTheRunContext(t *testing.T) {
 	noPollSleep(t)
 	srv := jobServer(t, 2)

@@ -2,12 +2,7 @@ package main
 
 import apidsl "github.com/wow-look-at-my/api-dsl"
 
-// The XML-with-placeholders language lives in api-dsl. This file is the local
-// boundary: it gives the shared API the names the rest of this package calls,
-// so the import stays in a single place and a call site stays short.
-//
-// A single shape differs from a plain rename: the element name is the
-// method Name(), never a field.
+// The XML-with-placeholders language lives in api-dsl.
 type xnode = apidsl.Node
 
 var (
