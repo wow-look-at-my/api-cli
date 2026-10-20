@@ -194,7 +194,7 @@ func TestMcpExecLeaf_JQSeesFlags(t *testing.T) {
 	}
 }
 
-// --- vars see this invocation's flags, not jq ---
+// vars see this invocation's flags, not jq
 
 func TestIntegration_VarSeesFlag(t *testing.T) {
 	cfg := &Config{

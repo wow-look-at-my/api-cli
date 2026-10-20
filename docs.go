@@ -1,15 +1,43 @@
 package main
 
 import (
-	_ "embed"
+	"embed"
 	"fmt"
+	"io/fs"
+	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 	spec "github.com/wow-look-at-my/api-cli-spec"
 )
 
 //go:embed README.md
-var readmeDoc string
+var readmeText string
+
+//go:embed docs/*.md
+var docPages embed.FS
+
+// readmeDoc is the README followed by every page under docs/.
+var readmeDoc = joinDocs(readmeText, docPages)
+
+func joinDocs(readme string, pages fs.FS) string {
+	names, err := fs.Glob(pages, "docs/*.md")
+	if err != nil {
+		panic(err)
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	b.WriteString(readme)
+	for _, name := range names {
+		body, err := fs.ReadFile(pages, name)
+		if err != nil {
+			panic(err)
+		}
+		b.WriteString("\n")
+		b.Write(body)
+	}
+	return b.String()
+}
 
 // The grammar comes from the specification module.
 var schemaDoc = spec.Schema

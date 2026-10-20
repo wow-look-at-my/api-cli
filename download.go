@@ -54,7 +54,8 @@ type Download struct {
 	Transport string   `json:"transport,omitempty"` // registry name; empty means the config default
 }
 
-// hashAlgos maps a <hash algo=> to the length of its digest in hex characters.
+// hashAlgos maps a <hash algo=> to the length of its digest in hex
+// characters.
 var hashAlgos = map[string]int{
 	"md5":    32,
 	"sha1":   40,
@@ -324,8 +325,8 @@ func planDownloads(dls []Download, data map[string]any, dir string) ([]downloadS
 				return nil, err
 			}
 			for _, spec := range specs {
-				// Records rendering a single file name is a <to> that forgot
-				// to vary — caught here rather than. This holds after N
+				// Records rendering a single file name is a <to>. That <to>
+				// forgot to vary — caught here rather than after N
 				// transfers have overwritten each other into a single file.
 				if !spec.DestIsDir {
 					if prev, dup := claimed[spec.Dest]; dup {
@@ -392,8 +393,8 @@ func planOne(d *Download, ctx map[string]any, dir string, idx int) ([]downloadSp
 		return nil, fmt.Errorf("download[%d]: <url> rendered empty", idx)
 	}
 	// Checked here rather than at the socket: a <url> built from a mistyped
-	// path renders to the template engine's placeholder, and "unsupported
-	// protocol scheme". Some seconds later does not point at the typo.
+	// path renders to the template engine's placeholder. Unsupported
+	// protocol scheme" some seconds later does not point at the typo.
 	for _, u := range urls {
 		if parsed, err := url.Parse(u); err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 			return nil, fmt.Errorf("download[%d]: <url> rendered %q, which is not an http(s) URL", idx, u)

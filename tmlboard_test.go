@@ -15,9 +15,9 @@ import (
 	"github.com/wow-look-at-my/tml/sema"
 )
 
-// The build-board case: a list call, a single call per element for its log,
-// and a single card per build. That build is carrying attributes plus the
-// tail of that log.
+// The build-board case: a list call, a single call per element for its log.
+// This also covers a single card per build carrying attributes plus the tail
+// of that log.
 //
 // Every server here closes through t.Cleanup rather than a defer, so it
 // outlives the swapped client that points at it. A defer closes it and the

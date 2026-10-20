@@ -50,9 +50,9 @@ func buildJoin(n *xnode) (*Join, error) {
 	return j, nil
 }
 
-// validateJoin checks a single declaration's join grammar. group=. It order=
-// only mean something to a join. A declaration that carries them without a
-// single is a config that expects a concatenation nobody asked for.
+// validateJoin checks a single declaration's join grammar. group= and order=
+// only mean something to a join, so a declaration that carries them without a
+// single is a config. That config expects a concatenation nobody asked for.
 func validateJoin(d *Download, where string) error {
 	if d.Join == nil {
 		if d.Group != "" || d.Order != "" {

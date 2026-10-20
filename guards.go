@@ -22,7 +22,7 @@ var segmentPatternText = `^(?:[` + segmentSafe + `]|[` + segmentSafe + `][` + se
 
 var segmentRe = regexp.MustCompile(segmentPatternText)
 
-// segmentPattern hands that expression to a template.
+// segmentPattern hands that expression to a template, so a pattern= states the rule by name and no config carries a copy of the regular expression.
 func segmentPattern() string { return segmentPatternText }
 
 // safeSegments is the same rule as a predicate, for a <precondition> or an

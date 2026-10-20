@@ -18,16 +18,18 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.repository.visibility == 'public' && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: wow-look-at-my/actions@ste-lint#latest
       # A dependency's generate directive wants generator binaries and the fork's GOROOT, which only go-toolchain's own CI has. Each dependency here ships the output already.
-      - uses: wow-look-at-my/go-toolchain@master
+      - uses: wow-look-at-my/go-toolchain@lkgb
         env:
           GOGENERATEDEPS: 'off'
         with:
           autorelease: 'true'
+          # --as=timeline runs the ascii-timeline executable, so apt and brew install it with api-cli.
+          depends: 'ascii-timeline'
       - name: Run samples/github/github.xml demo into the step summary
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

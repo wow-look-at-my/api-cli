@@ -135,8 +135,8 @@ func captureExecTo(c *Cmd, cwd, stdin string, data any, errOut io.Writer) (strin
 // flushed to execStdout and the remainder streams through. The caller treats
 // overflow == true as "skip formatting, output already streamed."
 //
-// returned string is empty — the caller MUST NOT format it; bytes are already
-// on stdout.
+// When overflowed is true the returned string is empty — the caller MUST
+// NOT format it; bytes are already on stdout.
 func captureExecCapped(c *Cmd, cwd, stdin string, data any, maxBytes int) (string, bool, int) {
 	if !c.Defined() {
 		fmt.Fprintln(execStderr, "error: command is empty")

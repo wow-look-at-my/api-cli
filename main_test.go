@@ -33,7 +33,6 @@ func TestRun_MissingConfigWithSubcommandReturns2(t *testing.T) {
 
 func TestRun_MissingConfigBareShowsHelp(t *testing.T) {
 	chdir(t, t.TempDir())
-	// Replay stdout so cobra's help goes somewhere we can inspect. cobra default writer which is os.Stdout.
 	prevStdout := os.Stdout
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
