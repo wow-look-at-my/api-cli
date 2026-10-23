@@ -340,7 +340,7 @@ func TestMCP_DownloadLeafWithNothingToDo(t *testing.T) {
 	assert.Contains(t, out, "render url")
 }
 
-//go:embed testdata/test-integration-download-hands-step-ur-ls-to-the-queue.xml
+//go:embed testdata/test-integration-download-hands-step-ur-ls-to-the-queue.xml.frag
 var testIntegration_DownloadHandsStepURLsToTheQueueXml string
 
 //go:embed testdata/test-integration-download-plan-error-stops-before-fetching.xml
@@ -349,7 +349,7 @@ var testIntegration_DownloadPlanErrorStopsBeforeFetchingXml string
 //go:embed testdata/test-integration-download-skipped-entirely-says-so.xml
 var testIntegration_DownloadSkippedEntirelySaysSoXml string
 
-//go:embed testdata/test-integration-download-leaf-ignores-an-inherited-run.xml
+//go:embed testdata/test-integration-download-leaf-ignores-an-inherited-run.xml.frag
 var testIntegration_DownloadLeafIgnoresAnInheritedRunXml string
 
 //go:embed testdata/test-integration-download-step-failure-skips-the-queue.xml

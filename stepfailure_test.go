@@ -136,5 +136,5 @@ func TestResponseStatus(t *testing.T) {
 	assert.Equal(t, "", responseStatus("text"))
 }
 
-//go:embed testdata/job-config.xml
+//go:embed testdata/job-config.xml.frag
 var jobConfigXml string

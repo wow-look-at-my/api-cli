@@ -206,7 +206,7 @@ func TestResolveArgv(t *testing.T) {
 	assert.ErrorContains(t, err, "argv command is empty")
 }
 
-//go:embed testdata/test-download-transport-streams-program-stdout-to-the-file.xml
+//go:embed testdata/test-download-transport-streams-program-stdout-to-the-file.xml.frag
 var testDownloadTransport_StreamsProgramStdoutToTheFileXml string
 
 //go:embed testdata/test-download-transport-program-sees-the-rendered-request.xml
