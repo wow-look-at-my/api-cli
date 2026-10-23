@@ -1,3 +1,4 @@
+<?xml version="1.1"?>
 <config name="x"><vars>
 		<var name="dash"><value name="flag.dry-run"/></var>
 		<var name="ifeq"><if test="flag.s" eq="">empty<else/>set</if></var>

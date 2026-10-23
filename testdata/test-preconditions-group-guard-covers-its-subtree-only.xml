@@ -1,3 +1,4 @@
+<?xml version="1.1"?>
 <config name="t">
 		<command name="guarded">
 			<preconditions><precondition>guarded is closed</precondition></preconditions>

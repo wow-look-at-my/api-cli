@@ -1,3 +1,4 @@
+<?xml version="1.1"?>
 <config name="x">
 		<formats><format name="u" input="json" when="{{.tty}}">
 			<view name="t" default="true">{{.data}}</view>

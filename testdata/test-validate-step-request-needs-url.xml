@@ -1,3 +1,4 @@
+<?xml version="1.1"?>
 <config name="x">
 	<command name="c">
 		<steps><step name="s"><run><request method="GET"><body>x</body></request></run></step></steps>

@@ -1,3 +1,4 @@
+<?xml version="1.1"?>
 <config name="j"><command name="pull">
 		<download group="{{ .id }}"><url>https://example.test/x</url><to>p</to></download>
 	</command></config>

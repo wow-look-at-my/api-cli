@@ -1,3 +1,4 @@
+<?xml version="1.1"?>
 <config name="dl"><command name="grab">
 		<download over="result.nothing"><url><value name="item"/></url></download>
 	</command></config>

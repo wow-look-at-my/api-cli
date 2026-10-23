@@ -1,3 +1,4 @@
+<?xml version="1.1"?>
 <config name="dl">
 		<vars><var name="token">sekrit</var></vars>
 		<transports>

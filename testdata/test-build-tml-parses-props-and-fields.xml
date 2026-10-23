@@ -1,3 +1,4 @@
+<?xml version="1.1"?>
 <config name="x">
 		<run><request><url>https://example.test</url></request></run>
 		<command name="dash">

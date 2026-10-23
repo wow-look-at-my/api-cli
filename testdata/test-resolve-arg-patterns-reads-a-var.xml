@@ -1,3 +1,4 @@
+<?xml version="1.1"?>
 <config name="t">
 		<vars><var name="segment">^[a-z]+$</var></vars>
 		<command name="show" description="s">
