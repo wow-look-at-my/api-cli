@@ -1,4 +1,3 @@
-<?xml version="1.1"?>
 <config name="t">
 		<command name="show" description="s">
 			<arg name="owner" pattern="{{ segmentPattern }}"/>

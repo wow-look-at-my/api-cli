@@ -1,4 +1,3 @@
-<?xml version="1.1"?>
 <config name="t">
 		<preconditions>
 			<precondition>{{ if not (safeSegments .arg.owner .arg.repo) }}owner and repo must each be one path segment{{ end }}</precondition>
