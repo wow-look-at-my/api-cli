@@ -137,7 +137,7 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 ## Tooling
 
 - `go-toolchain` runs `go mod tidy`, vet, all tests with coverage, and the build. **Always run `go-toolchain`, not a bare `go ...`.** Coverage minimum 80%.
-- CI is `.github/workflows/ci.yml`. The test` job runs `ste-lint` over the markdown, then go-toolchain, then the demo. The well-formedness check and the grammar check are both Go tests. The build names no `os` and no `arch`, so it produces one fat APE that autoreleases to buildhost.
+- CI is `.github/workflows/ci.yml`. The test job runs `ste-lint` over the markdown, then go-toolchain, then the demo. The well-formedness check and the grammar check are both Go tests. The build names no `os` and no `arch`, so it produces one fat APE that autoreleases to buildhost.
 - `ste-lint` (`wow-look-at-my/actions@ste-lint#latest`) checks every `*.md` file against the mechanical subset of ASD-STE100. One paragraph is one line, and a sentence caps at many words. A contraction, a semicolon, a comma splice or the word "would" fails the job.
 
 ## Cloudflare Workers port (`workers/`)
