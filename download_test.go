@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"os"
 	"path/filepath"
@@ -12,20 +14,7 @@ import (
 )
 
 func TestParseXML_Download(t *testing.T) {
-	cfg := mustParse(t, `<config name="x">
-		<downloads concurrency="8" retries="1" dir="./out"/>
-		<command name="get">
-			<download over="result.list.assets" when="{{.flag.save}}">
-				<url><value name="browser_download_url"/></url>
-				<to><value name="name"/></to>
-				<header name="Accept">application/octet-stream</header>
-				<cookie name="sid"><value name="var.session"/></cookie>
-				<if test="var.token">
-					<header name="Authorization">Bearer <value name="var.token"/></header>
-				</if>
-			</download>
-		</command>
-	</config>`)
+	cfg := mustParse(t, testParseXML_DownloadXml)
 
 	require.NotNil(t, cfg.Downloads)
 	assert.Equal(t, &Downloads{Concurrency: 8, Retries: 1, Dir: "./out", RetriesSet: true}, cfg.Downloads)
@@ -209,10 +198,7 @@ func TestPlanDownloads_MultiLineURLBecomesManyDownloads(t *testing.T) {
 }
 
 func TestParseXML_DownloadHash(t *testing.T) {
-	cfg := mustParse(t, `<config name="x"><command name="get">
-		<download><url>https://h/a</url><hash><value name="sha256"/></hash></download>
-		<download><url>https://h/b</url><hash algo="SHA512"><value name="d"/></hash></download>
-	</command></config>`)
+	cfg := mustParse(t, testParseXML_DownloadHashXml)
 
 	assert.Equal(t, "{{ .sha256 }}", cfg.Commands[0].Downloads[0].Hash)
 	assert.Equal(t, "sha256", cfg.Commands[0].Downloads[0].HashAlgo, "sha256 is the default")
@@ -220,9 +206,7 @@ func TestParseXML_DownloadHash(t *testing.T) {
 }
 
 func TestValidate_DownloadHashAlgo(t *testing.T) {
-	_, err := loadStr(t, `<config name="x"><command name="g">
-		<download><url>https://h/f</url><hash algo="crc32">abc</hash></download>
-	</command></config>`)
+	_, err := loadStr(t, testValidate_DownloadHashAlgoXml)
 	assert.ErrorContains(t, err, `<hash algo="crc32"> must be one of md5|sha1|sha256|sha512`)
 }
 
@@ -437,3 +421,12 @@ func TestDownloadDest_TrailingSeparator(t *testing.T) {
 	assert.Equal(t, filepath.Join("dl", "sub"), dest)
 	assert.True(t, isDir)
 }
+
+//go:embed testdata/test-parse-xml-download.xml
+var testParseXML_DownloadXml string
+
+//go:embed testdata/test-parse-xml-download-hash.xml
+var testParseXML_DownloadHashXml string
+
+//go:embed testdata/test-validate-download-hash-algo.xml
+var testValidate_DownloadHashAlgoXml string

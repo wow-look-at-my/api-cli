@@ -1,0 +1,4 @@
+[
+		{"name":"README.md","path":"README.md","sha":"aaa111","size":4096,"type":"file","download_url":"https://example.invalid/README.md"},
+		{"name":"llama","path":"llama","sha":"bbb222","size":0,"type":"dir","download_url":null}
+	]

@@ -1,0 +1,8 @@
+<config name="t">
+	<run>printf 'hi'</run>
+	<command name="log">
+		<stream mode="lines">
+			<run>cat</run>
+		</stream>
+	</command>
+</config>

@@ -64,6 +64,7 @@ Do not add a new third-party dependency without a clear cause.
 | `api.example.xml`              | Reference config (jsonplaceholder); loaded by `TestExampleConfigsLoad`. Exercises the grammar end to end, including a non-default `curl` transport, a request-step chain (`posts by-user`), and a step-to-queue download hand-off (`archive`). |
 | `samples/github/github.xml`     | Read-only GitHub REST API wrapper in XML: first-class requests, jq noise-trimming, fields views. Used by the CI demo; loaded by `TestGithubSampleLoads`. |
 | `*_test.go`                     | Unit + integration tests. `integration_test.go` has `execCmd`/`execCmdFull`; `request_test.go`/`request_integration_test.go` use httptest via `swapHTTPClient`. |
+| `workers/`                      | Cloudflare Workers TypeScript port. Parses the same JSON configs and serves each leaf as an HTTP endpoint through `fetch()`. See `workers/README.md`. |
 
 ## The XML config model
 
@@ -136,8 +137,12 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 ## Tooling
 
 - `go-toolchain` runs `go mod tidy`, vet, all tests with coverage, and the build. **Always run `go-toolchain`, not a bare `go ...`.** Coverage minimum 80%.
-- CI is `.github/workflows/ci.yml`. The test` job runs `ste-lint` over the markdown, then go-toolchain, then the demo. The well-formedness check and the grammar check are both Go tests. The build names no `os` and no `arch`, so it produces one fat APE that autoreleases to buildhost.
+- CI is `.github/workflows/ci.yml`. The test job runs `ste-lint` over the markdown, then go-toolchain, then the demo. The well-formedness check and the grammar check are both Go tests. The build names no `os` and no `arch`, so it produces one fat APE that autoreleases to buildhost.
 - `ste-lint` (`wow-look-at-my/actions@ste-lint#latest`) checks every `*.md` file against the mechanical subset of ASD-STE100. One paragraph is one line, and a sentence caps at many words. A contraction, a semicolon, a comma splice or the word "would" fails the job.
+
+## Cloudflare Workers port (`workers/`)
+
+A TypeScript reimplementation runs on Cloudflare Workers. It parses the same JSON config and serves each leaf command as an HTTP endpoint through `fetch()` instead of shelling out to `curl`. Commands are parsed as curl invocations and converted to `fetch()` calls, and pipe commands are stripped, so a config uses a format view there. The `cwd`, `stdin`, `confirm`, `fileExists` and `dirExists` helpers are unavailable. The Go `text/template` engine is reimplemented in TypeScript over a sprig subset. See the README's "Cloudflare Workers" section and `workers/README.md` for the architecture, the API mapping and the test commands.
 
 ## Conventions
 

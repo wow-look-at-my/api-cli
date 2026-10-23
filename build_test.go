@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"encoding/json"
 	"testing"
@@ -8,31 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const miniConfig = `{
-  "name": "t",
-  "command": "true",
-  "commands": [
-    {
-      "name": "users",
-      "description": "u desc",
-      "commands": [
-        {
-          "name": "get",
-          "args": [{"name": "id", "type": "int", "required": true}],
-          "entry": {"path": "/users/{{.arg.id}}"}
-        },
-        {
-          "name": "list",
-          "flags": [
-            {"name": "limit", "short": "l", "type": "int", "default": 10},
-            {"name": "token", "type": "string", "required": true}
-          ],
-          "entry": {"path": "/users"}
-        }
-      ]
-    }
-  ]
-}`
+//go:embed testdata/mini-config.json
+var miniConfig string
 
 func TestBuildTreeShape(t *testing.T) {
 	var cfg Config

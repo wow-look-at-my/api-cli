@@ -1,0 +1,4 @@
+<config name="x"><command name="get">
+		<download><url>https://h/a</url><hash><value name="sha256"/></hash></download>
+		<download><url>https://h/b</url><hash algo="SHA512"><value name="d"/></hash></download>
+	</command></config>

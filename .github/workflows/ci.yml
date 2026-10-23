@@ -28,8 +28,7 @@ jobs:
           GOGENERATEDEPS: 'off'
         with:
           autorelease: 'true'
-          # --as=timeline runs the ascii-timeline executable, so apt and brew install it with api-cli.
-          depends: 'ascii-timeline'
+          # --as=timeline runs the ascii-timeline executable, which the user installs alongside api-cli. The buildhost knows no project of that name, so no depends is declared here.
       - name: Run samples/github/github.xml demo into the step summary
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

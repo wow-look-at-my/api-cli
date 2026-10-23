@@ -1,0 +1,14 @@
+<config name="x">
+		<downloads concurrency="8" retries="1" dir="./out"/>
+		<command name="get">
+			<download over="result.list.assets" when="{{.flag.save}}">
+				<url><value name="browser_download_url"/></url>
+				<to><value name="name"/></to>
+				<header name="Accept">application/octet-stream</header>
+				<cookie name="sid"><value name="var.session"/></cookie>
+				<if test="var.token">
+					<header name="Authorization">Bearer <value name="var.token"/></header>
+				</if>
+			</download>
+		</command>
+	</config>

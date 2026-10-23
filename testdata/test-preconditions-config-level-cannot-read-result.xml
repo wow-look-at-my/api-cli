@@ -1,0 +1,4 @@
+<config name="t">
+		<preconditions><precondition>{{ .result.x }}</precondition></preconditions>
+		<command name="ping" description="p"><run>printf ok</run></command>
+	</config>

@@ -1,0 +1,7 @@
+<config name="x"><vars>
+		<var name="a"><value name="env.X" default="def" as="urlpath"/></var>
+		<var name="b"><if test="env.Y" eq="1">yes<else/>no</if></var>
+		<var name="c"><for each="items"><value name="name"/></for></var>
+		<var name="d"><value expr="{{ upper .env.Z }}"/></var>
+		<var name="e"><if test="env.W">on</if></var>
+	</vars><command name="c"><run>x</run></command></config>

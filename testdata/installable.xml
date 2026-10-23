@@ -1,0 +1,11 @@
+<config name="t">
+	<command name="cc" passthrough="true">
+		<mock><output path="out.o"/></mock>
+	</command>
+	<command name="tools">
+		<command name="ld" passthrough="true">
+			<mock><output path="app"/></mock>
+		</command>
+		<command name="unrelated"><run>true</run></command>
+	</command>
+</config>

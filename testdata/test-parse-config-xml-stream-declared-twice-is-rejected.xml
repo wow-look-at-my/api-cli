@@ -1,0 +1,7 @@
+<config name="t">
+	<run>printf 'hi'</run>
+	<command name="log">
+		<stream chunk="4"/>
+		<stream mode="lines"/>
+	</command>
+</config>

@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"bytes"
 	"strings"
@@ -38,9 +40,7 @@ func serveStdio(t *testing.T, cfg *Config, requests string) (int, string) {
 // A client that writes its last request and closes stdin in the same breath
 // still gets the answer.
 func TestMCPStdio_AnswersTheLastCallWhenStdinClosesAtOnce(t *testing.T) {
-	cfg, err := parseConfigXML([]byte(`<config name="t">
-		<command name="ping" description="p"><run>printf pong</run></command>
-	</config>`))
+	cfg, err := parseConfigXML([]byte(testMCPStdio_AnswersTheLastCallWhenStdinClosesAtOnceXml))
 	require.NoError(t, err)
 	require.NoError(t, validate(cfg))
 
@@ -59,9 +59,7 @@ func TestMCPStdio_AnswersTheLastCallWhenStdinClosesAtOnce(t *testing.T) {
 // Several calls back to back land the same way. The hold-back waits for the
 // whole batch rather than for whichever answer happens to be earliest.
 func TestMCPStdio_AnswersEveryCallWhenStdinClosesAtOnce(t *testing.T) {
-	cfg, err := parseConfigXML([]byte(`<config name="t">
-		<command name="ping" description="p"><run>printf pong</run></command>
-	</config>`))
+	cfg, err := parseConfigXML([]byte(testMCPStdio_AnswersEveryCallWhenStdinClosesAtOnceXml))
 	require.NoError(t, err)
 	require.NoError(t, validate(cfg))
 
@@ -126,3 +124,9 @@ func TestPendingCalls_WaitsUntilTheLastAnswer(t *testing.T) {
 	}()
 	p.waitIdle()
 }
+
+//go:embed testdata/test-mcp-stdio-answers-the-last-call-when-stdin-closes-at-once.xml
+var testMCPStdio_AnswersTheLastCallWhenStdinClosesAtOnceXml string
+
+//go:embed testdata/test-mcp-stdio-answers-every-call-when-stdin-closes-at-once.xml
+var testMCPStdio_AnswersEveryCallWhenStdinClosesAtOnceXml string

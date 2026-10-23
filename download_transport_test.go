@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"crypto/sha256"
 	"encoding/hex"
@@ -34,14 +36,7 @@ func TestDownloadTransport_StreamsProgramStdoutToTheFile(t *testing.T) {
 	dir := t.TempDir()
 
 	cfg, err := loadStr(t, `<config name="dl">
-		<transports><transport name="corp"><run>cat `+fixture+`</run></transport></transports>
-		<command name="grab">
-			<download transport="corp">
-				<url>https://internal.example/blob</url>
-				<to>blob.bin</to>
-			</download>
-		</command>
-	</config>`)
+		<transports><transport name="corp"><run>cat `+fixture+testDownloadTransport_StreamsProgramStdoutToTheFileXml)
 	require.NoError(t, err)
 
 	code, _, errOut := execCmdFull(t, cfg, "grab", "--download-dir", dir)
@@ -54,28 +49,7 @@ func TestDownloadTransport_StreamsProgramStdoutToTheFile(t *testing.T) {
 
 func TestDownloadTransport_ProgramSeesTheRenderedRequest(t *testing.T) {
 	dir := t.TempDir()
-	cfg, err := loadStr(t, `<config name="dl">
-		<vars><var name="token">sekrit</var></vars>
-		<transports>
-			<transport name="corp">
-				<run>
-					<argv>/bin/sh</argv>
-					<argv>-c</argv>
-					<argv>printf '%s %s %s' "$0" "$1" "$2"</argv>
-					<argv><value name="request.method"/></argv>
-					<argv><value name="request.url"/></argv>
-					<argv><value expr="{{ index .request.headers &quot;Authorization&quot; }}"/></argv>
-				</run>
-			</transport>
-		</transports>
-		<command name="grab">
-			<download transport="corp">
-				<url>https://internal.example/thing?v=2</url>
-				<to>out.txt</to>
-				<header name="Authorization">Bearer <value name="var.token"/></header>
-			</download>
-		</command>
-	</config>`)
+	cfg, err := loadStr(t, testDownloadTransport_ProgramSeesTheRenderedRequestXml)
 	require.NoError(t, err)
 
 	code, _, errOut := execCmdFull(t, cfg, "grab", "--download-dir", dir)
@@ -207,21 +181,15 @@ func TestDownloadTransport_DirectoryDestinationNamesFromTheURL(t *testing.T) {
 }
 
 func TestValidate_DownloadTransportMustExist(t *testing.T) {
-	_, err := loadStr(t, `<config name="dl"><command name="g">
-		<download transport="ghost"><url>https://h/f</url></download>
-	</command></config>`)
+	_, err := loadStr(t, testValidate_DownloadTransportMustExistXml)
 	assert.ErrorContains(t, err, `references unknown transport "ghost"`)
 
-	_, err = loadStr(t, `<config name="dl"><command name="g">
-		<download transport="http"><url>https://h/f</url></download>
-	</command></config>`)
+	_, err = loadStr(t, testValidate_DownloadTransportMustExistXml2)
 	assert.NoError(t, err, `"http" is the built-in client, always available`)
 }
 
 func TestParseXML_DownloadTransportAttribute(t *testing.T) {
-	cfg := mustParse(t, `<config name="x"><command name="g">
-		<download transport="corp"><url>https://h/f</url></download>
-	</command></config>`)
+	cfg := mustParse(t, testParseXML_DownloadTransportAttributeXml)
 	assert.Equal(t, "corp", cfg.Commands[0].Downloads[0].Transport)
 }
 
@@ -237,3 +205,18 @@ func TestResolveArgv(t *testing.T) {
 	_, err = resolveArgv(&Cmd{}, nil)
 	assert.ErrorContains(t, err, "argv command is empty")
 }
+
+//go:embed testdata/test-download-transport-streams-program-stdout-to-the-file.xml.frag
+var testDownloadTransport_StreamsProgramStdoutToTheFileXml string
+
+//go:embed testdata/test-download-transport-program-sees-the-rendered-request.xml
+var testDownloadTransport_ProgramSeesTheRenderedRequestXml string
+
+//go:embed testdata/test-validate-download-transport-must-exist.xml
+var testValidate_DownloadTransportMustExistXml string
+
+//go:embed testdata/test-validate-download-transport-must-exist-2.xml
+var testValidate_DownloadTransportMustExistXml2 string
+
+//go:embed testdata/test-parse-xml-download-transport-attribute.xml
+var testParseXML_DownloadTransportAttributeXml string

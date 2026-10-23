@@ -1,0 +1,7 @@
+<config name="t">
+	<command name="cc" passthrough="true">
+		<mock>
+			<output path="out.o" from="fixture.o"/>
+		</mock>
+	</command>
+</config>

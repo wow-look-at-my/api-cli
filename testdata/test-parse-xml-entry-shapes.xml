@@ -1,0 +1,5 @@
+<config name="x"><command name="c"><run>x</run>
+		<entry>
+			<path>/u/<value name="arg.id"/></path>
+			<query><param name="q"><value name="flag.q"/></param></query>
+		</entry></command></config>

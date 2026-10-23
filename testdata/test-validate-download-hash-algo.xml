@@ -1,0 +1,3 @@
+<config name="x"><command name="g">
+		<download><url>https://h/f</url><hash algo="crc32">abc</hash></download>
+	</command></config>

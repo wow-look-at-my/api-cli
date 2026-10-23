@@ -1,0 +1,13 @@
+<config name="x">
+		<run><request><url>https://example.test</url></request></run>
+		<command name="dash">
+			<tml src="ui/status.tml" dark="true">
+				<prop name="title">Deployments</prop>
+				<prop name="count" from="total"/>
+				<prop name="rows" over="services">
+					<field name="name">id</field>
+					<field name="state">status.phase</field>
+				</prop>
+			</tml>
+		</command>
+	</config>

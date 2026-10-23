@@ -1,0 +1,30 @@
+# The package's own binaries come first on PATH, as npm run puts them.
+export PATH := justfile_directory() + "/node_modules/.bin:" + env_var("PATH")
+
+# The npm script dev.
+dev:
+	wrangler dev
+
+# The npm script deploy.
+deploy:
+	wrangler deploy
+
+# The npm script test.
+test:
+	vitest run && vitest run --config vitest.node.config.ts
+
+# The npm script test:workers.
+test-workers:
+	vitest run
+
+# The npm script test:comparative.
+test-comparative:
+	vitest run --config vitest.node.config.ts
+
+# The npm script test:watch.
+test-watch:
+	vitest
+
+# The npm script typecheck.
+typecheck:
+	tsc --noEmit
