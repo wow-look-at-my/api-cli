@@ -1,0 +1,3 @@
+<config name="x"><command name="c"><run>x</run>
+		<fields><field name="a">a</field></fields>
+		<command name="list"><run>y</run></command></command></config>

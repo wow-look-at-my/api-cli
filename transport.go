@@ -8,15 +8,10 @@ import (
 	"strings"
 )
 
-// builtinTransportName selects the built-in net/http client. Reserved as a
-// <transport> name so a single request can opt out of a default transport with
-// transport="http" — for the public endpoint in an otherwise internal API.
+// builtinTransportName selects the built-in net/http client.
 const builtinTransportName = "http"
 
-// The active transport registry. Config data rather than state, but a process
-// loads exactly a single config, so this mirrors how httpClient and execStdout
-// are held — and spares every call site between runLeaf and runRequest a
-// parameter it would only pass along.
+// The active transport registry.
 var (
 	transports       = map[string]*Transport{}
 	defaultTransport string
@@ -102,12 +97,8 @@ func installTransports(cfg *Config) {
 	}
 }
 
-// resolveTransport picks the transport for a request: its own transport=, else
-// the registry default, else the built-in client (a nil return).
-//
-// There is deliberately no runtime override. How a request reaches its endpoint
-// is a property of that endpoint, not a user preference — sending an internal
-// API's request over the built-in client would just fetch an SSO page.
+// resolveTransport picks the transport for a request: its own transport=,
+// else the registry default, else the built-in client (a nil return).
 func resolveTransport(req *Request) (*Transport, error) {
 	return resolveTransportNamed(req.Transport)
 }
@@ -125,9 +116,7 @@ func resolveTransportNamed(name string) (*Transport, error) {
 	}
 	t := transports[name]
 	if t == nil {
-		// validate() rejects an unknown transport= at load time, so reaching
-		// this means the registry was never published for this config. Fail
-		// rather than quietly sending the request over the built-in client.
+		// validate() rejects an unknown transport= at load time.
 		return nil, fmt.Errorf("transport %q is not registered (known: %s)", name, knownTransports())
 	}
 	return t, nil
@@ -135,8 +124,6 @@ func resolveTransportNamed(name string) (*Transport, error) {
 
 // downloadTransport is a transport resolved for a single download: the
 // program's argv with every template already rendered, plus where to run it.
-// The queue executes this on a worker long after the leaf's data context is
-// gone, so nothing here may still need rendering.
 type downloadTransport struct {
 	Name  string
 	Argv  []string
@@ -150,8 +137,8 @@ type downloadTransport struct {
 // The program sees the same `.request` context a request-form transport sees —
 // method, url, headers, header_lines — so a single program serves both. The
 // difference is on the way back: a download's stdout is streamed to the file
-// rather than buffered as a response body, because the whole point of the file
-// is that it need not fit in memory.
+// rather than buffered as a response body. This is because the whole point of
+// the file is that it need not fit in memory.
 func prepareDownloadTransport(name, rawURL string, headers []renderedHeader, ctx map[string]any) (*downloadTransport, error) {
 	t, err := resolveTransportNamed(name)
 	if err != nil || t == nil {
@@ -166,8 +153,7 @@ func prepareDownloadTransport(name, rawURL string, headers []renderedHeader, ctx
 	if err != nil {
 		return nil, fmt.Errorf("transport %q: render cwd: %w", t.Name, err)
 	}
-	// A download has no body, so a transport that declares no <stdin> gets
-	// nothing — never the user's terminal.
+	// A download has no body, so a transport that declares no <stdin> gets nothing — never the user's terminal.
 	stdin := ""
 	if t.StdinSet {
 		if stdin, err = renderString(t.Stdin, tctx); err != nil {

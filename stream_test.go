@@ -94,8 +94,7 @@ func TestChunker_EmptySourceYieldsNoChunk(t *testing.T) {
 	assert.Empty(t, chunks, "an empty source has nothing to emit, not one empty chunk")
 }
 
-// chunkedReader hands its data over a single byte at a time, so a chunker
-// that trusted a single read to fill a chunk would produce the wrong boundaries.
+// chunkedReader hands its data over a single byte at a time.
 type chunkedReader struct {
 	data []byte
 	step int
@@ -216,9 +215,8 @@ func (r *growingReader) Read(p []byte) (int, error) {
 }
 
 func TestChunker_IncrementalBeforeSourceFinishes(t *testing.T) {
-	// The source hands over a single chunk's worth and then holds. the
-	// earliest chunk must already be readable, which is what makes this
-	// incremental rather than a buffer-everything implementation.
+	// The source hands over a single chunk's worth and then holds. the earliest
+	// chunk must already be readable.
 	src := &growingReader{
 		first:   []byte("abcd"),
 		second:  []byte("efgh"),

@@ -1,0 +1,4 @@
+<config name="t">
+	<run>printf '%s' {{.env.API_CLI_TEST_TOKEN}}</run>
+	<command name="show"/>
+</config>

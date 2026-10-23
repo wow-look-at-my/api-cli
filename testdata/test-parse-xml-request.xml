@@ -1,0 +1,13 @@
+<config name="x">
+		<run><request method="POST">
+			<url><value name="var.base"/>/p</url>
+			<query from="entry.query">
+				<param name="a"><value name="flag.a"/></param>
+				<if test="flag.b"><param name="b">1</param></if>
+			</query>
+			<header name="Accept">application/json</header>
+			<if test="var.token"><header name="Authorization">Bearer <value name="var.token"/></header></if>
+			<body>{{.flag.body}}</body>
+			<response jq="var.filter"/>
+		</request></run>
+		<command name="c"/></config>

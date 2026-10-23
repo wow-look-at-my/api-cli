@@ -1,28 +1,4 @@
 // Router — resolves URL paths to leaf commands and extracts args/flags.
-//
-// URL mapping:
-//   GET /<cmd>/<subcmd>[/<positional-args>...]?<flags>&<named-args>
-//
-// Examples:
-//   GET /users/get?id=1          → users get --id 1
-//   GET /users/get/1             → users get 1
-//   GET /users/list?limit=3      → users list --limit 3
-//   GET /posts/create?title=hi   → posts create --title hi
-//   GET /user-posts?username=Bret → user-posts --username Bret
-//
-// Special routes:
-//   GET /                 → command index (list all leaves)
-//   GET /_health          → {"status":"ok"}
-//   GET /_schema          → the loaded config as JSON (redacted)
-//   GET /_commands         → list of leaf commands with metadata
-//
-// Special query params (prefixed with _):
-//   _format=raw|auto|always  → output format mode
-//   _view=<name>             → force a specific view
-//
-// Response headers:
-//   X-API-CLI-Executions   → number of fetch calls made
-//   X-API-CLI-Warnings     → JSON array of warnings (unsupported features)
 
 import type { Config, CommandNode, Arg, Flag, Cmd, FormatRef, Format } from "./config.ts";
 import { cmdDefined, formatRefDefined } from "./config.ts";

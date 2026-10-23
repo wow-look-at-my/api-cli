@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"encoding/json"
 	"net/http"
@@ -189,16 +191,7 @@ func TestSteps_RequestThroughTransportInMCP(t *testing.T) {
 }
 
 func TestParseXML_StepWithRequest(t *testing.T) {
-	cfg := mustParse(t, `<config name="x">
-	<command name="c">
-		<steps>
-			<step name="user">
-				<run><request method="POST"><url>https://api/x</url><body>hi</body></request></run>
-			</step>
-		</steps>
-		<run>echo {{.result.user}}</run>
-	</command>
-</config>`)
+	cfg := mustParse(t, testParseXML_StepWithRequestXml)
 	step := cfg.Commands[0].Steps[0]
 	require.NotNil(t, step.Request)
 	assert.Nil(t, step.Command)
@@ -208,17 +201,12 @@ func TestParseXML_StepWithRequest(t *testing.T) {
 }
 
 func TestValidate_StepRequestNeedsURL(t *testing.T) {
-	_, err := loadStr(t, `<config name="x">
-	<command name="c">
-		<steps><step name="s"><run><request method="GET"><body>x</body></request></run></step></steps>
-		<run>echo hi</run>
-	</command>
-</config>`)
+	_, err := loadStr(t, testValidate_StepRequestNeedsURLXml)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "<request> requires a <url>")
 }
 
-// A leaf whose only run is a request still reports a missing step run clearly.
+// A leaf whose only run is a request still reports a missing step run.
 func TestSteps_NoRunAvailable(t *testing.T) {
 	cfg := &Config{
 		Name: "t",
@@ -228,8 +216,7 @@ func TestSteps_NoRunAvailable(t *testing.T) {
 			Command: &Cmd{Shell: true, Template: "true"},
 		}},
 	}
-	// Clear the leaf's own run after validation so the step has nothing to
-	// inherit — the shape validation cannot reach.
+	// Clear the leaf's own run after validation so the step has nothing to inherit — the shape validation cannot reach.
 	cfg.Commands[0].Command = nil
 	var oc stepOutcome
 	oc, err := runSteps(cfg.Commands[0].Steps, map[string]any{}, map[string]any{}, nil, nil, "", "", captureExec, execStderr)
@@ -237,3 +224,9 @@ func TestSteps_NoRunAvailable(t *testing.T) {
 	assert.Contains(t, err.Error(), "no command or request available")
 	assert.Equal(t, 0, oc.executions)
 }
+
+//go:embed testdata/test-parse-xml-step-with-request.xml
+var testParseXML_StepWithRequestXml string
+
+//go:embed testdata/test-validate-step-request-needs-url.xml
+var testValidate_StepRequestNeedsURLXml string

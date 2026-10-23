@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"net/http"
 	"net/http/httptest"
@@ -12,32 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testComponent = `<?xml version="1.1" encoding="UTF-8"?>
-<Component xmlns="urn:tml:v1" name="Status">
-	<Property name="title" type="string" required="true"/>
-	<Property name="count" type="string" default="0"/>
-	<Property name="rows" type="record[]" default=""/>
-
-	<DataTemplate name="Row">
-		<Property name="name" type="string" required="true"/>
-		<Property name="state" type="string" default=""/>
-		<Template>
-			<Stack orientation="horizontal" gap="1">
-				<Text width="12">{name}</Text>
-				<Text>{state}</Text>
-			</Stack>
-		</Template>
-	</DataTemplate>
-
-	<Template>
-		<Stack orientation="vertical">
-			<Text id="title">{title}</Text>
-			<Text id="count">count {count}</Text>
-			<Stack id="rows" itemsSource="{rows}" itemTemplate="Row" orientation="vertical"/>
-		</Stack>
-	</Template>
-</Component>
-`
+//go:embed testdata/test-component.xml
+var testComponent string
 
 // writeComponent puts the test component in its own directory and returns that
 // directory, which is what a config's Dir is.
@@ -49,19 +27,7 @@ func writeComponent(t *testing.T) string {
 }
 
 func TestBuildTML_ParsesPropsAndFields(t *testing.T) {
-	cfg, err := parseConfigXML([]byte(`<config name="x">
-		<run><request><url>https://example.test</url></request></run>
-		<command name="dash">
-			<tml src="ui/status.tml" dark="true">
-				<prop name="title">Deployments</prop>
-				<prop name="count" from="total"/>
-				<prop name="rows" over="services">
-					<field name="name">id</field>
-					<field name="state">status.phase</field>
-				</prop>
-			</tml>
-		</command>
-	</config>`))
+	cfg, err := parseConfigXML([]byte(testBuildTML_ParsesPropsAndFieldsXml))
 	require.NoError(t, err)
 
 	view := cfg.Commands[0].TML
@@ -168,7 +134,8 @@ func TestRenderTMLFrame(t *testing.T) {
 }
 
 // A component rejects a property it never declared, so a config that hands it
-// a single fails the run rather than drawing a screen missing the value.
+// a single fails the run rather than drawing a screen. That screen is missing
+// the value.
 func TestRenderTMLFrame_UndeclaredProp(t *testing.T) {
 	dir := writeComponent(t)
 	view := &TML{Src: "status.tml", Props: []TMLProp{
@@ -279,3 +246,6 @@ func TestValidateTML_ConfigRejectsBothPresentations(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not both")
 }
+
+//go:embed testdata/test-build-tml-parses-props-and-fields.xml
+var testBuildTML_ParsesPropsAndFieldsXml string

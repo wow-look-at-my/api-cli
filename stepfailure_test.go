@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"io"
 	"os"
@@ -10,26 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// jobService is a transport program that answers per job id:
-//   - flaky fails twice with a proxy error, then answers done
-//   - stuck always answers pending
-//   - login answers an HTML login page
-//   - ok answers done
-//
-// A /file/ URL is a download, and the program writes the file's contents.
-const jobService = `url="$1"; state="$2"
-id="${url##*/}"
-case "$url" in */file/*) printf 'data-%s' "$id"; exit 0;; esac
-case "$id" in
-flaky)
-	n=$(cat "$state/flaky" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" > "$state/flaky"
-	if [ "$n" -le 2 ]; then printf '<html>502 Bad Gateway</html>'; echo "proxy said 502" >&2; exit 1; fi
-	printf '{"status":"done","url":"https://jobs.example/file/flaky"}';;
-stuck) printf '{"status":"pending"}';;
-login) printf '<!DOCTYPE html><html><title>Sign in</title></html>';;
-*) printf '{"status":"done","url":"https://jobs.example/file/%s"}' "$id";;
-esac
-`
+//go:embed testdata/job-service.sh
+var jobService string
 
 // jobConfig polls each job until it is done, then downloads what each
 // finished job names.
@@ -41,10 +25,7 @@ func jobConfig(t *testing.T, stepAttrs string) *Config {
 	state := filepath.Join(dir, "state")
 	require.NoError(t, os.Mkdir(state, 0o755))
 
-	cfg, err := loadStr(t, `<config name="jobs">
-		<transports>
-			<transport name="corp" default="true">
-				<run><argv>sh</argv><argv>`+script+`</argv><argv><value name="request.url"/></argv><argv>`+state+`</argv></run>
+	cfg, err := loadStr(t, jobConfigXml+script+`</argv><argv><value name="request.url"/></argv><argv>`+state+`</argv></run>
 			</transport>
 		</transports>
 		<command name="wait">
@@ -154,3 +135,6 @@ func TestResponseStatus(t *testing.T) {
 	assert.Equal(t, "", responseStatus(map[string]any{"state": "x"}))
 	assert.Equal(t, "", responseStatus("text"))
 }
+
+//go:embed testdata/job-config.xml
+var jobConfigXml string

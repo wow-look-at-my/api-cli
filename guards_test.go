@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"os"
 	"path/filepath"
@@ -61,13 +63,7 @@ func TestSegmentPattern_MatchesWhatSafeSegmentsAccepts(t *testing.T) {
 // --- pattern= naming a var ---
 
 func TestResolveArgPatterns_ReadsAVar(t *testing.T) {
-	cfg := loadConfigFile(t, `<config name="t">
-		<vars><var name="segment">^[a-z]+$</var></vars>
-		<command name="show" description="s">
-			<arg name="owner" pattern="{{ .var.segment }}"/>
-			<run>printf ok</run>
-		</command>
-	</config>`)
+	cfg := loadConfigFile(t, testResolveArgPatterns_ReadsAVarXml)
 	assert.Equal(t, `^[a-z]+$`, cfg.Commands[0].Args[0].Pattern)
 
 	err := execErr(t, cfg, "show", "OCTOCAT")
@@ -77,12 +73,7 @@ func TestResolveArgPatterns_ReadsAVar(t *testing.T) {
 
 // The built-in rule needs no regular expression in the config at all.
 func TestResolveArgPatterns_ReadsTheSegmentHelper(t *testing.T) {
-	cfg := loadConfigFile(t, `<config name="t">
-		<command name="show" description="s">
-			<arg name="owner" pattern="{{ segmentPattern }}"/>
-			<run>printf ok</run>
-		</command>
-	</config>`)
+	cfg := loadConfigFile(t, testResolveArgPatterns_ReadsTheSegmentHelperXml)
 	assert.Equal(t, segmentPattern(), cfg.Commands[0].Args[0].Pattern)
 
 	code, out, _ := execCmdFull(t, cfg, "show", "octocat")
@@ -97,28 +88,14 @@ func TestResolveArgPatterns_ReadsTheSegmentHelper(t *testing.T) {
 // A var in scope at the node wins over an ancestor's, the same way any other
 // var does.
 func TestResolveArgPatterns_TakesTheNearestVar(t *testing.T) {
-	cfg := loadConfigFile(t, `<config name="t">
-		<vars><var name="segment">^[a-z]+$</var></vars>
-		<command name="group">
-			<vars><var name="segment">^[0-9]+$</var></vars>
-			<command name="show" description="s">
-				<arg name="id" pattern="{{ .var.segment }}"/>
-				<run>printf ok</run>
-			</command>
-		</command>
-	</config>`)
+	cfg := loadConfigFile(t, testResolveArgPatterns_TakesTheNearestVarXml)
 	assert.Equal(t, `^[0-9]+$`, cfg.Commands[0].Commands[0].Args[0].Pattern)
 }
 
 // A pattern that resolves to nothing matches everything, which is never what a
 // config that declared a pattern meant.
 func TestResolveArgPatterns_RefusesAnEmptyResult(t *testing.T) {
-	_, err := loadConfigFileErr(t, `<config name="t">
-		<command name="show" description="s">
-			<arg name="owner" pattern="{{ .var.missing }}"/>
-			<run>printf ok</run>
-		</command>
-	</config>`)
+	_, err := loadConfigFileErr(t, testResolveArgPatterns_RefusesAnEmptyResultXml)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "rendered empty or unresolved")
 }
@@ -128,20 +105,7 @@ func TestResolveArgPatterns_RefusesAnEmptyResult(t *testing.T) {
 // A single guard at the top of the config runs on every leaf under it, so no
 // leaf repeats it.
 func TestPreconditions_ConfigLevelGuardsEveryLeaf(t *testing.T) {
-	cfg := loadConfigFile(t, `<config name="t">
-		<preconditions>
-			<precondition>{{ if not (safeSegments .arg.owner .arg.repo) }}owner and repo must each be one path segment{{ end }}</precondition>
-		</preconditions>
-		<command name="repo" description="r">
-			<arg name="owner"/>
-			<arg name="repo"/>
-			<run>printf ok</run>
-		</command>
-		<command name="user" description="u">
-			<arg name="owner"/>
-			<run>printf ok</run>
-		</command>
-	</config>`)
+	cfg := loadConfigFile(t, testPreconditions_ConfigLevelGuardsEveryLeafXml)
 
 	for _, argv := range [][]string{
 		{"repo", "octocat", "../../etc"},
@@ -161,12 +125,7 @@ func TestPreconditions_ConfigLevelGuardsEveryLeaf(t *testing.T) {
 // A leaf that declares no such arg is not caught by the guard above it, because
 // an absent value has nothing to check.
 func TestPreconditions_ConfigLevelGuardSpareTheLeafWithoutThatArg(t *testing.T) {
-	cfg := loadConfigFile(t, `<config name="t">
-		<preconditions>
-			<precondition>{{ if not (safeSegments .arg.owner) }}owner must be one path segment{{ end }}</precondition>
-		</preconditions>
-		<command name="ping" description="p"><run>printf ok</run></command>
-	</config>`)
+	cfg := loadConfigFile(t, testPreconditions_ConfigLevelGuardSpareTheLeafWithoutThatArgXml)
 
 	code, out, _ := execCmdFull(t, cfg, "ping")
 	assert.Equal(t, 0, code)
@@ -175,13 +134,7 @@ func TestPreconditions_ConfigLevelGuardSpareTheLeafWithoutThatArg(t *testing.T) 
 
 // A guard on a group node covers its subtree and nothing else.
 func TestPreconditions_GroupGuardCoversItsSubtreeOnly(t *testing.T) {
-	cfg := loadConfigFile(t, `<config name="t">
-		<command name="guarded">
-			<preconditions><precondition>guarded is closed</precondition></preconditions>
-			<command name="inner" description="i"><run>printf inner</run></command>
-		</command>
-		<command name="open" description="o"><run>printf open</run></command>
-	</config>`)
+	cfg := loadConfigFile(t, testPreconditions_GroupGuardCoversItsSubtreeOnlyXml)
 
 	code, _, errOut := execCmdFull(t, cfg, "guarded", "inner")
 	assert.Equal(t, 1, code)
@@ -195,13 +148,7 @@ func TestPreconditions_GroupGuardCoversItsSubtreeOnly(t *testing.T) {
 // The ancestors' guards run before the node's own, so the broader message is the
 // thing a reader gets earliest.
 func TestPreconditions_AncestorsRunFirst(t *testing.T) {
-	cfg := loadConfigFile(t, `<config name="t">
-		<preconditions><precondition>from the config</precondition></preconditions>
-		<command name="leaf" description="l">
-			<preconditions><precondition>from the leaf</precondition></preconditions>
-			<run>printf ok</run>
-		</command>
-	</config>`)
+	cfg := loadConfigFile(t, testPreconditions_AncestorsRunFirstXml)
 
 	// The declared list is untouched. Inheritance happens where the node runs.
 	require.Equal(t, []string{"from the leaf"}, cfg.Commands[0].Preconditions)
@@ -215,15 +162,7 @@ func TestPreconditions_AncestorsRunFirst(t *testing.T) {
 // The MCP path carries the same inherited guards, so a tool call is gated like
 // the CLI invocation.
 func TestPreconditions_InheritedOverMCP(t *testing.T) {
-	cfg := loadConfigFile(t, `<config name="t">
-		<preconditions>
-			<precondition>{{ if not (safeSegments .arg.owner) }}owner must be one path segment{{ end }}</precondition>
-		</preconditions>
-		<command name="show" description="s">
-			<arg name="owner"/>
-			<run>printf ok</run>
-		</command>
-	</config>`)
+	cfg := loadConfigFile(t, testPreconditions_InheritedOverMCPXml)
 
 	leaves := collectMCPLeaves(cfg.Commands, mcpInherit{vars: cfg.Vars, pre: cfg.Preconditions})
 	require.Len(t, leaves, 1)
@@ -239,10 +178,7 @@ func TestPreconditions_InheritedOverMCP(t *testing.T) {
 
 // A config-level guard cannot read .result either: nothing has run when it does.
 func TestPreconditions_ConfigLevelCannotReadResult(t *testing.T) {
-	_, err := loadConfigFileErr(t, `<config name="t">
-		<preconditions><precondition>{{ .result.x }}</precondition></preconditions>
-		<command name="ping" description="p"><run>printf ok</run></command>
-	</config>`)
+	_, err := loadConfigFileErr(t, testPreconditions_ConfigLevelCannotReadResultXml)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "runs before <steps>")
 }
@@ -264,3 +200,33 @@ func loadConfigFileErr(t *testing.T, src string) (*Config, error) {
 	require.NoError(t, os.WriteFile(path, []byte(src), 0o600))
 	return Load(path)
 }
+
+//go:embed testdata/test-resolve-arg-patterns-reads-a-var.xml
+var testResolveArgPatterns_ReadsAVarXml string
+
+//go:embed testdata/test-resolve-arg-patterns-reads-the-segment-helper.xml
+var testResolveArgPatterns_ReadsTheSegmentHelperXml string
+
+//go:embed testdata/test-resolve-arg-patterns-takes-the-nearest-var.xml
+var testResolveArgPatterns_TakesTheNearestVarXml string
+
+//go:embed testdata/test-resolve-arg-patterns-refuses-an-empty-result.xml
+var testResolveArgPatterns_RefusesAnEmptyResultXml string
+
+//go:embed testdata/test-preconditions-config-level-guards-every-leaf.xml
+var testPreconditions_ConfigLevelGuardsEveryLeafXml string
+
+//go:embed testdata/test-preconditions-config-level-guard-spare-the-leaf-without-that-arg.xml
+var testPreconditions_ConfigLevelGuardSpareTheLeafWithoutThatArgXml string
+
+//go:embed testdata/test-preconditions-group-guard-covers-its-subtree-only.xml
+var testPreconditions_GroupGuardCoversItsSubtreeOnlyXml string
+
+//go:embed testdata/test-preconditions-ancestors-run-first.xml
+var testPreconditions_AncestorsRunFirstXml string
+
+//go:embed testdata/test-preconditions-inherited-over-mcp.xml
+var testPreconditions_InheritedOverMCPXml string
+
+//go:embed testdata/test-preconditions-config-level-cannot-read-result.xml
+var testPreconditions_ConfigLevelCannotReadResultXml string

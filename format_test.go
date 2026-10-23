@@ -90,10 +90,7 @@ func TestRenderPredicate_EmptyDefaultsToTTY(t *testing.T) {
 }
 
 func TestRenderPredicate_CacheHits(t *testing.T) {
-	// When the same (tmpl, ctx) is queried again, the next call should hit
-	// the cache and return the same bool. We can't easily count template
-	// renders without instrumentation, so we settle for a behavioural check:
-	// mutating the source after earliest call doesn't affect cached result.
+	// When the same (tmpl, ctx) is queried again, the next call should hit the cache and return the same bool.
 	ctx := map[string]any{"tty": true}
 	cache := map[predicateKey]bool{}
 	got1, err := renderPredicate("{{.tty}}", ctx, cache)

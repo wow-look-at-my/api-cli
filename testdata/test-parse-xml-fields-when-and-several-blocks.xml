@@ -1,0 +1,4 @@
+<config name="x"><command name="c"><run>x</run>
+		<fields when="{{ not .arg.id }}" over="items"><field name="id">id</field></fields>
+		<fields when="{{ .arg.id }}"><field name="name">name</field></fields>
+		</command></config>

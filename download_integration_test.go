@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"crypto/sha256"
 	"encoding/hex"
@@ -15,8 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// writeJSON encodes v as the response body. A manifest carries server URLs and
-// digests, so it is marshaled rather than formatted into a string.
+// writeJSON encodes v as the response body.
 func writeJSON(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
@@ -93,7 +94,6 @@ func TestIntegration_DownloadUnderAnInheritedWatchRunsOnce(t *testing.T) {
 	assert.Equal(t, "first", string(one))
 
 	// The flag asks for the same thing on purpose, and that stays an error.
-	// Cobra reports the error itself, so only the exit code is visible here.
 	require.NoError(t, os.Remove(filepath.Join(dir, "one.txt")))
 	code, _, _ = execCmdFull(t, cfg, "assets", "grab", "--download-dir", dir, "--watch", "2s")
 	assert.Equal(t, 1, code)
@@ -106,13 +106,7 @@ func TestIntegration_DownloadHandsStepURLsToTheQueue(t *testing.T) {
 	swapDownloadClient(t, srv)
 	dir := t.TempDir()
 
-	cfg, err := loadStr(t, `<config name="dl">
-		<downloads concurrency="2"/>
-		<vars><var name="token">s3cret</var></vars>
-		<command name="grab">
-			<steps>
-				<step name="index">
-					<run><request><url>`+srv.URL+`/index</url></request></run>
+	cfg, err := loadStr(t, testIntegration_DownloadHandsStepURLsToTheQueueXml+srv.URL+`/index</url></request></run>
 				</step>
 			</steps>
 			<download over="result.index.assets">
@@ -141,8 +135,7 @@ func TestIntegration_DownloadHandsStepURLsToTheQueue(t *testing.T) {
 		[]string{filepath.Join(dir, "one.txt"), filepath.Join(dir, "two.txt")},
 		strings.Fields(strings.TrimSpace(out)))
 	assert.Contains(t, errOut, "downloaded 2/2 files")
-	// A single line per file that landed, named by the file rather than by its
-	// full destination path, and no line at all for a start.
+	// This is a single line per file that landed.
 	assert.Contains(t, errOut, "downloaded one.txt (5 B)")
 	assert.Contains(t, errOut, "downloaded two.txt (11 B)")
 	assert.NotContains(t, errOut, "downloading ")
@@ -173,8 +166,7 @@ func TestIntegration_DownloadFailureIsLoudAndNonZero(t *testing.T) {
 }
 
 func TestIntegration_DownloadVerifiesDigestsFromTheStep(t *testing.T) {
-	// The manifest carries a digest per asset; any of them is wrong, which is
-	// the case the feature exists for.
+	// The manifest carries a digest per asset; any of them is wrong, which is the case the feature exists for.
 	good := sha256.Sum256([]byte("first"))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -266,9 +258,7 @@ func TestIntegration_RedirectedRequestIsByteExact(t *testing.T) {
 }
 
 func TestIntegration_DownloadPlanErrorStopsBeforeFetching(t *testing.T) {
-	cfg, err := loadStr(t, `<config name="dl"><command name="grab">
-		<download over="result.nothing"><url><value name="item"/></url></download>
-	</command></config>`)
+	cfg, err := loadStr(t, testIntegration_DownloadPlanErrorStopsBeforeFetchingXml)
 	require.NoError(t, err)
 
 	code, _, errOut := execCmdFull(t, cfg, "grab")
@@ -277,10 +267,7 @@ func TestIntegration_DownloadPlanErrorStopsBeforeFetching(t *testing.T) {
 }
 
 func TestIntegration_DownloadSkippedEntirelySaysSo(t *testing.T) {
-	cfg, err := loadStr(t, `<config name="dl"><command name="grab">
-		<flag name="save" type="bool"/>
-		<download when="{{.flag.save}}"><url>https://example.invalid/f</url></download>
-	</command></config>`)
+	cfg, err := loadStr(t, testIntegration_DownloadSkippedEntirelySaysSoXml)
 	require.NoError(t, err)
 
 	code, _, errOut := execCmdFull(t, cfg, "grab")
@@ -293,13 +280,10 @@ func TestIntegration_DownloadLeafIgnoresAnInheritedRun(t *testing.T) {
 	swapDownloadClient(t, srv)
 	dir := t.TempDir()
 
-	// The ancestor's <run> would write a marker file if a <download> leaf ran
-	// it on the way to the queue.
+	// The ancestor's <run> would write a marker file if a <download> leaf ran it on the way to the queue.
 	marker := filepath.Join(dir, "ran-the-command")
 	cfg, err := loadStr(t, `<config name="dl">
-		<run>touch `+marker+`</run>
-		<command name="grab">
-			<download><url>`+srv.URL+`/files/one</url><to>one.txt</to></download>
+		<run>touch `+marker+testIntegration_DownloadLeafIgnoresAnInheritedRunXml+srv.URL+`/files/one</url><to>one.txt</to></download>
 		</command>
 	</config>`)
 	require.NoError(t, err)
@@ -312,10 +296,7 @@ func TestIntegration_DownloadLeafIgnoresAnInheritedRun(t *testing.T) {
 
 func TestIntegration_DownloadStepFailureSkipsTheQueue(t *testing.T) {
 	dir := t.TempDir()
-	cfg, err := loadStr(t, `<config name="dl"><command name="grab">
-		<steps><step name="probe"><run>exit 3</run></step></steps>
-		<download><url>https://example.invalid/f</url><to>never.bin</to></download>
-	</command></config>`)
+	cfg, err := loadStr(t, testIntegration_DownloadStepFailureSkipsTheQueueXml)
 	require.NoError(t, err)
 
 	code, _, _ := execCmdFull(t, cfg, "grab", "--download-dir", dir)
@@ -358,3 +339,18 @@ func TestMCP_DownloadLeafWithNothingToDo(t *testing.T) {
 	assert.True(t, isErr)
 	assert.Contains(t, out, "render url")
 }
+
+//go:embed testdata/test-integration-download-hands-step-ur-ls-to-the-queue.xml
+var testIntegration_DownloadHandsStepURLsToTheQueueXml string
+
+//go:embed testdata/test-integration-download-plan-error-stops-before-fetching.xml
+var testIntegration_DownloadPlanErrorStopsBeforeFetchingXml string
+
+//go:embed testdata/test-integration-download-skipped-entirely-says-so.xml
+var testIntegration_DownloadSkippedEntirelySaysSoXml string
+
+//go:embed testdata/test-integration-download-leaf-ignores-an-inherited-run.xml
+var testIntegration_DownloadLeafIgnoresAnInheritedRunXml string
+
+//go:embed testdata/test-integration-download-step-failure-skips-the-queue.xml
+var testIntegration_DownloadStepFailureSkipsTheQueueXml string

@@ -84,8 +84,7 @@ describe("parseCurlCommand", () => {
     const r = parseCurlCommand(
       "sh -c 'curl -fsSL https://api.com/data'",
     );
-    // sh -c wraps the command — we pass the original string, not argv
-    // This tests the shell string form
+    // sh -c wraps the command — we pass the original string, not argv This tests the shell string form
     expect(r.request?.url ?? r.error).toBeDefined();
   });
 

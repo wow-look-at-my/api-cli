@@ -2,17 +2,6 @@
 //
 // Loads a JSON config (from environment binding or inline), builds the
 // command tree, and serves each leaf command as an HTTP endpoint.
-//
-// URL mapping:
-//   GET /                       → index of all commands
-//   GET /_health                → {"status":"ok"}
-//   GET /_commands              → JSON list of leaf commands with metadata
-//   GET /_warnings              → config compatibility warnings
-//   GET /<path>[/args...]?flags → execute leaf command via fetch()
-//
-// Config is provided via:
-//   - API_CLI_CONFIG env binding (JSON string)
-//   - Or a KV namespace binding CONFIG_KV with key "config"
 
 import { loadConfig, type Config, type Format } from "./config.ts";
 import { collectLeaves, listLeaves, resolveLeaf, extractArgs, validateRequired, type ResolvedLeaf } from "./router.ts";

@@ -1,13 +1,12 @@
 // Comparative tests — verifies the TypeScript port produces identical
-// results to the Go implementation for shared functionality.
-// These tests load the JSON example configs from test/fixtures/ and
-// exercise config parsing, template rendering, router resolution, and
-// format system behavior.
+// results to the Go implementation for shared functionality. These tests load
+// the JSON example configs from test/fixtures/ and exercise config parsing,
+// template rendering, router resolution, and format system behavior.
 //
-// The Go CLI migrated to XML configs, but the Workers port parses JSON.
-// The fixture files are the last JSON versions of the example configs,
-// preserved here so the Workers port's behavior can be verified against
-// the same config semantics.
+// The Go CLI migrated to XML configs, but the Workers port parses JSON. The
+// fixture files are the last JSON versions of the example configs, preserved
+// here so the Workers. Port's behavior can be verified against the same
+// config semantics.
 
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -218,8 +217,7 @@ describe("comparative: api.example.json", () => {
 
   it("analyzeConfig reports warnings", () => {
     const warnings = analyzeConfig(cfg);
-    // Example config has no cwd/stdin/confirm, so filesystem warnings
-    // come from preconditions only
+    // Example config has no cwd/stdin/confirm, so filesystem warnings come from preconditions only
     const fsWarnings = warnings.filter((w) => w.feature.includes("precondition"));
     expect(fsWarnings.length).toBeGreaterThan(0); // users/save has fileExists
   });

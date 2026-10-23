@@ -60,7 +60,7 @@ func runeWidth(r rune) int {
 }
 
 // skipEscape advances past the ANSI escape sequence at s[i], which must be an
-// ESC, and returns the index just after it. It knows CSI, OSC, and ESC plus an
+// ESC, and returns the index after it. It knows CSI, OSC, and ESC plus an
 // intro byte.
 func skipEscape(s string, i int) int {
 	// i points at ESC.

@@ -1,5 +1,4 @@
 // Render module — template rendering for strings, entries, and vars.
-// Port of render.go's renderString, renderEntry, walkEntry, mergeVars.
 
 import { executeTemplate, type FuncMap } from "./template.ts";
 import { buildFuncMap } from "./template-funcs.ts";

@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"testing"
 
@@ -8,13 +10,7 @@ import (
 )
 
 func TestJoin_Parses(t *testing.T) {
-	cfg, err := loadStr(t, `<config name="j"><command name="pull">
-		<download over="var.parts" group="{{ .id }}" order="{{ .seq }}">
-			<url>https://example.test/<value name="seq"/></url>
-			<to><value name="id"/>/<value name="seq"/>.part</to>
-			<join to="{{ .id }}.bin" cleanup="true" contiguous="warn"/>
-		</download>
-	</command></config>`)
+	cfg, err := loadStr(t, testJoin_ParsesXml)
 	require.NoError(t, err)
 
 	d := cfg.Commands[0].Downloads[0]
@@ -39,11 +35,7 @@ func TestJoin_RejectsBadGrammar(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := loadStr(t, `<config name="j"><command name="pull">
-				<download over="var.parts" group="{{ .id }}">
-					<url>https://example.test/x</url>
-					<to>p.part</to>
-					`+tc.join+`
+			_, err := loadStr(t, testJoin_RejectsBadGrammarXml+tc.join+`
 				</download>
 			</command></config>`)
 			require.Error(t, err)
@@ -53,22 +45,18 @@ func TestJoin_RejectsBadGrammar(t *testing.T) {
 }
 
 func TestJoin_GroupNeedsAJoin(t *testing.T) {
-	_, err := loadStr(t, `<config name="j"><command name="pull">
-		<download group="{{ .id }}"><url>https://example.test/x</url><to>p</to></download>
-	</command></config>`)
+	_, err := loadStr(t, testJoin_GroupNeedsAJoinXml)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "group= and order= describe a <join>")
 }
 
 func TestJoin_PartNeedsItsOwnFile(t *testing.T) {
-	_, err := loadStr(t, `<config name="j"><command name="pull">
-		<download><url>https://example.test/x</url><join to="out.bin"/></download>
-	</command></config>`)
+	_, err := loadStr(t, testJoin_PartNeedsItsOwnFileXml)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "a joined part needs its own <to>")
 }
 
-// A join orders by number, so a key that is not a single is a load-time
+// A join orders by number. A key that is not a single is a load-time
 // answer rather than a file concatenated in the wrong order.
 func TestJoin_OrderMustBeNumeric(t *testing.T) {
 	d := Download{
@@ -137,3 +125,15 @@ func TestMissingOrders(t *testing.T) {
 	assert.Equal(t, []string{"2", "3"}, missingOrders(members(1, 4)))
 	assert.Empty(t, missingOrders(members(1.5, 2.5)), "a fractional order names no sequence")
 }
+
+//go:embed testdata/test-join-parses.xml
+var testJoin_ParsesXml string
+
+//go:embed testdata/test-join-rejects-bad-grammar.xml
+var testJoin_RejectsBadGrammarXml string
+
+//go:embed testdata/test-join-group-needs-a-join.xml
+var testJoin_GroupNeedsAJoinXml string
+
+//go:embed testdata/test-join-part-needs-its-own-file.xml
+var testJoin_PartNeedsItsOwnFileXml string

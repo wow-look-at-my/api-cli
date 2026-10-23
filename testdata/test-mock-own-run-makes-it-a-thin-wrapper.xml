@@ -1,0 +1,9 @@
+<config name="t">
+	<command name="cc" passthrough="true">
+		<mock>
+			<input name="src" match="\.c$" required="true"/>
+			<record path="db.jsonl">{"file":<value expr="{{ .mock.src | toJson }}"/>}</record>
+		</mock>
+		<run>echo wrapped {{ .mock.src }}</run>
+	</command>
+</config>

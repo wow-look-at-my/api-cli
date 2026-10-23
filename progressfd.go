@@ -23,7 +23,7 @@ type progressReport struct {
 }
 
 // parseProgressLine reads a single report: a JSON object with "done", "total"
-// or both. An unknown key, a missing value or a negative number is an error: a
+// or both. An unknown key, a missing value or a negative number is an error. A
 // program that speaks the protocol wrong must hear about it, or its rows sit at
 // zero with no reason given.
 func parseProgressLine(line string) (progressReport, error) {

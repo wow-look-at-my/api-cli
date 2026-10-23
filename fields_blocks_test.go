@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"net/http"
 	"net/http/httptest"
@@ -10,8 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fieldsBlocks wraps a single declaration as the single block a leaf carries.
-// Most tests declare a single shape, and this keeps them reading that way.
+// fieldsBlocks wraps a single declaration as the block a leaf carries.
 func fieldsBlocks(f *Fields) []FieldsBlock {
 	return []FieldsBlock{{Fields: f}}
 }
@@ -126,10 +127,7 @@ func TestFieldsBlocks_OverAStepResult(t *testing.T) {
 }
 
 func TestParseXML_FieldsWhenAndSeveralBlocks(t *testing.T) {
-	cfg := mustParse(t, `<config name="x"><command name="c"><run>x</run>
-		<fields when="{{ not .arg.id }}" over="items"><field name="id">id</field></fields>
-		<fields when="{{ .arg.id }}"><field name="name">name</field></fields>
-		</command></config>`)
+	cfg := mustParse(t, testParseXML_FieldsWhenAndSeveralBlocksXml)
 	blocks := cfg.Commands[0].Fields
 	require.Len(t, blocks, 2)
 	assert.Equal(t, "{{ not .arg.id }}", blocks[0].When)
@@ -137,3 +135,6 @@ func TestParseXML_FieldsWhenAndSeveralBlocks(t *testing.T) {
 	assert.Equal(t, "{{ .arg.id }}", blocks[1].When)
 	assert.Equal(t, "name", blocks[1].Fields.List[0].Path)
 }
+
+//go:embed testdata/test-parse-xml-fields-when-and-several-blocks.xml
+var testParseXML_FieldsWhenAndSeveralBlocksXml string

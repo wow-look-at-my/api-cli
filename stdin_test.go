@@ -9,10 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Tests for the per-command/step stdin field. Stdin inherits down the tree like
-// `cwd`: a node's own stdin, if non-empty, overrides any ancestor's. Steps
-// inherit the leaf's effective stdin unless they override it. The stdin template
-// is rendered against the same data context as the command it applies to.
+// Tests for the per-command/step stdin field. Stdin inherits down the tree
+// like `cwd`: a node's own stdin, if non-empty, overrides any ancestor's.
+// Steps inherit the leaf's effective stdin unless they override it.
 
 func TestStdin_DoExecFeedsInput(t *testing.T) {
 	out, _ := captureExecStreams(t)

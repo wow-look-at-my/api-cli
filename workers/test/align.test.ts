@@ -15,7 +15,7 @@ describe("displayWidth", () => {
   });
 
   it("counts fullwidth forms as width 2", () => {
-    expect(displayWidth("Ａ")).toBe(2); // Ａ (fullwidth A)
+    expect(displayWidth("Ａ")).toBe(2);
   });
 
   it("handles empty string", () => {
@@ -23,7 +23,7 @@ describe("displayWidth", () => {
   });
 
   it("handles mixed content", () => {
-    expect(displayWidth("hi世\x1b[1m!\x1b[0m")).toBe(5); // h(1) i(1) 世(2) !(1)
+    expect(displayWidth("hi世\x1b[1m!\x1b[0m")).toBe(5);
   });
 });
 
@@ -52,7 +52,7 @@ describe("alignColumns", () => {
     const rows = ["A\tB\tC", "X\tY"];
     const result = alignColumns(rows, 2);
     const lines = result.split("\n");
-    expect(lines.length).toBe(3); // 2 rows + trailing newline
+    expect(lines.length).toBe(3); // A couple of rows + trailing newline
   });
 
   it("handles empty input", () => {
@@ -66,8 +66,6 @@ describe("alignColumns", () => {
   it("width-aware alignment with CJK", () => {
     const rows = ["NAME\tVAL", "世界\t42", "ab\t99"];
     const result = alignColumns(rows, 2);
-    // 世界 has display width 4, "NAME" has width 4, "ab" has width 2
-    // So ab should be padded to match
     const lines = result.split("\n").filter(Boolean);
     expect(lines.length).toBe(3);
   });

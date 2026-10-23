@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"bytes"
 	"os"
@@ -29,17 +31,8 @@ func captureStdout(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-const installable = `<config name="t">
-	<command name="cc" passthrough="true">
-		<mock><output path="out.o"/></mock>
-	</command>
-	<command name="tools">
-		<command name="ld" passthrough="true">
-			<mock><output path="app"/></mock>
-		</command>
-		<command name="unrelated"><run>true</run></command>
-	</command>
-</config>`
+//go:embed testdata/installable.xml
+var installable string
 
 // A single XML in, a directory of executables out. That directory on PATH
 // is the whole installation.
@@ -83,16 +76,7 @@ func TestInstallMocks_ScriptNamesTheLeafPath(t *testing.T) {
 // Leaves that share a name would install a single script, and the later leaf
 // would win in silence. A build then calls a stand-in nobody can trace back.
 func TestInstallMocks_DuplicateLeafNameFails(t *testing.T) {
-	cfgPath := writeConfig(t, `<config name="t">
-	<command name="cc" passthrough="true">
-		<mock><output path="a"/></mock>
-	</command>
-	<command name="alt">
-		<command name="cc" passthrough="true">
-			<mock><output path="b"/></mock>
-		</command>
-	</command>
-</config>`)
+	cfgPath := writeConfig(t, testInstallMocks_DuplicateLeafNameFailsXml)
 	captureStdout(t)
 
 	var errOut bytes.Buffer
@@ -120,3 +104,6 @@ func TestCollectMockWrappers_FindsNestedLeaves(t *testing.T) {
 	assert.Equal(t, []string{"cc"}, got[0].path)
 	assert.Equal(t, []string{"tools", "ld"}, got[1].path)
 }
+
+//go:embed testdata/test-install-mocks-duplicate-leaf-name-fails.xml
+var testInstallMocks_DuplicateLeafNameFailsXml string

@@ -1,0 +1,8 @@
+<config name="x"><command name="c">
+		<arg name="id" type="int" required="true"/>
+		<flag name="limit" short="n" type="int" default="30" conflicts="page"/>
+		<flag name="page" type="int" default="1"/>
+		<flag name="tags" type="string-slice" default="a,b"/>
+		<flag name="on" type="bool" default="true"/>
+		<steps><step name="s" when="{{.arg.id}}"><run>echo {{.arg.id}}</run></step></steps>
+		<run>echo done</run></command></config>

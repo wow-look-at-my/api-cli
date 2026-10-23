@@ -9,15 +9,7 @@ import (
 	"github.com/wow-look-at-my/tml"
 )
 
-// A <tml> leaf under a watch runs as a real Bubble Tea program rather than
-// through the repaint loop in watch.go. TML takes down a program that paints
-// for longer than tml.DriveGrace with nothing able to drive it. A terminal
-// program also owns the alternate screen, the resize and the key handling
-// that a dashboard wants anyway.
-//
-// A tick is a single whole run of the leaf, exactly as a watch frame is:
-// the steps, the request and the component render, captured into a buffer
-// that becomes the frame. Nothing is cached between ticks.
+// A <tml> leaf under a watch runs as a real Bubble Tea program rather than through the repaint loop in watch.go.
 
 // tmlTickMsg asks the model to run the leaf again.
 type tmlTickMsg time.Time
@@ -85,8 +77,9 @@ func (m *tmlModel) View() tea.View {
 }
 
 // refresh runs the leaf into a buffer and keeps the result as the frame. The
-// run happens here rather than in a command, because the leaf writes through
-// the package's own output channels and runs cannot hold them at the same time.
+// run happens here rather than in a command. This is because the leaf writes
+// through the package's own output channels and runs cannot hold them at the
+// same time.
 func (m *tmlModel) refresh() tea.Cmd {
 	var buf bytes.Buffer
 	prev := ttyOverride

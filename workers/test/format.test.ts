@@ -177,7 +177,5 @@ describe("applyFormat", () => {
       "table",
     );
     expect(result.applied).toBe(true);
-    // Object data, but table view forced — template may produce empty output
-    // since .data is not a slice
   });
 });

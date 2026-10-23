@@ -11,7 +11,7 @@ import (
 )
 
 // execStdin / execStdout / execStderr are the I/O channels used when running
-// the rendered command. Package-level so tests can redirect them.
+// the rendered command.
 var (
 	execStdin  io.Reader = os.Stdin
 	execStdout io.Writer = os.Stdout
@@ -102,7 +102,7 @@ func captureExec(c *Cmd, cwd, stdin string, data any) (string, int) {
 }
 
 // captureExecTo captures stdout and sends stderr to errOut instead of the
-// process's own. Child stdin is always explicit, never inherited: the callers
+// process's own. Child stdin is always explicit, never inherited. The callers
 // are contexts where the parent's stdin is either the MCP protocol channel or
 // the user's terminal, and neither belongs to the child.
 func captureExecTo(c *Cmd, cwd, stdin string, data any, errOut io.Writer) (string, int) {
@@ -130,14 +130,13 @@ func captureExecTo(c *Cmd, cwd, stdin string, data any, errOut io.Writer) (strin
 	return outBuf.String(), 0
 }
 
-// captureExecCapped is the format-path capture variant. It buffers the
-// child's stdout up to maxBytes; if the child exceeds the cap, the buffered
-// prefix is flushed to execStdout and the remainder streams through. The
-// caller treats overflow == true as "skip formatting, output already streamed."
+// captureExecCapped is the format-path capture variant. It buffers the child's
+// stdout up to maxBytes. If the child exceeds the cap, the buffered prefix is
+// flushed to execStdout and the remainder streams through. The caller treats
+// overflow == true as "skip formatting, output already streamed."
 //
-// Returns (capturedOrEmpty, overflowed, exitCode). When overflowed is true the
-// returned string is empty — the caller MUST NOT format it; bytes are already
-// on stdout.
+// When overflowed is true the returned string is empty — the caller MUST
+// NOT format it; bytes are already on stdout.
 func captureExecCapped(c *Cmd, cwd, stdin string, data any, maxBytes int) (string, bool, int) {
 	if !c.Defined() {
 		fmt.Fprintln(execStderr, "error: command is empty")
@@ -178,11 +177,8 @@ func captureExecCapped(c *Cmd, cwd, stdin string, data any, maxBytes int) (strin
 	return tee.buf.String(), false, 0
 }
 
-// cappedTee buffers writes up to max bytes. a single time the cap would be
-// exceeded by the next Write, it flushes the buffered prefix to out and
-// switches to passthrough mode, where every subsequent Write goes straight to
-// out. This gives the format path a "earliest 32MB or whatever fits" buffer
-// with a transparent fallback to streaming for larger outputs.
+// cappedTee buffers writes up to max bytes. a single time the cap will be
+// exceeded by the next Write.
 type cappedTee struct {
 	buf        *bytes.Buffer
 	out        io.Writer
@@ -207,11 +203,10 @@ func (c *cappedTee) Write(p []byte) (int, error) {
 	return c.buf.Write(p)
 }
 
-// parseResult tries to decode s as JSON. If s is valid JSON, the decoded value
-// is returned (arrays and objects remain structured so templates can index
-// into them). JSON numbers are normalized to int64 or float64 so that sprig
-// arithmetic helpers (mul, add, etc.) work without extra casting. If s is not
-// valid JSON, the trimmed raw string is returned.
+// parseResult tries to decode s as JSON. If s is valid JSON, the decoded
+// value is returned (arrays and objects remain structured so templates can
+// index into them). JSON numbers are normalized to int64 or float64 so that
+// sprig arithmetic helpers (mul, add, etc.) work without extra casting.
 func parseResult(s string) any {
 	s = strings.TrimSpace(s)
 	dec := json.NewDecoder(strings.NewReader(s))
@@ -271,7 +266,7 @@ func buildExecCmd(c *Cmd, data any) (*exec.Cmd, error) {
 //
 // Split out of buildExecCmd for the caller that cannot execute where it
 // renders: a <download> resolves its transport while the leaf's data context
-// still exists, and the queue runs the result later, on a worker, with no
+// still exists. The queue runs the result later, on a worker, with no
 // context in reach. Rendering stays in a single place either way.
 func resolveArgv(c *Cmd, data any) ([]string, error) {
 	if c.Shell {

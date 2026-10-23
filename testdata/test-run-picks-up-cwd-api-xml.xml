@@ -1,0 +1,4 @@
+<config name="t">
+	<run>true</run>
+	<command name="ping"/>
+</config>

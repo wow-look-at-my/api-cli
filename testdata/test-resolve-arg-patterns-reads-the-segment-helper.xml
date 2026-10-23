@@ -1,0 +1,6 @@
+<config name="t">
+		<command name="show" description="s">
+			<arg name="owner" pattern="{{ segmentPattern }}"/>
+			<run>printf ok</run>
+		</command>
+	</config>

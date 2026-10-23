@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"encoding/json"
 	"io"
@@ -15,43 +17,10 @@ import (
 	"github.com/wow-look-at-my/tml/sema"
 )
 
-// The build-board case: a list call, a single call per element for its log,
-// and a single card per build carrying attributes plus the tail of that log.
-//
-// Every server here closes through t.Cleanup rather than a defer, so it
-// outlives the swapped client that points at it. A defer closes it and the
-// global then names a dead server for as long as the restore takes.
+// The build-board case: a list call, a single call per element for its log.
 
-const boardComponent = `<?xml version="1.1" encoding="UTF-8"?>
-<Component xmlns="urn:tml:v1" name="Board">
-	<Property name="heading" type="string" required="true"/>
-	<Property name="builds" type="record[]" default=""/>
-
-	<DataTemplate name="Build">
-		<Property name="name" type="string" required="true"/>
-		<Property name="status" type="string" default=""/>
-		<Property name="stage" type="string" default=""/>
-		<Property name="log" type="string[]" default=""/>
-		<Template>
-			<Stack orientation="vertical">
-				<Stack orientation="horizontal" gap="1">
-					<Text>{name}</Text>
-					<Text>{status}</Text>
-					<Text>{stage}</Text>
-				</Stack>
-				<For each="{log}" as="line"><Text>  {line}</Text></For>
-			</Stack>
-		</Template>
-	</DataTemplate>
-
-	<Template>
-		<Stack orientation="vertical">
-			<Text id="heading">{heading}</Text>
-			<Stack id="builds" itemsSource="{builds}" itemTemplate="Build" orientation="vertical"/>
-		</Stack>
-	</Template>
-</Component>
-`
+//go:embed testdata/board-component.xml
+var boardComponent string
 
 func writeBoardComponent(t *testing.T) string {
 	t.Helper()
@@ -61,7 +30,7 @@ func writeBoardComponent(t *testing.T) string {
 }
 
 // fakeCI answers a list call and a per-build detail call, in the shape a CI
-// server takes: the list names the runs, and the detail carries the log as a
+// server takes: the list names the runs. The detail carries the log as a
 // single entry per stage.
 func fakeCI(t *testing.T, calls *[]string) *httptest.Server {
 	t.Helper()
@@ -135,8 +104,7 @@ func TestBuildBoard_OneCardPerBuildWithItsOwnLog(t *testing.T) {
 	code, out, errOut := execCmdFull(t, cfg, "builds", "--format=always")
 	require.Equal(t, 0, code, errOut)
 
-	// The list a single time, then a single detail call per element in the
-	// source order, then the leaf's own call.
+	// The list a single time, then a single detail call per element in the source order, then the leaf's own call.
 	require.Len(t, calls, 4)
 	assert.Contains(t, calls[0], "/list")
 	assert.Contains(t, calls[1], `{"id":"api"}`)

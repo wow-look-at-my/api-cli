@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"encoding/json"
 	"os"
@@ -28,18 +30,8 @@ func readFile(t *testing.T, path string) string {
 	return string(b)
 }
 
-const ccMock = `<config name="t">
-	<command name="cc" passthrough="true">
-		<flag name="o" short="o" type="string"/>
-		<flag name="c" type="bool"/>
-		<mock>
-			<input name="src" match="\.c$" required="true"/>
-			<output path="{{ .flag.o }}" when="{{ .flag.o }}"/>
-			<output path="{{ stem .mock.src }}.o" when="{{ and .flag.c (not .flag.o) }}"/>
-			<record path="db.jsonl"/>
-		</mock>
-	</command>
-</config>`
+//go:embed testdata/cc-mock.xml
+var ccMock string
 
 func TestMock_WritesTheDeclaredOutput(t *testing.T) {
 	dir := t.TempDir()
@@ -86,8 +78,7 @@ func TestMock_RecordIsACompileCommandsEntry(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(lines[0]), &entry))
 	assert.Equal(t, dir, entry.Directory)
-	// The whole command line, with the program at the front: a consumer replays
-	// these, and the leftovers alone are missing every flag the leaf declared.
+	// The whole command line, with the program at the front: a consumer replays these.
 	assert.Equal(t, []string{"cc", "-c", "src/foo.c"}, entry.Arguments)
 	assert.Equal(t, "src/foo.c", entry.File)
 	assert.Equal(t, "foo.o", entry.Output)
@@ -114,14 +105,7 @@ func TestMock_VariadicInputFansOutToOneOutputEach(t *testing.T) {
 	dir := t.TempDir()
 	chdir(t, dir)
 
-	cfg := loadMock(t, `<config name="t">
-	<command name="cc" passthrough="true">
-		<mock>
-			<input name="sources" match="\.c$" variadic="true" required="true"/>
-			<output over="mock.sources" path="build/{{ stem .item }}.o"/>
-		</mock>
-	</command>
-</config>`)
+	cfg := loadMock(t, testMock_VariadicInputFansOutToOneOutputEachXml)
 
 	code, _ := execCmd(t, cfg, "cc", "--", "-c", "a.c", "b.c", "sub/c.c")
 	require.Equal(t, 0, code)
@@ -136,16 +120,7 @@ func TestMock_BodyAndModeReachTheFile(t *testing.T) {
 	dir := t.TempDir()
 	chdir(t, dir)
 
-	cfg := loadMock(t, `<config name="t">
-	<command name="ld" passthrough="true">
-		<mock>
-			<input name="objects" match="\.o$" variadic="true"/>
-			<output path="app" mode="0755">#!/bin/sh
-<for each="mock.objects"># <value expr="{{ . }}"/>
-</for></output>
-		</mock>
-	</command>
-</config>`)
+	cfg := loadMock(t, testMock_BodyAndModeReachTheFileXml)
 
 	code, _ := execCmd(t, cfg, "ld", "--", "a.o", "b.o")
 	require.Equal(t, 0, code)
@@ -163,14 +138,7 @@ func TestMock_BodyAndModeReachTheFile(t *testing.T) {
 func TestMock_ExitCodeIsATemplate(t *testing.T) {
 	chdir(t, t.TempDir())
 
-	cfg := loadMock(t, `<config name="t">
-	<command name="cc" passthrough="true">
-		<mock exit="{{ if .mock.src }}0{{ else }}1{{ end }}">
-			<input name="src" match="\.c$"/>
-			<stderr>cc: no input files<value expr="{{ &quot;\n&quot; }}"/></stderr>
-		</mock>
-	</command>
-</config>`)
+	cfg := loadMock(t, testMock_ExitCodeIsATemplateXml)
 
 	code, _, errOut := execCmdFull(t, cfg, "cc", "--", "-v")
 	assert.Equal(t, 1, code)
@@ -192,15 +160,7 @@ func TestMock_OwnRunMakesItAThinWrapper(t *testing.T) {
 	dir := t.TempDir()
 	chdir(t, dir)
 
-	cfg := loadMock(t, `<config name="t">
-	<command name="cc" passthrough="true">
-		<mock>
-			<input name="src" match="\.c$" required="true"/>
-			<record path="db.jsonl">{"file":<value expr="{{ .mock.src | toJson }}"/>}</record>
-		</mock>
-		<run>echo wrapped {{ .mock.src }}</run>
-	</command>
-</config>`)
+	cfg := loadMock(t, testMock_OwnRunMakesItAThinWrapperXml)
 
 	code, out := execCmd(t, cfg, "cc", "--", "src/foo.c")
 	assert.Equal(t, 0, code)
@@ -208,22 +168,13 @@ func TestMock_OwnRunMakesItAThinWrapper(t *testing.T) {
 	assert.JSONEq(t, `{"file":"src/foo.c"}`, strings.TrimSpace(readFile(t, filepath.Join(dir, "db.jsonl"))))
 }
 
-// An INHERITED run is not the leaf's own, so it stays where it is: a mock leaf
+// An INHERITED run is not the leaf's own. It stays where it is: a mock leaf
 // under a parent that declares a run does not fire that run on the way past.
 func TestMock_InheritedRunDoesNotFire(t *testing.T) {
 	dir := t.TempDir()
 	chdir(t, dir)
 
-	cfg := loadMock(t, `<config name="t">
-	<command name="tools">
-		<run>echo inherited</run>
-		<command name="cc" passthrough="true">
-			<mock>
-				<output path="out.o"/>
-			</mock>
-		</command>
-	</command>
-</config>`)
+	cfg := loadMock(t, testMock_InheritedRunDoesNotFireXml)
 
 	code, out := execCmd(t, cfg, "tools", "cc", "--", "foo.c")
 	assert.Equal(t, 0, code)
@@ -238,13 +189,7 @@ func TestMock_FromCopiesAFixture(t *testing.T) {
 	chdir(t, dir)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "fixture.o"), []byte("ELF-ish"), 0o644))
 
-	cfg := loadMock(t, `<config name="t">
-	<command name="cc" passthrough="true">
-		<mock>
-			<output path="out.o" from="fixture.o"/>
-		</mock>
-	</command>
-</config>`)
+	cfg := loadMock(t, testMock_FromCopiesAFixtureXml)
 
 	code, _ := execCmd(t, cfg, "cc", "--", "foo.c")
 	require.Equal(t, 0, code)
@@ -339,3 +284,21 @@ func TestStem(t *testing.T) {
 	assert.Equal(t, "bar", stem("bar"))
 	assert.Equal(t, "", stem(""))
 }
+
+//go:embed testdata/test-mock-variadic-input-fans-out-to-one-output-each.xml
+var testMock_VariadicInputFansOutToOneOutputEachXml string
+
+//go:embed testdata/test-mock-body-and-mode-reach-the-file.xml
+var testMock_BodyAndModeReachTheFileXml string
+
+//go:embed testdata/test-mock-exit-code-is-a-template.xml
+var testMock_ExitCodeIsATemplateXml string
+
+//go:embed testdata/test-mock-own-run-makes-it-a-thin-wrapper.xml
+var testMock_OwnRunMakesItAThinWrapperXml string
+
+//go:embed testdata/test-mock-inherited-run-does-not-fire.xml
+var testMock_InheritedRunDoesNotFireXml string
+
+//go:embed testdata/test-mock-from-copies-a-fixture.xml
+var testMock_FromCopiesAFixtureXml string

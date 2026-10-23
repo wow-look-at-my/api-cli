@@ -1,15 +1,4 @@
 // Go text/template engine — TypeScript implementation.
-//
-// Supports the subset of Go's text/template used by api-cli configs:
-//   - {{.field}} dot access, nested
-//   - {{if pipeline}}...{{else}}...{{end}}
-//   - {{range pipeline}}...{{else}}...{{end}}  with $index/$key and .
-//   - {{with pipeline}}...{{else}}...{{end}}
-//   - {{$var := pipeline}} / {{$var = pipeline}}
-//   - pipelines: expr | func arg ...
-//   - function calls: func arg1 arg2
-//   - {{- ... -}} whitespace trimming
-//   - missingkey=zero semantics
 
 // ---------- Token types ----------
 
@@ -442,7 +431,7 @@ function tokenizeExpr(src: string): Expr[] {
       continue;
     }
 
-    // Dot access: .field.subfield or bare .
+    // Dot access: .field.subfield or bare.
     if (ch === ".") {
       if (i + 1 >= src.length || /[\s)|]/.test(src[i + 1]!)) {
         exprs.push({ kind: "dot" });
@@ -619,8 +608,7 @@ function evalCommand(cmd: PipelineCommand, ctx: ExecContext, pipeArg?: unknown):
     return fn(...fnArgs);
   }
 
-  // First is a value, rest are... shouldn't happen in Go templates,
-  // but handle gracefully
+  // First is a value, rest are... shouldn't happen in Go templates, but handle gracefully
   return evalExpr(first, ctx);
 }
 
@@ -649,8 +637,7 @@ function formatValue(v: unknown): string {
   if (typeof v === "number" || typeof v === "boolean") return String(v);
   if (Array.isArray(v)) return v.map(formatValue).join(" ");
   if (typeof v === "object") {
-    // Go's fmt prints maps as map[k1:v1 k2:v2], but for templates
-    // we typically want JSON or the raw value for nested access
+    // Go's fmt prints maps as map[k1:v1 k2:v2].
     return JSON.stringify(v);
   }
   return String(v);

@@ -1,0 +1,6 @@
+<config name="t">
+		<preconditions>
+			<precondition>{{ if not (safeSegments .arg.owner) }}owner must be one path segment{{ end }}</precondition>
+		</preconditions>
+		<command name="ping" description="p"><run>printf ok</run></command>
+	</config>

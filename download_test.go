@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"os"
 	"path/filepath"
@@ -12,20 +14,7 @@ import (
 )
 
 func TestParseXML_Download(t *testing.T) {
-	cfg := mustParse(t, `<config name="x">
-		<downloads concurrency="8" retries="1" dir="./out"/>
-		<command name="get">
-			<download over="result.list.assets" when="{{.flag.save}}">
-				<url><value name="browser_download_url"/></url>
-				<to><value name="name"/></to>
-				<header name="Accept">application/octet-stream</header>
-				<cookie name="sid"><value name="var.session"/></cookie>
-				<if test="var.token">
-					<header name="Authorization">Bearer <value name="var.token"/></header>
-				</if>
-			</download>
-		</command>
-	</config>`)
+	cfg := mustParse(t, testParseXML_DownloadXml)
 
 	require.NotNil(t, cfg.Downloads)
 	assert.Equal(t, &Downloads{Concurrency: 8, Retries: 1, Dir: "./out", RetriesSet: true}, cfg.Downloads)
@@ -209,10 +198,7 @@ func TestPlanDownloads_MultiLineURLBecomesManyDownloads(t *testing.T) {
 }
 
 func TestParseXML_DownloadHash(t *testing.T) {
-	cfg := mustParse(t, `<config name="x"><command name="get">
-		<download><url>https://h/a</url><hash><value name="sha256"/></hash></download>
-		<download><url>https://h/b</url><hash algo="SHA512"><value name="d"/></hash></download>
-	</command></config>`)
+	cfg := mustParse(t, testParseXML_DownloadHashXml)
 
 	assert.Equal(t, "{{ .sha256 }}", cfg.Commands[0].Downloads[0].Hash)
 	assert.Equal(t, "sha256", cfg.Commands[0].Downloads[0].HashAlgo, "sha256 is the default")
@@ -220,9 +206,7 @@ func TestParseXML_DownloadHash(t *testing.T) {
 }
 
 func TestValidate_DownloadHashAlgo(t *testing.T) {
-	_, err := loadStr(t, `<config name="x"><command name="g">
-		<download><url>https://h/f</url><hash algo="crc32">abc</hash></download>
-	</command></config>`)
+	_, err := loadStr(t, testValidate_DownloadHashAlgoXml)
 	assert.ErrorContains(t, err, `<hash algo="crc32"> must be one of md5|sha1|sha256|sha512`)
 }
 
@@ -269,16 +253,16 @@ func TestPlanDownloads_MalformedHashIsAnError(t *testing.T) {
 		})
 	}
 
-	// And the placeholder really is what a missing field renders as, so the
-	// case above is the real a single and not a straw man.
+	// And the placeholder is what a missing field renders as, so the case above
+	// is the real a single and not a straw man.
 	_, err := planDownloads([]Download{{
 		URL: "https://h/f", Hash: "{{.result.list.typo}}", HashAlgo: "sha256",
 	}}, planData(), ".")
 	assert.ErrorContains(t, err, "is not a 64-character hex digest")
 }
 
-// A digest is optional per record: an <if> around the <hash> body renders empty
-// for a record that has none, and that record simply is not verified.
+// A digest is optional per record. An <if> around the <hash> body renders
+// empty for a record that has none, and that record is not verified.
 func TestPlanDownloads_HashCanBeEmptyPerRecord(t *testing.T) {
 	data := planData()
 	data["result"].(map[string]any)["assets"] = []any{
@@ -319,8 +303,7 @@ func TestPlanDownloads_EmptyURLIsAnError(t *testing.T) {
 }
 
 func TestPlanDownloads_NonHTTPURLIsAnError(t *testing.T) {
-	// A mistyped path renders to the template engine's placeholder rather than
-	// to nothing, so the check has to be on the shape of the URL.
+	// A mistyped path renders to the template engine's placeholder rather than to nothing.
 	_, err := planDownloads([]Download{{URL: "https://h/{{.result.list.typo}}/f"}}, planData(), ".")
 	assert.NoError(t, err, "a missing leaf inside an otherwise valid URL is the author's business")
 
@@ -398,8 +381,7 @@ func TestResolveDownloadSettings(t *testing.T) {
 	require.NoError(t, root.PersistentFlags().Set("concurrency", "2"))
 	require.NoError(t, root.PersistentFlags().Set("download-dir", "elsewhere"))
 	require.NoError(t, root.PersistentFlags().Set("no-tui", "true"))
-	// newRoot(nil) cleared the registry; put the config settings back so the
-	// test proves the flags win over them rather than over the defaults.
+	// newRoot(nil) cleared the registry.
 	installDownloads(&Config{Downloads: &Downloads{Concurrency: 8, Dir: "out"}})
 	assert.Equal(t, downloadSettings{Concurrency: 2, Retries: 3, Dir: "elsewhere", NoTUI: true},
 		resolveDownloadSettings(root))
@@ -439,3 +421,12 @@ func TestDownloadDest_TrailingSeparator(t *testing.T) {
 	assert.Equal(t, filepath.Join("dl", "sub"), dest)
 	assert.True(t, isDir)
 }
+
+//go:embed testdata/test-parse-xml-download.xml
+var testParseXML_DownloadXml string
+
+//go:embed testdata/test-parse-xml-download-hash.xml
+var testParseXML_DownloadHashXml string
+
+//go:embed testdata/test-validate-download-hash-algo.xml
+var testValidate_DownloadHashAlgoXml string

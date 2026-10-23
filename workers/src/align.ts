@@ -40,7 +40,7 @@ function runeWidth(cp: number): number {
 function isEastAsianWide(cp: number): boolean {
   // CJK Unified Ideographs
   if (cp >= 0x4e00 && cp <= 0x9fff) return true;
-  // CJK Unified Ideographs Extension A
+  // CJK Unified Ideographs Extension.
   if (cp >= 0x3400 && cp <= 0x4dbf) return true;
   // CJK Compatibility Ideographs
   if (cp >= 0xf900 && cp <= 0xfaff) return true;

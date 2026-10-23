@@ -1,20 +1,15 @@
 # api-cli Workers
 
-Cloudflare Workers port of `api-cli`. Parses the **same JSON config** as the
-Go CLI and serves each leaf command as an HTTP endpoint, executing the
-underlying API calls via `fetch()` instead of shelling out to `curl`.
+Cloudflare Workers port of `api-cli`. Parses the **same JSON config** as the Go CLI and serves each leaf command as an HTTP endpoint. That config executes the underlying API calls via `fetch()` instead of shelling out to `curl`.
 
 ## How it works
 
-1. The config JSON is loaded from an environment variable (`API_CLI_CONFIG`)
-   or a KV namespace binding (`CONFIG_KV`).
+1. The config JSON is loaded from an environment variable (`API_CLI_CONFIG`) or a KV namespace binding (`CONFIG_KV`).
 2. The command tree is flattened into leaf endpoints.
 3. Each HTTP request is resolved to a leaf command via URL path.
-4. The command template is rendered (exactly like the Go CLI), then **parsed
-   as a curl command** to extract URL, method, headers, and body.
+4. The command template is rendered (exactly like the Go CLI), then **parsed as a curl command** to extract URL, method, headers, and body.
 5. The extracted request is executed via `fetch()`.
-6. If a format is configured, the response is parsed and rendered through the
-   format's view templates.
+6. If a format is configured, the response is parsed and rendered through the format's view templates.
 
 ## URL mapping
 
@@ -36,7 +31,7 @@ GET /<command-path>[/<positional-args>...]?<flags>
 - **Command path**: slash-joined command names (`users/get`, `repo/issues`)
 - **Positional args**: appended as path segments after the command
 - **Named args/flags**: query parameters (`?id=1&limit=10`)
-- Path args take priority when both path and query provide the same arg
+- Path args take priority when both path and query give the same arg
 
 ### Special routes
 
@@ -65,9 +60,8 @@ GET /<command-path>[/<positional-args>...]?<flags>
 
 Everything that maps to HTTP requests:
 
-- **Config parsing and validation** — identical to the Go CLI
-- **Template rendering** — Go `text/template` engine reimplemented in TypeScript
-  with full sprig function subset
+- **Config parsing and validation** — same to the Go CLI
+- **Template rendering** — Go `text/template` engine reimplemented in TypeScript with full sprig function subset
 - **Entry rendering** — string leaves templated, non-strings pass through
 - **Vars inheritance** — child overrides parent, templates in scope
 - **Command inheritance** — closest ancestor wins
@@ -81,8 +75,7 @@ Everything that maps to HTTP requests:
 - **Args and flags** — typed (string, int, bool, string-slice, variadic)
 - **Templated flag defaults** — rendered at invocation time
 - **Curl command parsing** — extracts URL, method, headers, body from rendered commands
-- **Template helpers** — `querystring`, `urlpath`, `shellquote`, `tabwriter`,
-  `padRight`, `padLeft`, `displayWidth`, `stripANSI`, `repeatkey`, plus ~60 sprig functions
+- **Template helpers** — `querystring`, `urlpath`, `shellquote`, `tabwriter`, `padRight`, `padLeft`, `displayWidth`, `stripANSI`, `repeatkey`, plus ~60 sprig functions
 
 ## What doesn't work (with warnings)
 

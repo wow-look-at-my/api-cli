@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"crypto/sha256"
 	"fmt"
@@ -77,8 +79,7 @@ func TestIntegration_StreamFixedSizeHumanUnits(t *testing.T) {
 }
 
 func TestIntegration_StreamFixedSizeBinaryRoundTrip(t *testing.T) {
-	// A binary source: every byte value, NUL and invalid UTF-8 included. The
-	// streamed output must be the input byte for byte.
+	// A binary source: every byte value, NUL and invalid UTF-8 included.
 	src := make([]byte, 4096)
 	for i := range src {
 		src[i] = byte(i % 256)
@@ -118,8 +119,7 @@ func TestIntegration_StreamSourceExitCodePropagates(t *testing.T) {
 }
 
 func TestIntegration_StreamPerChunkStepReplacesTheChunk(t *testing.T) {
-	// The step uppercases each chunk. Chunk sizes must be preserved, so the
-	// transformed output still concatenates to a 10-byte source.
+	// The step uppercases each chunk.
 	cfg := streamConfig(`chunk="4"`, `printf 'abcdefghij'`)
 	cfg.Commands[0].Stream = mustBuildStreamWith(`chunk="4"`, `<run>tr a-z A-Z</run>`)
 	code, out := execCmd(t, cfg, "log")
@@ -128,9 +128,7 @@ func TestIntegration_StreamPerChunkStepReplacesTheChunk(t *testing.T) {
 }
 
 func TestIntegration_StreamPerChunkStepMarksEachChunk(t *testing.T) {
-	// The step emits a single line per chunk naming its index and byte count:
-	// that makes the chunk count and the per-chunk sizes observable on
-	// stdout, and they must agree with the chunking asserted above.
+	// The step emits a single line per chunk naming its index and byte count.
 	cfg := streamConfig(`chunk="4"`, `printf 'abcdefghij'`)
 	cfg.Commands[0].Stream = mustBuildStreamWith(`chunk="4"`,
 		`<run>printf '%s:%s:{{.stream.size}}\n' {{.stream.index}} {{.stream.offset}}</run>`)
@@ -151,8 +149,7 @@ func TestIntegration_StreamPerChunkStepFailureFailsTheLeaf(t *testing.T) {
 }
 
 func TestIntegration_StreamLineModePerChunkStepCountsLines(t *testing.T) {
-	// A filter over lines is the log case: the step sees a single line
-	// and its output replaces that line.
+	// A filter over lines is the log case: the step sees a single line and its output replaces that line.
 	cfg := streamConfig(`mode="lines"`, `printf 'keep me\ndrop me\nkeep me too\n'`)
 	cfg.Commands[0].Stream = mustBuildStreamWith(`mode="lines"`, `<run>sed '/drop/d'</run>`)
 	code, out := execCmd(t, cfg, "log")
@@ -161,7 +158,7 @@ func TestIntegration_StreamLineModePerChunkStepCountsLines(t *testing.T) {
 }
 
 // chunkMarks reads the per-chunk timestamps a marking step left behind. Each
-// line is a single chunk, in nanoseconds since the epoch, so a test can see
+// line is a single chunk, in nanoseconds since the epoch. A test can see
 // when the chunker handed each chunk over rather than only that it finished.
 func chunkMarks(t *testing.T, path string) []int64 {
 	t.Helper()
@@ -184,8 +181,6 @@ func markingStream(attrs, marksPath string) *Stream {
 
 func TestIntegration_StreamFirstChunkArrivesBeforeTheSourceEnds(t *testing.T) {
 	// The source emits a single chunk, pauses seconds, then emits the next.
-	// the earliest chunk must be handed over during that pause, which is
-	// what makes this incremental rather than a buffer-everything implementation.
 	t.Serial()
 
 	marks := filepath.Join(t.TempDir(), "chunks.marks")
@@ -207,8 +202,7 @@ func TestIntegration_StreamFirstChunkArrivesBeforeTheSourceEnds(t *testing.T) {
 }
 
 func TestIntegration_StreamNeverBuffersTheWholeSource(t *testing.T) {
-	// A source much larger than any internal buffer streams through as many
-	// chunks, so the run proves the whole output was never captured earliest.
+	// A source much larger than any internal buffer streams through as many chunks.
 	t.Serial()
 
 	const (
@@ -274,8 +268,7 @@ func TestIntegration_StreamWithoutARunIsALoadError(t *testing.T) {
 }
 
 func TestIntegration_StreamRejectsADownloadOnTheSameLeaf(t *testing.T) {
-	// Both are the leaf's action, and accepting the pair would silently drop
-	// the stream while the files transferred.
+	// Both are the leaf's action, and accepting the pair would silently drop the stream while the files transferred.
 	cfg := streamConfig(`mode="lines"`, `printf 'x'`)
 	cfg.Commands[0].Downloads = []Download{{URL: "https://example.test/f.bin", To: "f.bin"}}
 	err := validate(cfg)
@@ -361,14 +354,7 @@ func TestBuildStream_RejectsARequestStep(t *testing.T) {
 }
 
 func TestParseConfigXML_StreamDeclaration(t *testing.T) {
-	src := `<config name="t">
-	<run>printf 'hi'</run>
-	<command name="log">
-		<stream mode="lines">
-			<run>cat</run>
-		</stream>
-	</command>
-</config>`
+	src := testParseConfigXML_StreamDeclarationXml
 	cfg, err := parseConfigXML([]byte(src))
 	require.NoError(t, err)
 	require.Len(t, cfg.Commands, 1)
@@ -381,25 +367,14 @@ func TestParseConfigXML_StreamDeclaration(t *testing.T) {
 }
 
 func TestParseConfigXML_StreamDeclaredTwiceIsRejected(t *testing.T) {
-	src := `<config name="t">
-	<run>printf 'hi'</run>
-	<command name="log">
-		<stream chunk="4"/>
-		<stream mode="lines"/>
-	</command>
-</config>`
+	src := testParseConfigXML_StreamDeclaredTwiceIsRejectedXml
 	_, err := parseConfigXML([]byte(src))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "once")
 }
 
 func TestParseConfigXML_StreamRequiresChunkInByteMode(t *testing.T) {
-	src := `<config name="t">
-	<run>printf 'hi'</run>
-	<command name="log">
-		<stream/>
-	</command>
-</config>`
+	src := testParseConfigXML_StreamRequiresChunkInByteModeXml
 	cfg, err := parseConfigXML([]byte(src))
 	require.NoError(t, err)
 	err = validate(cfg)
@@ -408,9 +383,7 @@ func TestParseConfigXML_StreamRequiresChunkInByteMode(t *testing.T) {
 }
 
 func TestIntegration_StreamRejectsWatch(t *testing.T) {
-	// The guard itself is what decides, so it is called directly: the stream
-	// already runs until its source ends, and a watch frame would have to
-	// capture the whole thing.
+	// The guard itself is what decides, so it is called directly: the stream already runs until its source ends.
 	cfg := streamConfig(`mode="lines"`, `printf 'x'`)
 	err := watchable(watchRoot(t), cfg.Commands[0], "")
 	require.Error(t, err)
@@ -486,3 +459,12 @@ func TestIntegration_StreamRequestErrorStatusFailsTheRun(t *testing.T) {
 	assert.Empty(t, out, "an error status is not streamed as if it were the source")
 	assert.Contains(t, errOut, "404")
 }
+
+//go:embed testdata/test-parse-config-xml-stream-declaration.xml
+var testParseConfigXML_StreamDeclarationXml string
+
+//go:embed testdata/test-parse-config-xml-stream-declared-twice-is-rejected.xml
+var testParseConfigXML_StreamDeclaredTwiceIsRejectedXml string
+
+//go:embed testdata/test-parse-config-xml-stream-requires-chunk-in-byte-mode.xml
+var testParseConfigXML_StreamRequiresChunkInByteModeXml string

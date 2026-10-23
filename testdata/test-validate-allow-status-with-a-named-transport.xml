@@ -1,0 +1,6 @@
+<config name="x">
+	<transports><transport name="corp"><run>corp-http</run></transport></transports>
+	<command name="c"><run>
+		<request transport="corp" allow-status="404"><url>https://e/x</url></request>
+	</run></command>
+</config>

@@ -1,0 +1,9 @@
+<config name="t">
+		<command name="show" description="s">
+			<arg name="post" pattern="^[0-9]+$"/>
+			<run>
+				<argv>printf</argv>
+				<argv>ran:<value name="arg.post"/></argv>
+			</run>
+		</command>
+	</config>

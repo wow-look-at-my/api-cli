@@ -45,8 +45,7 @@ export function parseCurlArgv(argv: string[]): CurlParseResult {
     args = shellSplit(args[2]!);
   }
 
-  // Handle piped commands: "curl ... | jq ..."
-  // Take the curl portion, warn about the pipe.
+  // Handle piped commands: "curl ... | jq ..." Take the curl portion, warn about the pipe.
   const pipeIdx = args.indexOf("|");
   let pipedCommand: string[] | undefined;
   if (pipeIdx !== -1) {
