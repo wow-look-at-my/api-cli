@@ -438,7 +438,6 @@ func (m *browseModel) frame() string {
 		"hint":        sema.StringValue(m.hint()),
 		"tree":        sema.ListValue(labels),
 		"selected":    sema.StringValue(strconv.Itoa(m.sel - start)),
-		"treeHeight":  sema.StringValue(strconv.Itoa(rows + 2)),
 		"path":        sema.StringValue(strings.Join(e.path, " ")),
 		"description": sema.StringValue(e.node.Description),
 		"runnable":    sema.BoolValue(e.runnable()),

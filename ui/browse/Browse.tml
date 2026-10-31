@@ -6,7 +6,6 @@
 	<Property name="hint" type="string" default=""/>
 	<Property name="tree" type="string[]" default=""/>
 	<Property name="selected" type="int" default="0"/>
-	<Property name="treeHeight" type="int" default="10"/>
 
 	<Property name="path" type="string" default=""/>
 	<Property name="description" type="string" default=""/>
@@ -53,7 +52,7 @@
 					<Text style="dim" overflow="ellipsis">{hint}</Text>
 				</Stack>
 
-				<Grid columns="*[16..36],1*" rows="1*" gap="1" height="{treeHeight}">
+				<Grid columns="*[16..36],1*" rows="auto" gap="1">
 					<Border title="Commands" color="{theme.track}" Grid.column="0">
 						<List id="tree" items="{tree}" selected="{selected}"/>
 					</Border>
