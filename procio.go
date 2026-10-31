@@ -1,3 +1,5 @@
+// A transport that holds the body until it exits writes nothing to stdout, and may never write to the progress fd.
+
 package main
 
 import (

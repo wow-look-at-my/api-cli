@@ -1,3 +1,5 @@
+// exitCode is set by a leaf's RunE to the exit status of the child process.
+
 package main
 
 import (

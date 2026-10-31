@@ -1,3 +1,5 @@
+// stallReportEvery is how many unsettled poll attempts pass between the lines that say a poll still waits.
+
 package main
 
 import (

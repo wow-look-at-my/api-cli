@@ -1,3 +1,5 @@
+// Config is the top-level JSON schema.
+
 package main
 
 import (

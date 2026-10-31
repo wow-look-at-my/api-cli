@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"net/http"
 	"net/http/httptest"
@@ -125,10 +127,7 @@ func TestFieldsBlocks_OverAStepResult(t *testing.T) {
 }
 
 func TestParseXML_FieldsWhenAndSeveralBlocks(t *testing.T) {
-	cfg := mustParse(t, `<config name="x"><command name="c"><run>x</run>
-		<fields when="{{ not .arg.id }}" over="items"><field name="id">id</field></fields>
-		<fields when="{{ .arg.id }}"><field name="name">name</field></fields>
-		</command></config>`)
+	cfg := mustParse(t, testParseXML_FieldsWhenAndSeveralBlocksXml)
 	blocks := cfg.Commands[0].Fields
 	require.Len(t, blocks, 2)
 	assert.Equal(t, "{{ not .arg.id }}", blocks[0].When)
@@ -136,3 +135,6 @@ func TestParseXML_FieldsWhenAndSeveralBlocks(t *testing.T) {
 	assert.Equal(t, "{{ .arg.id }}", blocks[1].When)
 	assert.Equal(t, "name", blocks[1].Fields.List[0].Path)
 }
+
+//go:embed testdata/test-parse-xml-fields-when-and-several-blocks.xml
+var testParseXML_FieldsWhenAndSeveralBlocksXml string

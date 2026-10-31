@@ -1,0 +1,25 @@
+{
+  "name": "t",
+  "command": "true",
+  "commands": [
+    {
+      "name": "users",
+      "description": "u desc",
+      "commands": [
+        {
+          "name": "get",
+          "args": [{"name": "id", "type": "int", "required": true}],
+          "entry": {"path": "/users/{{.arg.id}}"}
+        },
+        {
+          "name": "list",
+          "flags": [
+            {"name": "limit", "short": "l", "type": "int", "default": 10},
+            {"name": "token", "type": "string", "required": true}
+          ],
+          "entry": {"path": "/users"}
+        }
+      ]
+    }
+  ]
+}

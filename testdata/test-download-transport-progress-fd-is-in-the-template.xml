@@ -1,0 +1,18 @@
+<config name="dl">
+		<transports>
+			<transport name="corp">
+				<run>
+					<argv>/bin/sh</argv>
+					<argv>-c</argv>
+					<argv>printf '%s %s' "$0" "$API_CLI_PROGRESS_FD"</argv>
+					<argv><value name="request.progress_fd"/></argv>
+				</run>
+			</transport>
+		</transports>
+		<command name="grab">
+			<download transport="corp">
+				<url>https://internal.example/thing</url>
+				<to>out.txt</to>
+			</download>
+		</command>
+	</config>

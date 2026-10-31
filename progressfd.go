@@ -1,3 +1,5 @@
+// The progress channel lets a download transport report how far it got.
+
 package main
 
 import (

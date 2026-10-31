@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"crypto/sha256"
 	"fmt"
@@ -352,14 +354,7 @@ func TestBuildStream_RejectsARequestStep(t *testing.T) {
 }
 
 func TestParseConfigXML_StreamDeclaration(t *testing.T) {
-	src := `<config name="t">
-	<run>printf 'hi'</run>
-	<command name="log">
-		<stream mode="lines">
-			<run>cat</run>
-		</stream>
-	</command>
-</config>`
+	src := testParseConfigXML_StreamDeclarationXml
 	cfg, err := parseConfigXML([]byte(src))
 	require.NoError(t, err)
 	require.Len(t, cfg.Commands, 1)
@@ -372,25 +367,14 @@ func TestParseConfigXML_StreamDeclaration(t *testing.T) {
 }
 
 func TestParseConfigXML_StreamDeclaredTwiceIsRejected(t *testing.T) {
-	src := `<config name="t">
-	<run>printf 'hi'</run>
-	<command name="log">
-		<stream chunk="4"/>
-		<stream mode="lines"/>
-	</command>
-</config>`
+	src := testParseConfigXML_StreamDeclaredTwiceIsRejectedXml
 	_, err := parseConfigXML([]byte(src))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "once")
 }
 
 func TestParseConfigXML_StreamRequiresChunkInByteMode(t *testing.T) {
-	src := `<config name="t">
-	<run>printf 'hi'</run>
-	<command name="log">
-		<stream/>
-	</command>
-</config>`
+	src := testParseConfigXML_StreamRequiresChunkInByteModeXml
 	cfg, err := parseConfigXML([]byte(src))
 	require.NoError(t, err)
 	err = validate(cfg)
@@ -475,3 +459,12 @@ func TestIntegration_StreamRequestErrorStatusFailsTheRun(t *testing.T) {
 	assert.Empty(t, out, "an error status is not streamed as if it were the source")
 	assert.Contains(t, errOut, "404")
 }
+
+//go:embed testdata/test-parse-config-xml-stream-declaration.xml
+var testParseConfigXML_StreamDeclarationXml string
+
+//go:embed testdata/test-parse-config-xml-stream-declared-twice-is-rejected.xml
+var testParseConfigXML_StreamDeclaredTwiceIsRejectedXml string
+
+//go:embed testdata/test-parse-config-xml-stream-requires-chunk-in-byte-mode.xml
+var testParseConfigXML_StreamRequiresChunkInByteModeXml string

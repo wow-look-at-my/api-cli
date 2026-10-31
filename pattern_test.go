@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"testing"
 
@@ -81,15 +83,7 @@ func TestMCPGatherArgs_ChecksAnIntArgAsText(t *testing.T) {
 
 // The whole MCP leaf path refuses the call, so nothing runs.
 func TestMCPExecLeaf_RefusesAValueThePatternExcludes(t *testing.T) {
-	cfg, err := parseConfigXML([]byte(`<config name="t">
-		<command name="show" description="s">
-			<arg name="post" pattern="^[0-9]+$"/>
-			<run>
-				<argv>printf</argv>
-				<argv>ran:<value name="arg.post"/></argv>
-			</run>
-		</command>
-	</config>`))
+	cfg, err := parseConfigXML([]byte(testMCPExecLeaf_RefusesAValueThePatternExcludesXml))
 	require.NoError(t, err)
 	require.NoError(t, validate(cfg))
 
@@ -104,3 +98,6 @@ func TestMCPExecLeaf_RefusesAValueThePatternExcludes(t *testing.T) {
 	assert.False(t, isErr)
 	assert.Contains(t, out, "ran:5")
 }
+
+//go:embed testdata/test-mcp-exec-leaf-refuses-a-value-the-pattern-excludes.xml
+var testMCPExecLeaf_RefusesAValueThePatternExcludesXml string

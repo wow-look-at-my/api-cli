@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"net/http"
 	"net/http/httptest"
@@ -17,10 +19,6 @@ const githubSampleConfig = "samples/github/github.xml"
 // Canned GitHub "contents" API responses. Each carries a *url key so the test
 // also proves the request+jq noise filter ran (it must be stripped).
 const (
-	ghDirListingJSON = `[
-		{"name":"README.md","path":"README.md","sha":"aaa111","size":4096,"type":"file","download_url":"https://example.invalid/README.md"},
-		{"name":"llama","path":"llama","sha":"bbb222","size":0,"type":"dir","download_url":null}
-	]`
 	ghFileJSON = `{"name":"Dockerfile","path":"Dockerfile","sha":"deadbeefcafe","size":1328,"type":"file","encoding":"base64","content":"RlJPTQo=","download_url":"https://example.invalid/Dockerfile"}`
 )
 
@@ -132,3 +130,6 @@ func TestGithubSample_RepoContents_AsTableUsesOwnColumns(t *testing.T) {
 	assert.Contains(t, out, "llama")
 	assertNoRepoProjectionLeak(t, out)
 }
+
+//go:embed testdata/gh-dir-listing-json.json
+var ghDirListingJSON string

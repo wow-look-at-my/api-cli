@@ -1,3 +1,5 @@
+// streamSource is the leaf's run, opened as a byte stream rather than executed to completion: the chunker pulls from it.
+
 package main
 
 import (

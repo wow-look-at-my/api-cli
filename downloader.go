@@ -1,3 +1,5 @@
+// retryDelay separates attempts at a fixed cadence: a slow origin is not a reason to wait exponentially longer for it.
+
 package main
 
 import (

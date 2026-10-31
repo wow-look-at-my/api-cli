@@ -1,3 +1,5 @@
+// The download TUI is a tml.Live region pinned to the bottom of the screen.
+
 package main
 
 import (

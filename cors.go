@@ -1,3 +1,5 @@
+// CorsLevel controls how the MCP HTTP/SSE server handles cross-origin requests.
+
 package main
 
 import (

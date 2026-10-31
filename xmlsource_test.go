@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"testing"
 
@@ -40,13 +42,7 @@ func TestParseXML_ArgvRun(t *testing.T) {
 }
 
 func TestParseXML_Placeholders(t *testing.T) {
-	cfg := mustParse(t, `<config name="x"><vars>
-		<var name="a"><value name="env.X" default="def" as="urlpath"/></var>
-		<var name="b"><if test="env.Y" eq="1">yes<else/>no</if></var>
-		<var name="c"><for each="items"><value name="name"/></for></var>
-		<var name="d"><value expr="{{ upper .env.Z }}"/></var>
-		<var name="e"><if test="env.W">on</if></var>
-	</vars><command name="c"><run>x</run></command></config>`)
+	cfg := mustParse(t, testParseXML_PlaceholdersXml)
 	assert.Equal(t, `{{ urlpath (.env.X | default "def") }}`, cfg.Vars["a"])
 	assert.Equal(t, `{{ if eq (printf "%v" .env.Y) "1" }}yes{{ else }}no{{ end }}`, cfg.Vars["b"])
 	assert.Equal(t, `{{ range .items }}{{ .name }}{{ end }}`, cfg.Vars["c"])
@@ -55,10 +51,7 @@ func TestParseXML_Placeholders(t *testing.T) {
 }
 
 func TestParseXML_DashedPathAndIfEq(t *testing.T) {
-	cfg := mustParse(t, `<config name="x"><vars>
-		<var name="dash"><value name="flag.dry-run"/></var>
-		<var name="ifeq"><if test="flag.s" eq="">empty<else/>set</if></var>
-	</vars><command name="c"><run>x</run></command></config>`)
+	cfg := mustParse(t, testParseXML_DashedPathAndIfEqXml)
 	// A non-identifier segment compiles to an index expression.
 	assert.Equal(t, `{{ (index . "flag" "dry-run") }}`, cfg.Vars["dash"])
 	// eq="" is a real equality test, not a truthiness test.
@@ -86,19 +79,7 @@ func TestParseXML_BOMAndDeclaration(t *testing.T) {
 }
 
 func TestParseXML_Request(t *testing.T) {
-	cfg := mustParse(t, `<config name="x">
-		<run><request method="POST">
-			<url><value name="var.base"/>/p</url>
-			<query from="entry.query">
-				<param name="a"><value name="flag.a"/></param>
-				<if test="flag.b"><param name="b">1</param></if>
-			</query>
-			<header name="Accept">application/json</header>
-			<if test="var.token"><header name="Authorization">Bearer <value name="var.token"/></header></if>
-			<body>{{.flag.body}}</body>
-			<response jq="var.filter"/>
-		</request></run>
-		<command name="c"/></config>`)
+	cfg := mustParse(t, testParseXML_RequestXml)
 	req := cfg.Request
 	require.NotNil(t, req)
 	assert.Equal(t, "POST", req.Method)
@@ -116,13 +97,7 @@ func TestParseXML_Request(t *testing.T) {
 }
 
 func TestParseXML_Fields(t *testing.T) {
-	cfg := mustParse(t, `<config name="x"><command name="c"><run>x</run>
-		<fields over="data.items" footer="{{.data.total}} total">
-			<field name="login">login</field>
-			<field name="lang" default="-" truncate="5" priority="-1" show_in="!json">language</field>
-			<field name="virt" expr="{{.a}}-{{.b}}"/>
-			<field name="sha" firstline="true">sha</field>
-		</fields></command></config>`)
+	cfg := mustParse(t, testParseXML_FieldsXml)
 	require.Len(t, cfg.Commands[0].Fields, 1)
 	f := cfg.Commands[0].Fields[0].Fields
 	require.NotNil(t, f)
@@ -136,11 +111,7 @@ func TestParseXML_Fields(t *testing.T) {
 }
 
 func TestParseXML_EntryShapes(t *testing.T) {
-	cfg := mustParse(t, `<config name="x"><command name="c"><run>x</run>
-		<entry>
-			<path>/u/<value name="arg.id"/></path>
-			<query><param name="q"><value name="flag.q"/></param></query>
-		</entry></command></config>`)
+	cfg := mustParse(t, testParseXML_EntryShapesXml)
 	ent, err := renderEntry(cfg.Commands[0].Entry, map[string]any{
 		"arg":  map[string]any{"id": 5},
 		"flag": map[string]any{"q": "hi"},
@@ -152,14 +123,7 @@ func TestParseXML_EntryShapes(t *testing.T) {
 }
 
 func TestParseXML_ArgsFlagsSteps(t *testing.T) {
-	cfg := mustParse(t, `<config name="x"><command name="c">
-		<arg name="id" type="int" required="true"/>
-		<flag name="limit" short="n" type="int" default="30" conflicts="page"/>
-		<flag name="page" type="int" default="1"/>
-		<flag name="tags" type="string-slice" default="a,b"/>
-		<flag name="on" type="bool" default="true"/>
-		<steps><step name="s" when="{{.arg.id}}"><run>echo {{.arg.id}}</run></step></steps>
-		<run>echo done</run></command></config>`)
+	cfg := mustParse(t, testParseXML_ArgsFlagsStepsXml)
 	c := cfg.Commands[0]
 	require.Len(t, c.Args, 1)
 	assert.Equal(t, Arg{Name: "id", Type: "int", Required: true}, c.Args[0])
@@ -174,11 +138,7 @@ func TestParseXML_ArgsFlagsSteps(t *testing.T) {
 }
 
 func TestParseXML_FormatsLegacy(t *testing.T) {
-	cfg := mustParse(t, `<config name="x">
-		<formats><format name="u" input="json" when="{{.tty}}">
-			<view name="t" default="true">{{.data}}</view>
-		</format></formats>
-		<command name="c"><run>x</run><format ref="u"/></command></config>`)
+	cfg := mustParse(t, testParseXML_FormatsLegacyXml)
 	require.Contains(t, cfg.Formats, "u")
 	assert.Equal(t, "json", cfg.Formats["u"].Input)
 	require.Len(t, cfg.Formats["u"].Views, 1)
@@ -197,13 +157,7 @@ func TestParseXML_InlineFormat(t *testing.T) {
 }
 
 func TestParseXML_ConfigLevelFields(t *testing.T) {
-	cfg := mustParse(t, `<config name="x">
-		<description>Hi there</description>
-		<vars><var name="v">val</var></vars>
-		<run>root cmd</run>
-		<cwd>/tmp</cwd>
-		<stdin>input</stdin>
-		<command name="c" passthrough="true" confirm="sure?"/></config>`)
+	cfg := mustParse(t, testParseXML_ConfigLevelFieldsXml)
 	assert.Equal(t, "Hi there", cfg.Description)
 	assert.Equal(t, "val", cfg.Vars["v"])
 	require.NotNil(t, cfg.Command)
@@ -253,3 +207,27 @@ func TestParseXML_ValidateErrors(t *testing.T) {
 		})
 	}
 }
+
+//go:embed testdata/test-parse-xml-placeholders.xml
+var testParseXML_PlaceholdersXml string
+
+//go:embed testdata/test-parse-xml-dashed-path-and-if-eq.xml
+var testParseXML_DashedPathAndIfEqXml string
+
+//go:embed testdata/test-parse-xml-request.xml
+var testParseXML_RequestXml string
+
+//go:embed testdata/test-parse-xml-fields.xml
+var testParseXML_FieldsXml string
+
+//go:embed testdata/test-parse-xml-entry-shapes.xml
+var testParseXML_EntryShapesXml string
+
+//go:embed testdata/test-parse-xml-args-flags-steps.xml
+var testParseXML_ArgsFlagsStepsXml string
+
+//go:embed testdata/test-parse-xml-formats-legacy.xml
+var testParseXML_FormatsLegacyXml string
+
+//go:embed testdata/test-parse-xml-config-level-fields.xml
+var testParseXML_ConfigLevelFieldsXml string

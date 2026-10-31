@@ -1,0 +1,4 @@
+<config name="x">
+	<transports><transport name="a" default="true"><run>x</run></transport></transports>
+	<command name="c"><run><request transport="http"><url>u</url></request></run></command>
+</config>

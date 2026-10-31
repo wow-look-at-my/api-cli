@@ -1,3 +1,5 @@
+// execStdin / execStdout / execStderr are the I/O channels used when running the rendered command.
+
 package main
 
 import (

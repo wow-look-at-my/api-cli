@@ -1,3 +1,5 @@
+// defaultMockMode is the mode of a mock artifact.
+
 package main
 
 import (

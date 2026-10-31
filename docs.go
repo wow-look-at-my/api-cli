@@ -1,3 +1,5 @@
+// readmeDoc is the README followed by every page under docs/.
+
 package main
 
 import (

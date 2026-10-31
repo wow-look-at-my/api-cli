@@ -1,0 +1,7 @@
+<config name="x">
+		<description>Hi there</description>
+		<vars><var name="v">val</var></vars>
+		<run>root cmd</run>
+		<cwd>/tmp</cwd>
+		<stdin>input</stdin>
+		<command name="c" passthrough="true" confirm="sure?"/></config>

@@ -1,0 +1,14 @@
+<config name="t">
+		<preconditions>
+			<precondition>{{ if not (safeSegments .arg.owner .arg.repo) }}owner and repo must each be one path segment{{ end }}</precondition>
+		</preconditions>
+		<command name="repo" description="r">
+			<arg name="owner"/>
+			<arg name="repo"/>
+			<run>printf ok</run>
+		</command>
+		<command name="user" description="u">
+			<arg name="owner"/>
+			<run>printf ok</run>
+		</command>
+	</config>

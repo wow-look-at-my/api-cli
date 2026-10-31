@@ -1,3 +1,5 @@
+// A frame is a single whole run of the leaf -- steps, entry, request and formatter -- captured into a buffer instead of the terminal.
+
 package main
 
 import (

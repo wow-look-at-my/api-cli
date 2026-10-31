@@ -1,0 +1,3 @@
+<config name="t">
+		<command name="ping" description="p"><run>printf pong</run></command>
+	</config>

@@ -1,3 +1,5 @@
+// downloadSession is a single invocation's use of the shared downloader: the batch it enqueues into, and the display it runs while that batch drains.
+
 package main
 
 import (

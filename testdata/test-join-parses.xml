@@ -1,0 +1,7 @@
+<config name="j"><command name="pull">
+		<download over="var.parts" group="{{ .id }}" order="{{ .seq }}">
+			<url>https://example.test/<value name="seq"/></url>
+			<to><value name="id"/>/<value name="seq"/>.part</to>
+			<join to="{{ .id }}.bin" cleanup="true" contiguous="warn"/>
+		</download>
+	</command></config>

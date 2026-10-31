@@ -1,3 +1,5 @@
+// A <tml> leaf under a watch runs as a real Bubble Tea program rather than through the repaint loop in watch.go.
+
 package main
 
 import (

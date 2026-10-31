@@ -1,0 +1,25 @@
+<?xml version="1.1" encoding="UTF-8"?>
+<Component xmlns="urn:tml:v1" name="Status">
+	<Property name="title" type="string" required="true"/>
+	<Property name="count" type="string" default="0"/>
+	<Property name="rows" type="record[]" default=""/>
+
+	<DataTemplate name="Row">
+		<Property name="name" type="string" required="true"/>
+		<Property name="state" type="string" default=""/>
+		<Template>
+			<Stack orientation="horizontal" gap="1">
+				<Text width="12">{name}</Text>
+				<Text>{state}</Text>
+			</Stack>
+		</Template>
+	</DataTemplate>
+
+	<Template>
+		<Stack orientation="vertical">
+			<Text id="title">{title}</Text>
+			<Text id="count">count {count}</Text>
+			<Stack id="rows" itemsSource="{rows}" itemTemplate="Row" orientation="vertical"/>
+		</Stack>
+	</Template>
+</Component>
