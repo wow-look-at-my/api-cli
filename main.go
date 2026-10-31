@@ -1,3 +1,5 @@
+// version is stamped at build time with -ldflags "-X main.version=...".
+
 package main
 
 import (
@@ -41,10 +43,9 @@ func run(argv []string, errOut io.Writer) int {
 		cfg = loaded
 	}
 
-	// No config and user invoked a real subcommand — they need a config. A
-	// version request is answered by the binary itself, so it joins the help
-	// invocations that a missing config must not turn away.
-	if cfg == nil && ((!isHelpInvocation(argv) && !isDocsInvocation(argv) && !isVersionInvocation(argv)) || mcpTransport != "" || installMocks != "") {
+	// No config and user invoked a real subcommand — they need a config.
+	browse := isBrowseInvocation(argv)
+	if cfg == nil && ((!isHelpInvocation(argv) && !isDocsInvocation(argv) && !isVersionInvocation(argv)) || mcpTransport != "" || installMocks != "" || browse) {
 		fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.xml in the current directory")
 		return 2
 	}
@@ -64,6 +65,10 @@ func run(argv []string, errOut io.Writer) int {
 			return 2
 		}
 		return runMCP(mcpTransport, cfg, corsLevel)
+	}
+
+	if browse {
+		return runBrowse(cfg)
 	}
 
 	root := newRoot(cfg)
@@ -102,6 +107,7 @@ func newRoot(cfg *Config) *cobra.Command {
 	root.PersistentFlags().String("config", "", "Path to config file: XML (default: ./api.xml).")
 	root.PersistentFlags().String("mcp", "", `Run as MCP server. Value: "stdio", "http://<addr>", or "sse://<addr>".`)
 	root.PersistentFlags().String("cors", "strict", "CORS policy for MCP HTTP/SSE: disabled|permissive|strict|enabled.")
+	root.PersistentFlags().Bool("browse", false, "Explore the commands interactively: pick one, fill in its args and flags, run it.")
 	root.PersistentFlags().String("install-mocks", "", "Write one wrapper script per <mock> leaf into this directory, then exit.")
 	root.PersistentFlags().StringArray("var", nil, "Set an environment variable (KEY=VALUE). Repeatable.")
 	root.PersistentFlags().BoolP("quiet", "q", false, "Suppress execution count on stderr.")
@@ -130,6 +136,16 @@ func newRoot(cfg *Config) *cobra.Command {
 	}
 	root.AddCommand(docsCommand())
 	return root
+}
+
+// isBrowseInvocation reports whether argv asks for the interactive browser.
+func isBrowseInvocation(argv []string) bool {
+	for _, a := range argv {
+		if a == "--browse" || a == "--browse=true" {
+			return true
+		}
+	}
+	return false
 }
 
 // isVersionInvocation reports whether argv asks for the version.

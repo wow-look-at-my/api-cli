@@ -176,6 +176,18 @@ A config can make the repeat the default. `watch="5s"` on a `<command>` says the
 
 [docs/screens-tml.md](docs/screens-tml.md) holds this section.
 
+## Browse
+
+`--browse` opens an interactive explorer of the config. The left pane is the command tree. The right pane is a form for the selected command: one field per arg and flag, with a checkbox for a bool flag. The bottom pane shows the output of the last run.
+
+```bash
+ghr --browse
+```
+
+The up and down keys pick a command. Enter moves into its form. Tab moves between the fields, and enter in a field runs the command. Ctrl+R runs from anywhere, esc goes back to the tree, and q quits from the tree. Under the form is the command line that the run is equal to. You can copy it.
+
+A run is the same as that command line, with `--yes`. A command that declares `confirm=` asks in a popup first. An empty field is left out, so cobra applies the declared default. A variadic arg and a passthrough command split their field on spaces. A `string-slice` flag splits on commas. The browser needs a terminal on stdin and stdout.
+
 ## Examples
 
 ### Wrap a REST API
@@ -409,6 +421,7 @@ An attribute value is always raw, a template or a context path. A Go template ne
 | `--version`       |       |         | Print the binary's version. Needs no config. |
 | `--mcp <transport>` |     |         | Run the config as an MCP server: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes a tool named for its command path, with underscores (`users_get`). The HTTP and SSE servers also answer `GET /health`. The server behaves as `--format=always` does, with `.tty` true and width 80. A tool's `inputSchema` carries each arg's `pattern=`, and a call is checked against it. Over stdio, a client that closes stdin right after its last request still gets that request's answer. |
 | `--cors <level>`  |       | `strict`| CORS for the MCP HTTP/SSE server. See [CORS levels](#cors-levels). |
+| `--browse`        |       | false   | Explore the commands interactively: pick one, fill in its args and flags, run it. See [Browse](#browse). |
 | `--install-mocks <dir>` | |        | Write one wrapper script per `<mock>` leaf into the directory, then exit. See [Mock executables](#mock-executables). |
 | `--quiet`         | `-q`  | false   | Suppress the `N executions` line. |
 | `--yes`           | `-y`  | false   | Skip `confirm` prompts. |

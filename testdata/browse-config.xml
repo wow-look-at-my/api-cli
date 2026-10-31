@@ -1,0 +1,21 @@
+<config name="tool">
+	<command name="repos" description="Repositories." confirm="Really?">
+		<command name="list" description="List repositories.">
+			<arg name="owner" required="true" description="Who owns them."/>
+			<flag name="limit" type="int" default="10" description="Max results."/>
+			<flag name="archived" type="bool" description="Include archived ones."/>
+			<flag name="topic" type="string-slice"/>
+			<run>echo list <value name="arg.owner"/> <value name="flag.limit"/> <value name="flag.archived"/> <value expr="{{ join &quot;+&quot; .flag.topic }}"/></run>
+		</command>
+	</command>
+	<command name="files" description="Files.">
+		<arg name="paths" variadic="true"/>
+		<run>echo files <value expr="{{ join &quot;,&quot; .arg.paths }}"/></run>
+	</command>
+	<command name="raw" passthrough="true">
+		<run>echo raw <value expr="{{ join &quot; &quot; .rest }}"/></run>
+	</command>
+	<command name="fail">
+		<run>echo broke; exit 3</run>
+	</command>
+</config>
