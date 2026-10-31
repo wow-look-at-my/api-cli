@@ -129,7 +129,7 @@ func TestMissingOrders(t *testing.T) {
 //go:embed testdata/test-join-parses.xml
 var testJoin_ParsesXml string
 
-//go:embed testdata/test-join-rejects-bad-grammar.xml
+//go:embed testdata/test-join-rejects-bad-grammar.xml.frag
 var testJoin_RejectsBadGrammarXml string
 
 //go:embed testdata/test-join-group-needs-a-join.xml
