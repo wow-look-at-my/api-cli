@@ -312,8 +312,8 @@ type FieldsBlock struct {
 	Fields *Fields `json:"fields"`
 }
 
-// reservedCommandNames are the names cobra owns.
-var reservedCommandNames = set.Of("help", "completion", "__complete", "docs")
+// reservedCommandNames are the names cobra and the built-in subcommands own.
+var reservedCommandNames = set.Of("help", "completion", "__complete", "docs", "tui")
 
 // validFlagTypes are the accepted <flag type=> values. The empty string defaults to "string".
 var validFlagTypes = set.Of("", "string", "bool", "int", "string-slice")
@@ -481,7 +481,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		return fmt.Errorf("%s: name %q must not contain whitespace or slashes", where, c.Name)
 	}
 	if reservedCommandNames.Contains(c.Name) {
-		return fmt.Errorf("%s: name %q is reserved by cobra", where, c.Name)
+		return fmt.Errorf("%s: name %q is reserved for a built-in subcommand", where, c.Name)
 	}
 	if siblings[c.Name] {
 		return fmt.Errorf("%s: duplicate command name %q", where, c.Name)

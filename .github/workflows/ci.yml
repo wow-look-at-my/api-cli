@@ -1,3 +1,5 @@
+# A dependency's generate directive wants generator binaries and the fork's GOROOT, which only go-toolchain's own CI has.
+
 name: CI
 
 on:

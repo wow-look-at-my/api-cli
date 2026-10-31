@@ -252,9 +252,13 @@ func TestBrowseTreeWindowsTheSelection(t *testing.T) {
 	assert.NotContains(t, m.frame(), "repos/")
 }
 
-func TestBrowseInvocation(t *testing.T) {
-	t.Serial()
-	assert.True(t, isBrowseInvocation([]string{"--browse"}))
-	assert.False(t, isBrowseInvocation([]string{"repos"}))
-	assert.Equal(t, 2, run([]string{"--browse", "--config", "/nonexistent.xml"}, &strings.Builder{}))
+func TestTUISubcommand(t *testing.T) {
+	cfg := loadBrowseConfig(t)
+	code, _, _ := execCmdFull(t, cfg, "tui")
+	assert.Equal(t, 1, code, "tui refuses to start without a terminal")
+	assert.Equal(t, 2, run([]string{"tui"}, &strings.Builder{}), "tui needs a config like any other command")
+
+	bad, err := parseConfigXML([]byte(`<config name="x"><command name="tui"><run>true</run></command></config>`))
+	require.NoError(t, err)
+	assert.ErrorContains(t, validate(bad), `name "tui" is reserved for a built-in subcommand`)
 }

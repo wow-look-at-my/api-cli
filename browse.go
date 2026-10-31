@@ -1,4 +1,4 @@
-// --browse is an interactive explorer: the command tree, a form for the selected command's args and flags.
+// The tui subcommand is an interactive explorer: the command tree, a form for the selected command's args and flags.
 
 package main
 
@@ -17,11 +17,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"golang.org/x/term"
 
+	"github.com/spf13/cobra"
 	"github.com/wow-look-at-my/tml"
 	"github.com/wow-look-at-my/tml/sema"
 )
-
-// --browse is an interactive explorer: the command tree, a form for the selected command's args and flags.
 
 //go:embed ui/browse
 var browseUI embed.FS
@@ -64,27 +63,36 @@ type browseModel struct {
 	exec func(argv []string, width, height int) (string, int)
 }
 
-// runBrowse is the --browse entry point.
-func runBrowse(cfg *Config) int {
+// tuiCommand is the built-in `tui` subcommand.
+func tuiCommand(cfg *Config) *cobra.Command {
+	return &cobra.Command{
+		Use:          "tui",
+		Short:        "Explore the commands interactively: pick one, fill in its args and flags, run it",
+		Args:         cobra.NoArgs,
+		SilenceUsage: true,
+		RunE: func(c *cobra.Command, args []string) error {
+			return runBrowse(cfg)
+		},
+	}
+}
+
+func runBrowse(cfg *Config) error {
 	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
-		fmt.Fprintln(os.Stderr, "error: --browse needs a terminal on stdin and stdout")
-		return 2
+		return fmt.Errorf("tui needs a terminal on stdin and stdout")
 	}
 	m, err := newBrowseModel(cfg)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		return 1
+		return err
 	}
 	program, err := tml.NewProgram(m)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		return 1
+		return err
 	}
 	if _, err := program.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		return 1
+		return err
 	}
-	return m.code
+	exitCode = m.code
+	return nil
 }
 
 func newBrowseModel(cfg *Config) (*browseModel, error) {
