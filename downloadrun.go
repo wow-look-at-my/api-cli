@@ -94,11 +94,6 @@ func (s *downloadSession) close() {
 // run plans the leaf's declarations, hands them to the queue, and waits for the
 // queue to drain.
 func (s *downloadSession) run(dls []Download, data map[string]any) int {
-	if os.Getenv(servedRunEnv) == "1" {
-		s.close()
-		fmt.Fprintln(execStderr, "error: a <download> leaf cannot run for a --client: the server would write the file outside the client's sandbox")
-		return 2
-	}
 	specs, err := planDownloads(dls, data, s.settings.Dir)
 	if err != nil {
 		s.close()

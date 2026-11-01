@@ -36,11 +36,8 @@ type servedResult struct {
 	Error string `json:"error,omitempty"`
 }
 
-// serverOnlyFlags are the global flags a client may not send.
-var serverOnlyFlags = set.Of("config", "mcp", "cors", "install-mocks", "var", "download-dir", "debug", "verbose", "server", "client")
-
-// servedRunEnv marks a run that a server started for a client. Only the server sets it, on the child's environment.
-const servedRunEnv = "API_CLI_SERVED_RUN"
+// serverOnlyFlags are the global flags a client may not send. --config swaps the contract. --var sets the server's environment.
+var serverOnlyFlags = set.Of("config", "var", "debug", "verbose")
 
 // maxRequestBytes bounds the first line of a client.
 const maxRequestBytes = 1 << 20
@@ -168,7 +165,6 @@ func serveConn(conn *net.UnixConn, exe, cfgPath string) {
 	}
 	cmd := exec.Command(exe, append([]string{"--config", cfgPath}, req.Argv...)...)
 	cmd.Dir = req.Cwd
-	cmd.Env = append(os.Environ(), servedRunEnv+"=1")
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = files[0], files[1], files[2]
 	if err := cmd.Start(); err != nil {
 		reply(servedResult{Exit: 2, Error: err.Error()})

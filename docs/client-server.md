@@ -22,8 +22,7 @@ Each call is its own connection, so calls from many processes at once never shar
 
 - The server runs `api-cli --config <its config>` with the client's argv, in the client's working directory. A directory that does not exist on the server fails the call.
 - The run gets the server's environment, not the client's. That is where `GH_TOKEN` or a keychain lives.
-- The client may not send a global flag that changes what the server loads, writes or prints. `--config`, `--var`, `--mcp`, `--cors`, `--install-mocks`, `--download-dir`, `--debug`, `--verbose`, `--server` or `--client`. The server refuses the call with exit 2. An argument after a bare `--` is an argument, not a flag.
-- A `<download>` leaf fails for a client with exit 2, and writes nothing. The server writes a download outside the client's sandbox. The client can have files written where it cannot write itself.
+- The client may not send `--config`, which swaps the contract, or `--var`, which sets the server's environment, `PATH` included. It may not send `--debug` or `--verbose` either. Both print what the server renders, and that can hold its credentials. The server refuses the call with exit 2. An argument after a bare `--` is an argument, not a flag. Every other flag and every leaf, `<download>` included, works as it does locally.
 - `--client` must be the first flag. Every later argument goes to the server as it is.
 
 ## Lifetime

@@ -115,7 +115,7 @@ func TestServe_RefusesServerOnlyGlobalFlags(t *testing.T) {
 		{"--config=/tmp/evil.xml", "where"},
 		{"where", "--var", "X=1"},
 		{"where", "--debug"},
-		{"--download-dir", "/", "where"},
+		{"where", "--verbose"},
 	} {
 		code, out, errOut := callServer(t, sock, "", argv...)
 		assert.Equal(t, 2, code, "%v", argv)
@@ -148,17 +148,6 @@ func TestServe_TheEnvironmentIsTheServers(t *testing.T) {
 	code, out, errOut := callServer(t, sock, "", "secret")
 	assert.Equal(t, 0, code, errOut)
 	assert.Equal(t, "server-side-only", out)
-}
-
-func TestServe_RefusesADownloadLeaf(t *testing.T) {
-	sock := startServer(t)
-	dir := t.TempDir()
-	chdir(t, dir)
-	code, _, errOut := callServer(t, sock, "", "fetch")
-	assert.Equal(t, 2, code, errOut)
-	assert.Contains(t, errOut, "cannot run for a --client")
-	_, err := os.Stat(filepath.Join(dir, "written-by-the-server"))
-	assert.True(t, os.IsNotExist(err), "the server must write nothing for a client")
 }
 
 func TestServe_PassesTheExitCodeAndStdin(t *testing.T) {
