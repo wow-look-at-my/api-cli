@@ -68,8 +68,8 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []str
 	} else {
 		var count cobra.PositionalArgs
 		switch total := len(node.Args); {
-		case total == 0 && node.Runnable:
-			// A runnable node with no args takes none: an unmatched positional is a mistyped subcommand, and cobra says so.
+		case total == 0 && (node.Runnable || len(node.Commands) > 0):
+			// A node with no args takes none: an unmatched positional is a mistyped subcommand, and cobra says so.
 			count = cobra.NoArgs
 		case total == 0:
 			count = nil
@@ -140,6 +140,11 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []str
 		leafFormats := formats
 		cmd.RunE = func(c *cobra.Command, args []string) error {
 			return runLeaf(c, nodeCopy, args, leafVars, leafCmd, leafRequest, leafCwd, leafStdin, leafConfirm, leafWatch, leafFormat, leafFormats)
+		}
+	} else {
+		// Cobra checks Args only on a runnable command. Without this, a mistyped subcommand prints help and exits 0.
+		cmd.RunE = func(c *cobra.Command, args []string) error {
+			return c.Help()
 		}
 	}
 

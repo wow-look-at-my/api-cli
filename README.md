@@ -305,6 +305,10 @@ A leaf that sets `passthrough="true"` accepts arbitrary positional args, which i
 
 **Constraints:** `passthrough` and `<arg>` are mutually exclusive, and `passthrough` sits on a leaf only. A flag takes `=` syntax and next-arg syntax. A `bool` flag consumes no value, and a `string-slice` flag accumulates. Filter `.rest` with `filterSuffix` and `filterPrefix`.
 
+## Client and server
+
+[docs/client-server.md](docs/client-server.md) holds this section. `--server` runs a config for `--client` callers on the far side of a sandbox, so the credentials and the contract stay on one side.
+
 ## Mock executables
 
 [docs/mock-executables.md](docs/mock-executables.md) holds this section.
@@ -361,6 +365,7 @@ Every [sprig v3](https://masterminds.github.io/sprig/) helper is available: `toJ
 | `shellquote`  | POSIX single-quote a value for the shell form of a command.                               |
 | `urlpath`     | URL-escape a single path segment.                                                         |
 | `spread`      | Splat a slice into multiple argv slots (or shell-quoted words). Works with `[]string`/`[]int`/`[]any`. |
+| `flagArgs`    | Rebuild the set flags as argv slots, sorted by name: `{{spread (flagArgs .flag)}}`. A zero value is left out. |
 | `fileExists` / `dirExists` | Path predicates, useful in `<preconditions>`.                              |
 | `segmentPattern` | The built-in path-segment regular expression, for an `<arg pattern=>`.                 |
 | `safeSegments` | The same rule as a predicate over one or more values. An absent value passes.             |
@@ -421,6 +426,8 @@ An attribute value is always raw, a template or a context path. A Go template ne
 | `--version`       |       |         | Print the binary's version. Needs no config. |
 | `--mcp <transport>` |     |         | Run the config as an MCP server: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes a tool named for its command path, with underscores (`users_get`). The HTTP and SSE servers also answer `GET /health`. The server behaves as `--format=always` does, with `.tty` true and width 80. A tool's `inputSchema` carries each arg's `pattern=`, and a call is checked against it. Over stdio, a client that closes stdin right after its last request still gets that request's answer. |
 | `--cors <level>`  |       | `strict`| CORS for the MCP HTTP/SSE server. See [CORS levels](#cors-levels). |
+| `--server <socket>` |     |         | Serve `--config` on a unix socket for `--client` callers. See [Client and server](#client-and-server). |
+| `--client <socket>` |     |         | As the first flag: run the rest of the command line on that server. Needs no config. |
 | `--install-mocks <dir>` | |        | Write one wrapper script per `<mock>` leaf into the directory, then exit. See [Mock executables](#mock-executables). |
 | `--quiet`         | `-q`  | false   | Suppress the `N executions` line. |
 | `--yes`           | `-y`  | false   | Skip `confirm` prompts. |
