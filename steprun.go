@@ -1,3 +1,5 @@
+// stepRunner is a single step's run, with everything its attempts share.
+
 package main
 
 import (

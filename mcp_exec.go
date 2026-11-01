@@ -1,3 +1,5 @@
+// mcpExecLeaf runs a leaf command and returns (output, isError).
+
 package main
 
 import (

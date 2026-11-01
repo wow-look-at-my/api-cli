@@ -1,0 +1,7 @@
+<config name="x"><command name="c"><run>x</run>
+		<fields over="data.items" footer="{{.data.total}} total">
+			<field name="login">login</field>
+			<field name="lang" default="-" truncate="5" priority="-1" show_in="!json">language</field>
+			<field name="virt" expr="{{.a}}-{{.b}}"/>
+			<field name="sha" firstline="true">sha</field>
+		</fields></command></config>

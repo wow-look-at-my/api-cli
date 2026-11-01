@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"bytes"
 	"errors"
@@ -231,12 +233,7 @@ func TestValidateWatch(t *testing.T) {
 }
 
 func TestValidate_WatchOnAGroupCoversItsLeaves(t *testing.T) {
-	cfg, err := loadStr(t, `<config name="w">
-		<run>echo hi</run>
-		<command name="board" watch="5s">
-			<command name="a"/>
-			<command name="b" watch="500ms"/>
-		</command></config>`)
+	cfg, err := loadStr(t, testValidate_WatchOnAGroupCoversItsLeavesXml)
 	require.NoError(t, err)
 	assert.Equal(t, "5s", cfg.Commands[0].Watch)
 	assert.Equal(t, "", cfg.Commands[0].Commands[0].Watch, "inheritance happens at build time, not at parse time")
@@ -277,3 +274,6 @@ func TestTTYOverride_AnswersTheTerminalProbes(t *testing.T) {
 	assert.Equal(t, 120, width)
 	assert.Equal(t, 40, height)
 }
+
+//go:embed testdata/test-validate-watch-on-a-group-covers-its-leaves.xml
+var testValidate_WatchOnAGroupCoversItsLeavesXml string

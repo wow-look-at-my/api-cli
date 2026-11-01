@@ -1,3 +1,5 @@
+// Defaults for a polling step.
+
 package main
 
 import (

@@ -1,3 +1,5 @@
+// knownSinks are the representations a Fields declaration can be rendered as.
+
 package fields
 
 import (

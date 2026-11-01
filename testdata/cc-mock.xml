@@ -1,0 +1,12 @@
+<config name="t">
+	<command name="cc" passthrough="true">
+		<flag name="o" short="o" type="string"/>
+		<flag name="c" type="bool"/>
+		<mock>
+			<input name="src" match="\.c$" required="true"/>
+			<output path="{{ .flag.o }}" when="{{ .flag.o }}"/>
+			<output path="{{ stem .mock.src }}.o" when="{{ and .flag.c (not .flag.o) }}"/>
+			<record path="db.jsonl"/>
+		</mock>
+	</command>
+</config>

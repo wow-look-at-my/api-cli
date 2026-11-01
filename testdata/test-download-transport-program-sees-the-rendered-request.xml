@@ -1,0 +1,22 @@
+<config name="dl">
+		<vars><var name="token">sekrit</var></vars>
+		<transports>
+			<transport name="corp">
+				<run>
+					<argv>/bin/sh</argv>
+					<argv>-c</argv>
+					<argv>printf '%s %s %s' "$0" "$1" "$2"</argv>
+					<argv><value name="request.method"/></argv>
+					<argv><value name="request.url"/></argv>
+					<argv><value expr="{{ index .request.headers &quot;Authorization&quot; }}"/></argv>
+				</run>
+			</transport>
+		</transports>
+		<command name="grab">
+			<download transport="corp">
+				<url>https://internal.example/thing?v=2</url>
+				<to>out.txt</to>
+				<header name="Authorization">Bearer <value name="var.token"/></header>
+			</download>
+		</command>
+	</config>

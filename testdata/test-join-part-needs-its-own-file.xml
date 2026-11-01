@@ -1,0 +1,3 @@
+<config name="j"><command name="pull">
+		<download><url>https://example.test/x</url><join to="out.bin"/></download>
+	</command></config>

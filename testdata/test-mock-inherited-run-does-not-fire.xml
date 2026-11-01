@@ -1,0 +1,10 @@
+<config name="t">
+	<command name="tools">
+		<run>echo inherited</run>
+		<command name="cc" passthrough="true">
+			<mock>
+				<output path="out.o"/>
+			</mock>
+		</command>
+	</command>
+</config>

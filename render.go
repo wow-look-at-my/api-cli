@@ -1,3 +1,5 @@
+// spreadSentinel (NUL) delimits elements in spread output; spreadEndSentinel (SOH) terminates a spread region.
+
 package main
 
 import (

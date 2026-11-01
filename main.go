@@ -1,3 +1,5 @@
+// version is stamped at build time with -ldflags "-X main.version=...".
+
 package main
 
 import (
@@ -41,9 +43,7 @@ func run(argv []string, errOut io.Writer) int {
 		cfg = loaded
 	}
 
-	// No config and user invoked a real subcommand — they need a config. A
-	// version request is answered by the binary itself, so it joins the help
-	// invocations that a missing config must not turn away.
+	// No config and user invoked a real subcommand — they need a config.
 	if cfg == nil && ((!isHelpInvocation(argv) && !isDocsInvocation(argv) && !isVersionInvocation(argv)) || mcpTransport != "" || installMocks != "") {
 		fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.xml in the current directory")
 		return 2
@@ -121,6 +121,7 @@ func newRoot(cfg *Config) *cobra.Command {
 		for _, c := range cfg.Commands {
 			root.AddCommand(buildCommand(c, cfg.Vars, cfg.Preconditions, cfg.Command, cfg.Request, cfg.Cwd, cfg.Stdin, "", "", nil, cfg.Formats))
 		}
+		root.AddCommand(tuiCommand(cfg))
 	} else {
 		// Cobra's default help template only renders the flags/usage block for
 		// Runnable commands (or commands with subcommands).

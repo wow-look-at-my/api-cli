@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"os"
 	"path/filepath"
@@ -118,24 +120,7 @@ func TestTransport_ProgramThatNeverReportsStillCounts(t *testing.T) {
 
 func TestDownloadTransport_ProgressFDIsInTheTemplate(t *testing.T) {
 	dir := t.TempDir()
-	cfg, err := loadStr(t, `<config name="dl">
-		<transports>
-			<transport name="corp">
-				<run>
-					<argv>/bin/sh</argv>
-					<argv>-c</argv>
-					<argv>printf '%s %s' "$0" "$API_CLI_PROGRESS_FD"</argv>
-					<argv><value name="request.progress_fd"/></argv>
-				</run>
-			</transport>
-		</transports>
-		<command name="grab">
-			<download transport="corp">
-				<url>https://internal.example/thing</url>
-				<to>out.txt</to>
-			</download>
-		</command>
-	</config>`)
+	cfg, err := loadStr(t, testDownloadTransport_ProgressFDIsInTheTemplateXml)
 	require.NoError(t, err)
 
 	code, _, errOut := execCmdFull(t, cfg, "grab", "--download-dir", dir)
@@ -144,3 +129,6 @@ func TestDownloadTransport_ProgressFDIsInTheTemplate(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "3 3", string(got), "argv and the environment name the same fd")
 }
+
+//go:embed testdata/test-download-transport-progress-fd-is-in-the-template.xml
+var testDownloadTransport_ProgressFDIsInTheTemplateXml string

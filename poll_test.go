@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"fmt"
 	"io"
@@ -278,19 +280,19 @@ func TestOver_IteratesAVariadicArgDirectly(t *testing.T) {
 }
 
 func TestPoll_RejectsPollAttributesWithoutUntil(t *testing.T) {
-	_, err := loadStr(t, `<config name="p"><command name="wait">
-		<steps><step name="job" interval="1s"><run><argv>true</argv></run></step></steps>
-		<run><argv>true</argv></run>
-	</command></config>`)
+	_, err := loadStr(t, testPoll_RejectsPollAttributesWithoutUntilXml)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "they need until=")
 }
 
 func TestPoll_RejectsABadInterval(t *testing.T) {
-	_, err := loadStr(t, `<config name="p"><command name="wait">
-		<steps><step name="job" until="{{ true }}" interval="soon"><run><argv>true</argv></run></step></steps>
-		<run><argv>true</argv></run>
-	</command></config>`)
+	_, err := loadStr(t, testPoll_RejectsABadIntervalXml)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must be a duration")
 }
+
+//go:embed testdata/test-poll-rejects-poll-attributes-without-until.xml
+var testPoll_RejectsPollAttributesWithoutUntilXml string
+
+//go:embed testdata/test-poll-rejects-a-bad-interval.xml
+var testPoll_RejectsABadIntervalXml string

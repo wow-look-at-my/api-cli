@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"bytes"
 	"io"
@@ -79,10 +81,7 @@ func TestRun_InvalidConfigReturns2(t *testing.T) {
 func TestRun_HappyPath(t *testing.T) {
 	t.Serial() // swaps execStdout/execStderr/exitCode, which are package-wide.
 	dir := t.TempDir()
-	cfg := `<config name="t">
-	<run>printf '%s' {{.arg.id}}</run>
-	<command name="show"><arg name="id" type="int" required="true"/></command>
-</config>`
+	cfg := testRun_HappyPathXml
 	p := filepath.Join(dir, "api.xml")
 	require.NoError(t, os.WriteFile(p, []byte(cfg), 0o600))
 
@@ -107,10 +106,7 @@ func TestRun_HappyPath(t *testing.T) {
 func TestRun_PicksUpCwdAPIXml(t *testing.T) {
 	t.Serial()
 	dir := t.TempDir()
-	cfg := `<config name="t">
-	<run>true</run>
-	<command name="ping"/>
-</config>`
+	cfg := testRun_PicksUpCwdAPIXmlXml
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "api.xml"), []byte(cfg), 0o600))
 	chdir(t, dir)
 
@@ -227,10 +223,7 @@ func TestApplyEnvVars_BadFormat(t *testing.T) {
 func TestRun_VarSetsEnv(t *testing.T) {
 	t.Serial() // swaps execStdout/execStderr/exitCode, which are package-wide.
 	dir := t.TempDir()
-	cfg := `<config name="t">
-	<run>printf '%s' {{.env.API_CLI_TEST_TOKEN}}</run>
-	<command name="show"/>
-</config>`
+	cfg := testRun_VarSetsEnvXml
 	p := filepath.Join(dir, "api.xml")
 	require.NoError(t, os.WriteFile(p, []byte(cfg), 0o600))
 
@@ -271,3 +264,12 @@ func TestStringSlice_PreservesCommas(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a,b", "c"}, got)
 }
+
+//go:embed testdata/test-run-happy-path.xml
+var testRun_HappyPathXml string
+
+//go:embed testdata/test-run-picks-up-cwd-api-xml.xml
+var testRun_PicksUpCwdAPIXmlXml string
+
+//go:embed testdata/test-run-var-sets-env.xml
+var testRun_VarSetsEnvXml string

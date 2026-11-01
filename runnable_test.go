@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"io"
 	"testing"
@@ -184,17 +186,19 @@ func TestValidate_RunnableErrors(t *testing.T) {
 // A parent without runnable= stays help-only, and its leaf-shaped children are
 // still rejected.
 func TestValidate_FieldsStillNeedANodeThatRuns(t *testing.T) {
-	_, err := loadStr(t, `<config name="x"><command name="c"><run>x</run>
-		<fields><field name="a">a</field></fields>
-		<command name="list"><run>y</run></command></command></config>`)
+	_, err := loadStr(t, testValidate_FieldsStillNeedANodeThatRunsXml)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "needs a node that runs")
 }
 
 func TestParseXML_RunnableAndPattern(t *testing.T) {
-	cfg := mustParse(t, `<config name="x"><command name="c" runnable="true">
-		<arg name="id" pattern="^[0-9]+$"/><run>x</run>
-		<command name="list"><run>y</run></command></command></config>`)
+	cfg := mustParse(t, testParseXML_RunnableAndPatternXml)
 	assert.True(t, cfg.Commands[0].Runnable)
 	assert.Equal(t, "^[0-9]+$", cfg.Commands[0].Args[0].Pattern)
 }
+
+//go:embed testdata/test-validate-fields-still-need-a-node-that-runs.xml
+var testValidate_FieldsStillNeedANodeThatRunsXml string
+
+//go:embed testdata/test-parse-xml-runnable-and-pattern.xml
+var testParseXML_RunnableAndPatternXml string

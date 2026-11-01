@@ -1,0 +1,5 @@
+<config name="x">
+		<formats><format name="u" input="json" when="{{.tty}}">
+			<view name="t" default="true">{{.data}}</view>
+		</format></formats>
+		<command name="c"><run>x</run><format ref="u"/></command></config>

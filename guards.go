@@ -1,3 +1,5 @@
+// The pieces a config guards its inputs with: the path-segment rule, and the load-time resolution that lets a pattern= name.
+
 package main
 
 // The pieces a config guards its inputs with: the path-segment rule, and the

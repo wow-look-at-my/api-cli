@@ -1,0 +1,14 @@
+<config name="x">
+	<transports>
+		<transport name="corp" default="true">
+			<run>
+				<argv>corp-http</argv>
+				<argv><value name="request.method"/></argv>
+				<argv><value name="request.url"/></argv>
+			</run>
+			<cwd>/tmp</cwd>
+			<stdin><value name="request.body"/></stdin>
+		</transport>
+	</transports>
+	<command name="c"><run><request transport="corp"><url>https://x/y</url></request></run></command>
+</config>

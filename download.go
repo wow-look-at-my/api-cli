@@ -1,3 +1,5 @@
+// Defaults for the shared queue.
+
 package main
 
 import (

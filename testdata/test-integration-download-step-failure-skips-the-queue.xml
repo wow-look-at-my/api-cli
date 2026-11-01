@@ -1,0 +1,4 @@
+<config name="dl"><command name="grab">
+		<steps><step name="probe"><run>exit 3</run></step></steps>
+		<download><url>https://example.invalid/f</url><to>never.bin</to></download>
+	</command></config>
