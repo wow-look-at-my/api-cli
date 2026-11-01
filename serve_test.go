@@ -150,6 +150,17 @@ func TestServe_TheEnvironmentIsTheServers(t *testing.T) {
 	assert.Equal(t, "server-side-only", out)
 }
 
+func TestServe_RefusesADownloadLeaf(t *testing.T) {
+	sock := startServer(t)
+	dir := t.TempDir()
+	chdir(t, dir)
+	code, _, errOut := callServer(t, sock, "", "fetch")
+	assert.Equal(t, 2, code, errOut)
+	assert.Contains(t, errOut, "cannot run for a --client")
+	_, err := os.Stat(filepath.Join(dir, "written-by-the-server"))
+	assert.True(t, os.IsNotExist(err), "the server must write nothing for a client")
+}
+
 func TestServe_PassesTheExitCodeAndStdin(t *testing.T) {
 	sock := startServer(t)
 	code, _, _ := callServer(t, sock, "", "fail")

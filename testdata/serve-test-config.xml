@@ -11,4 +11,10 @@
 	<command name="secret"><run>printf %s "$SERVE_TEST_SECRET"</run></command>
 	<command name="fail"><run>exit 7</run></command>
 	<command name="cat"><run><argv>cat</argv></run></command>
+	<command name="fetch">
+		<download>
+			<url>http://127.0.0.1:9/never</url>
+			<to>written-by-the-server</to>
+		</download>
+	</command>
 </config>
