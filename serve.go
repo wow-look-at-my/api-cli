@@ -66,7 +66,7 @@ func runServer(cfgPath, sockPath string, errOut io.Writer) int {
 		fmt.Fprintln(errOut, "error:", err)
 		return 2
 	}
-	exe, err := os.Executable()
+	exe, err := selfPath()
 	if err != nil {
 		fmt.Fprintln(errOut, "error: cannot find this executable:", err)
 		return 2
@@ -100,6 +100,41 @@ func runServer(cfgPath, sockPath string, errOut io.Writer) int {
 		}
 		go serveConn(conn, exe, absConfig)
 	}
+}
+
+// selfPath is the file this process runs from. argv[0] comes first: an APE that a shell starts runs under a loader, and os.Executable then fails or names the loader.
+func selfPath() (string, error) {
+	if arg := os.Args[0]; arg != "" {
+		var path string
+		var err error
+		if strings.ContainsRune(arg, '/') {
+			path, err = filepath.Abs(arg)
+		} else {
+			path, err = exec.LookPath(arg)
+		}
+		if err == nil {
+			if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() {
+				return path, nil
+			}
+		}
+	}
+	return os.Executable()
+}
+
+// apeMagic opens every APE. execve on macOS refuses such a file, and a shell runs it.
+const apeMagic = "MZqFpD='"
+
+// selfCommand runs exe with args, through /bin/sh when exe is an APE.
+func selfCommand(exe string, args []string) *exec.Cmd {
+	head := make([]byte, len(apeMagic))
+	if f, err := os.Open(exe); err == nil {
+		_, _ = io.ReadFull(f, head)
+		_ = f.Close()
+	}
+	if string(head) == apeMagic {
+		return exec.Command("/bin/sh", append([]string{exe}, args...)...)
+	}
+	return exec.Command(exe, args...)
 }
 
 // listenUnix binds sockPath, owner-only. A stale socket from a dead server is removed first. Any other file at the path is an error.
@@ -163,7 +198,7 @@ func serveConn(conn *net.UnixConn, exe, cfgPath string) {
 		reply(servedResult{Exit: 2, Error: fmt.Sprintf("working directory %q is not an absolute directory on the server", req.Cwd)})
 		return
 	}
-	cmd := exec.Command(exe, append([]string{"--config", cfgPath}, req.Argv...)...)
+	cmd := selfCommand(exe, append([]string{"--config", cfgPath}, req.Argv...))
 	cmd.Dir = req.Cwd
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = files[0], files[1], files[2]
 	if err := cmd.Start(); err != nil {

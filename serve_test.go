@@ -218,6 +218,26 @@ func TestListenUnix_RefusesAFileThatIsNotASocket(t *testing.T) {
 	assert.ErrorContains(t, err, "is not a socket")
 }
 
+func TestSelfCommand_StartsAnAPEThroughSh(t *testing.T) {
+	dir := t.TempDir()
+	ape := filepath.Join(dir, "ape")
+	require.NoError(t, os.WriteFile(ape, []byte(apeMagic+"\n"), 0o755))
+	native := filepath.Join(dir, "native")
+	require.NoError(t, os.WriteFile(native, []byte("\x7fELF"), 0o755))
+	assert.Equal(t, []string{"/bin/sh", ape, "--config", "c"}, selfCommand(ape, []string{"--config", "c"}).Args)
+	assert.Equal(t, []string{native, "x"}, selfCommand(native, []string{"x"}).Args)
+	assert.Equal(t, native, selfCommand(native, nil).Path)
+}
+
+func TestSelfPath_NamesARealFile(t *testing.T) {
+	path, err := selfPath()
+	require.NoError(t, err)
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.True(t, info.Mode().IsRegular())
+	assert.True(t, filepath.IsAbs(path))
+}
+
 func TestFlagArgs_RebuildsTheSetFlags(t *testing.T) {
 	got := flagArgs(map[string]any{
 		"json": "a,b", "web": true, "off": false, "limit": 0, "empty": "", "R": "o/r",
