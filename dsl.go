@@ -1,3 +1,5 @@
+// The XML-with-placeholders language lives in api-dsl.
+
 package main
 
 import apidsl "github.com/wow-look-at-my/api-dsl"

@@ -1,3 +1,5 @@
+// Stream is a leaf's chunked-streaming action.
+
 package main
 
 import (

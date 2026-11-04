@@ -23,7 +23,7 @@ One example is the rule that a leaf needs a run, its own or an ancestor's. api-c
 
 | Attribute / child | Notes |
 |-------------------|-------|
-| `name=` (required) | Subcommand name. No whitespace or slashes, and not `help`, `completion`, `__complete`, or `docs`. |
+| `name=` (required) | Subcommand name. No whitespace or slashes, and not `help`, `completion`, `__complete`, `docs`, or `tui`. |
 | `description=` | Shown in help. |
 | `passthrough="true"` | Leaf-only. See [Passthrough mode](#passthrough-mode). |
 | `runnable="true"` | A node with subcommands runs in its own right. Every `<arg>` then needs a `pattern=`. See [A parent that also runs](#a-parent-that-also-runs). |

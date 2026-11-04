@@ -1,3 +1,5 @@
+// Declared <arg> and <flag> elements, on both sides of a run.
+
 package main
 
 // Declared <arg> and <flag> elements, on both sides of a run.

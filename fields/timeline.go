@@ -1,3 +1,5 @@
+// timelineBinary is the executable that draws the timeline sink.
+
 package fields
 
 import (

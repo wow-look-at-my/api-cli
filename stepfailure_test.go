@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// jobService is a transport program that answers per job id: - flaky fails twice with a proxy error, then answers done. - stuck always answers.
+//
 //go:embed testdata/job-service.sh
 var jobService string
 

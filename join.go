@@ -1,3 +1,5 @@
+// Both verdicts <join contiguous=> accepts.
+
 package main
 
 import (

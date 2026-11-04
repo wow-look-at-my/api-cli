@@ -1,3 +1,5 @@
+// lookupData resolves a dotted path through decoded JSON, walking maps by key and lists by index.
+
 package fields
 
 import (

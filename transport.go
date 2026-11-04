@@ -1,3 +1,5 @@
+// builtinTransportName selects the built-in net/http client.
+
 package main
 
 import (

@@ -1,3 +1,5 @@
+// version is stamped at build time with -ldflags "-X main.version=...".
+
 package main
 
 import (
@@ -19,7 +21,26 @@ func main() {
 
 // run is the process body, split out of main for testability.
 func run(argv []string, errOut io.Writer) int {
+	// A client loads no config. The server holds the only copy, so both cannot disagree.
+	if sock, rest, ok, err := clientTarget(argv); ok {
+		if err != nil {
+			fmt.Fprintln(errOut, "error:", err)
+			return 2
+		}
+		return runClient(sock, rest, os.Stdin, os.Stdout, os.Stderr, errOut)
+	}
 	cfgPath, mcpTransport, corsValue, envVars, installMocks := preparseGlobals(argv)
+	if serverSock := preparseServer(argv); serverSock != "" {
+		if cfgPath == "" {
+			fmt.Fprintln(errOut, "error: --server needs --config: the server holds the contract")
+			return 2
+		}
+		if _, err := Load(cfgPath); err != nil {
+			fmt.Fprintln(errOut, "error:", err)
+			return 2
+		}
+		return runServer(cfgPath, serverSock, errOut)
+	}
 
 	if err := applyEnvVars(envVars); err != nil {
 		fmt.Fprintln(errOut, "error:", err)
@@ -41,9 +62,7 @@ func run(argv []string, errOut io.Writer) int {
 		cfg = loaded
 	}
 
-	// No config and user invoked a real subcommand — they need a config. A
-	// version request is answered by the binary itself, so it joins the help
-	// invocations that a missing config must not turn away.
+	// No config and user invoked a real subcommand — they need a config.
 	if cfg == nil && ((!isHelpInvocation(argv) && !isDocsInvocation(argv) && !isVersionInvocation(argv)) || mcpTransport != "" || installMocks != "") {
 		fmt.Fprintln(errOut, "error: no config found; pass --config <path> or place api.xml in the current directory")
 		return 2
@@ -102,6 +121,8 @@ func newRoot(cfg *Config) *cobra.Command {
 	root.PersistentFlags().String("config", "", "Path to config file: XML (default: ./api.xml).")
 	root.PersistentFlags().String("mcp", "", `Run as MCP server. Value: "stdio", "http://<addr>", or "sse://<addr>".`)
 	root.PersistentFlags().String("cors", "strict", "CORS policy for MCP HTTP/SSE: disabled|permissive|strict|enabled.")
+	root.PersistentFlags().String("server", "", "Serve --config on this unix socket for --client callers, then exit when stopped.")
+	root.PersistentFlags().String("client", "", "As the first flag: run the rest of the command line on the --server at this unix socket. Needs no config.")
 	root.PersistentFlags().String("install-mocks", "", "Write one wrapper script per <mock> leaf into this directory, then exit.")
 	root.PersistentFlags().StringArray("var", nil, "Set an environment variable (KEY=VALUE). Repeatable.")
 	root.PersistentFlags().BoolP("quiet", "q", false, "Suppress execution count on stderr.")
@@ -121,6 +142,7 @@ func newRoot(cfg *Config) *cobra.Command {
 		for _, c := range cfg.Commands {
 			root.AddCommand(buildCommand(c, cfg.Vars, cfg.Preconditions, cfg.Command, cfg.Request, cfg.Cwd, cfg.Stdin, "", "", nil, cfg.Formats))
 		}
+		root.AddCommand(tuiCommand(cfg))
 	} else {
 		// Cobra's default help template only renders the flags/usage block for
 		// Runnable commands (or commands with subcommands).
@@ -165,7 +187,6 @@ func isHelpInvocation(argv []string) bool {
 	for _, a := range argv {
 		if a == "--help" || a == "-h" || a == "help" {
 			return true
-
 		}
 	}
 	return false
@@ -199,6 +220,18 @@ func preparseGlobals(argv []string) (configPath, mcpTransport, corsValue string,
 	envVars, _ = pre.Flags().GetStringArray("var")
 	installMocks, _ = pre.Flags().GetString("install-mocks")
 	return
+}
+
+// preparseServer reports the socket of --server, or "".
+func preparseServer(argv []string) string {
+	pre := &cobra.Command{SilenceErrors: true, SilenceUsage: true}
+	pre.SetOut(io.Discard)
+	pre.SetErr(io.Discard)
+	pre.FParseErrWhitelist.UnknownFlags = true
+	pre.Flags().String("server", "", "")
+	_ = pre.ParseFlags(argv)
+	sock, _ := pre.Flags().GetString("server")
+	return sock
 }
 
 // applyEnvVars parses KEY=VALUE pairs and sets them as process environment

@@ -1,3 +1,5 @@
+// defaultFormatCap is the byte threshold above which captureExecCapped flushes to streaming and skips the format step.
+
 package main
 
 import (

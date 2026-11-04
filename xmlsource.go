@@ -1,3 +1,5 @@
+// parseConfigXML maps an XML config document to the Config model.
+
 package main
 
 import (

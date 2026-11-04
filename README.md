@@ -176,6 +176,20 @@ A config can make the repeat the default. `watch="5s"` on a `<command>` says the
 
 [docs/screens-tml.md](docs/screens-tml.md) holds this section.
 
+## TUI
+
+The built-in `tui` subcommand opens an interactive explorer of the config. The left pane is the command tree. The right pane is a form for the selected command: one field per arg and flag, with a checkbox for a bool flag. The bottom pane shows the output of the last run.
+
+```bash
+api-cli tui --config github.xml
+```
+
+The up and down keys pick a command. Enter moves into its form. Tab moves between the fields, and enter in a field runs the command. Ctrl+R runs from anywhere, esc goes back to the tree, and q quits from the tree. Under the form is the command line that the run is equal to. You can copy it.
+
+A run is the same as that command line, with `--yes`. A command that declares `confirm=` asks in a popup first. An empty field is left out, so cobra applies the declared default. A variadic arg and a passthrough command split their field on spaces. A `string-slice` flag splits on commas. The `tui` subcommand needs a terminal on stdin and stdout.
+
+A config cannot declare a command named `tui`.
+
 ## Examples
 
 ### Wrap a REST API
@@ -293,6 +307,10 @@ A leaf that sets `passthrough="true"` accepts arbitrary positional args, which i
 
 **Constraints:** `passthrough` and `<arg>` are mutually exclusive, and `passthrough` sits on a leaf only. A flag takes `=` syntax and next-arg syntax. A `bool` flag consumes no value, and a `string-slice` flag accumulates. Filter `.rest` with `filterSuffix` and `filterPrefix`.
 
+## Client and server
+
+[docs/client-server.md](docs/client-server.md) holds this section. `--server` runs a config for `--client` callers on the far side of a sandbox, so the credentials and the contract stay on one side.
+
 ## Mock executables
 
 [docs/mock-executables.md](docs/mock-executables.md) holds this section.
@@ -349,6 +367,7 @@ Every [sprig v3](https://masterminds.github.io/sprig/) helper is available: `toJ
 | `shellquote`  | POSIX single-quote a value for the shell form of a command.                               |
 | `urlpath`     | URL-escape a single path segment.                                                         |
 | `spread`      | Splat a slice into multiple argv slots (or shell-quoted words). Works with `[]string`/`[]int`/`[]any`. |
+| `flagArgs`    | Rebuild the set flags as argv slots, sorted by name: `{{spread (flagArgs .flag)}}`. A zero value is left out. |
 | `fileExists` / `dirExists` | Path predicates, useful in `<preconditions>`.                              |
 | `segmentPattern` | The built-in path-segment regular expression, for an `<arg pattern=>`.                 |
 | `safeSegments` | The same rule as a predicate over one or more values. An absent value passes.             |
@@ -409,6 +428,8 @@ An attribute value is always raw, a template or a context path. A Go template ne
 | `--version`       |       |         | Print the binary's version. Needs no config. |
 | `--mcp <transport>` |     |         | Run the config as an MCP server: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes a tool named for its command path, with underscores (`users_get`). The HTTP and SSE servers also answer `GET /health`. The server behaves as `--format=always` does, with `.tty` true and width 80. A tool's `inputSchema` carries each arg's `pattern=`, and a call is checked against it. Over stdio, a client that closes stdin right after its last request still gets that request's answer. |
 | `--cors <level>`  |       | `strict`| CORS for the MCP HTTP/SSE server. See [CORS levels](#cors-levels). |
+| `--server <socket>` |     |         | Serve `--config` on a unix socket for `--client` callers. See [Client and server](#client-and-server). |
+| `--client <socket>` |     |         | As the first flag: run the rest of the command line on that server. Needs no config. |
 | `--install-mocks <dir>` | |        | Write one wrapper script per `<mock>` leaf into the directory, then exit. See [Mock executables](#mock-executables). |
 | `--quiet`         | `-q`  | false   | Suppress the `N executions` line. |
 | `--yes`           | `-y`  | false   | Skip `confirm` prompts. |
@@ -527,6 +548,7 @@ out, err := fields.Render(nil, f, body, map[string]any{"data": body}, "", 0)
 ```
 
 The first argument evaluates `expr=` and `footer=` templates. It may be nil for a declaration that uses neither. See `docs/fields-package.md`.
+
 ## Development
 
 ```sh

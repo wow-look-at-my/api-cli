@@ -1,3 +1,5 @@
+// TML presents a leaf through a Terminal Markup Language component.
+
 package main
 
 import (

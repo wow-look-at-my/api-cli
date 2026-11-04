@@ -1,3 +1,5 @@
+// Mock is the <mock> element on a leaf: a declarative stand-in for a real program.
+
 package main
 
 import (

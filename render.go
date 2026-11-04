@@ -1,3 +1,5 @@
+// spreadSentinel (NUL) delimits elements in spread output; spreadEndSentinel (SOH) terminates a spread region.
+
 package main
 
 import (
@@ -29,6 +31,7 @@ func cliFuncs() template.FuncMap {
 	return template.FuncMap{
 		"shellquote":   shellQuote,
 		"spread":       spread,
+		"flagArgs":     flagArgs,
 		"fileExists":   fileExists,
 		"dirExists":    dirExists,
 		"tabwriter":    tabwriter,
@@ -248,6 +251,42 @@ func spread(v any) (string, error) {
 		return spreadSentinel + spreadEndSentinel, nil
 	}
 	return spreadSentinel + strings.Join(parts, spreadSentinel) + spreadEndSentinel, nil
+}
+
+// flagArgs turns a flag map back into a command line, sorted by name, for a wrapper that passes its declared flags on. A flag at its zero value is left out. A bool is the bare flag. A list repeats the flag once per value.
+func flagArgs(flags map[string]any) []string {
+	names := make([]string, 0, len(flags))
+	for name := range flags {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var out []string
+	for _, name := range names {
+		dash := "--"
+		if len(name) == 1 {
+			dash = "-"
+		}
+		switch value := flags[name].(type) {
+		case nil:
+		case bool:
+			if value {
+				out = append(out, dash+name)
+			}
+		case []string:
+			for _, item := range value {
+				out = append(out, dash+name+"="+item)
+			}
+		case []any:
+			for _, item := range value {
+				out = append(out, fmt.Sprintf("%s%s=%v", dash, name, item))
+			}
+		default:
+			if text := fmt.Sprint(value); text != "" && text != "0" {
+				out = append(out, dash+name+"="+text)
+			}
+		}
+	}
+	return out
 }
 
 func toStringSlice(v any) ([]string, error) {

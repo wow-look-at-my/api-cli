@@ -1,3 +1,5 @@
+// mockWrapper is a single script to write: the file name a build tool invokes, and the leaf path that answers for it.
+
 package main
 
 import _ "embed"
