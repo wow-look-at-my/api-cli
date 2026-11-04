@@ -1,0 +1,14 @@
+{
+  "name": "api-cli-workers",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Workers port of api-cli — parses the same JSON config and serves leaf commands as HTTP endpoints using fetch().",
+  "type": "module",
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.8.0",
+    "@cloudflare/workers-types": "^4.20250508.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.1",
+    "wrangler": "^4.14.0"
+  }
+}

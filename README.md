@@ -186,7 +186,9 @@ api-cli tui --config github.xml
 
 The up and down keys pick a command. Enter moves into its form. Tab moves between the fields, and enter in a field runs the command. Ctrl+R runs from anywhere, esc goes back to the tree, and q quits from the tree. Under the form is the command line that the run is equal to. You can copy it.
 
-A run is the same as that command line, with `--yes`. A command that declares `confirm=` asks in a popup first. An empty field is left out, so cobra applies the declared default. A variadic arg and a passthrough command split their field on spaces. A `string-slice` flag splits on commas. The `tui` subcommand needs a terminal on stdin and stdout. A config cannot declare a command named `tui`.
+A run is the same as that command line, with `--yes`. A command that declares `confirm=` asks in a popup first. An empty field is left out, so cobra applies the declared default. A variadic arg and a passthrough command split their field on spaces. A `string-slice` flag splits on commas. The `tui` subcommand needs a terminal on stdin and stdout.
+
+A config cannot declare a command named `tui`.
 
 ## Examples
 
@@ -511,6 +513,27 @@ ghr repo issues cli/cli --state open -n 10
 ghr search repos 'language:go stars:>10000' --sort stars
 ghr repo languages golang/go --as=json
 ```
+
+## Cloudflare Workers
+
+A TypeScript port lives in `workers/` and serves the same configs as HTTP endpoints on Cloudflare Workers. Instead of shelling out to `curl`, it parses rendered command templates and executes them via `fetch()`.
+
+```sh
+cd workers
+npm install
+npm test        # 242 tests (Workers pool + comparative)
+npm run dev     # local dev server
+```
+
+CLI invocations map to HTTP requests:
+
+| CLI                              | HTTP                          |
+|----------------------------------|-------------------------------|
+| `api-cli users get 1`            | `GET /users/get/1`            |
+| `api-cli users list --limit 3`   | `GET /users/list?limit=3`     |
+| `api-cli user-posts Bret`        | `GET /user-posts/Bret`        |
+
+See `workers/README.md` for the full API mapping, deployment, and architecture details.
 
 ## Using the formatter as a library
 
