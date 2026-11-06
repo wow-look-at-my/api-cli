@@ -16,8 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fixtureTransport writes fixture's contents to stdout, standing in for the
-// program a real config would delegate to (corp-http, an SSO-aware curl, ...).
+// fixtureTransport writes fixture's contents to stdout.
 func fixtureTransport(name, fixture string, isDefault bool) *Transport {
 	return shellTransport(name, `cat `+fixture, isDefault)
 }

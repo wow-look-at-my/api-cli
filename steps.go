@@ -22,7 +22,7 @@ var pollSleep = time.Sleep
 type stepCapture func(c *Cmd, cwd, stdin string, data any) (string, int)
 
 // stepOutcome reports how a run of steps ended. output carries the failing
-// step's stdout (empty on success) for callers that report it to the user.
+// step's stdout (empty on success) for callers that report it.
 type stepOutcome struct {
 	executions int
 	output     string
