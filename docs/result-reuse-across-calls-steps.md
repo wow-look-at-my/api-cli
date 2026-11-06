@@ -92,7 +92,7 @@ An API that answers `status: pending` needs a poll, not a call. A step with `unt
 - **`.result.<name>` is the body that satisfied the predicate**, not one of the answers before it.
 - **`interval=`** is a duration such as `500ms` or `2s`. It defaults to one second, and it never grows: a slow job is not a reason to wait longer and longer for it.
 - **`attempts=`** caps the poll at 60 by default. A poll that runs out fails the run and prints the last response. The reason is therefore the body itself rather than a bare timeout.
-- **A non-zero exit ends the poll at once**, after the step's `retries=`. A job that reports a failure has answered, and asking again cannot change it.
+- **A non-zero exit ends the poll at once**, after the step's `retries=`. A job that reports a failure answered, and asking again cannot change it.
 - **`over=` and `until=` compose.** A repeated step polls each element in turn, which is how one invocation lists N items whose listings are all jobs.
 
 ## Retrying a step: `retries=` and `on-error=`
@@ -108,7 +108,7 @@ A flaky endpoint needs a second try, not a shell loop. `retries="N"` runs a fail
 - **A failure is any failed run.** A command fails on a non-zero exit. A request fails on an HTTP error status or a network fault. It also fails on a `<transport>` that exits non-zero, or a body that is not JSON under `jq=`.
 - **The retries run one second apart, at a fixed cadence.** The delay never grows. The download queue uses the same delay.
 - **The default is `0`**, which fails at once. A negative value is a load error.
-- **A poll retries each attempt.** A retried attempt does not use up an `attempts=` slot. A poll that runs out of attempts is final, and nothing retries it.
+- **A poll retries each try.** A retried try does not use up an `attempts=` slot. A poll that runs out of attempts is last, and nothing retries it.
 - **With `over=`, each element gets its own retries.**
 
 `on-error=` decides what a repeated step does with an element that still fails. It takes `fail` (the default) or `skip`. It needs `over=`. On a step without `over=`, it is a load error.

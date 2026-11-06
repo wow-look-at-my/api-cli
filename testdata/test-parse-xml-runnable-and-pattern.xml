@@ -1,0 +1,3 @@
+<config name="x"><command name="c" runnable="true">
+		<arg name="id" pattern="^[0-9]+$"/><run>x</run>
+		<command name="list"><run>y</run></command></command></config>

@@ -1,3 +1,5 @@
+// exitCode is set by a leaf's RunE to the exit status of the child process.
+
 package main
 
 import (
@@ -66,8 +68,8 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []str
 	} else {
 		var count cobra.PositionalArgs
 		switch total := len(node.Args); {
-		case total == 0 && node.Runnable:
-			// A runnable node with no args takes none: an unmatched positional is a mistyped subcommand, and cobra says so.
+		case total == 0 && (node.Runnable || len(node.Commands) > 0):
+			// A node with no args takes none: an unmatched positional is a mistyped subcommand, and cobra says so.
 			count = cobra.NoArgs
 		case total == 0:
 			count = nil
@@ -138,6 +140,11 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []str
 		leafFormats := formats
 		cmd.RunE = func(c *cobra.Command, args []string) error {
 			return runLeaf(c, nodeCopy, args, leafVars, leafCmd, leafRequest, leafCwd, leafStdin, leafConfirm, leafWatch, leafFormat, leafFormats)
+		}
+	} else {
+		// Cobra checks Args only on a runnable command. Without this, a mistyped subcommand prints help and exits 0.
+		cmd.RunE = func(c *cobra.Command, args []string) error {
+			return c.Help()
 		}
 	}
 
@@ -331,9 +338,9 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 	logDebug("leaf %q: entry: %s", node.Name, jsonCompact(entry))
 
 	// A <mock> stands in for a program, so it is the leaf's action too. Its own
-	// <run> is the exception: that shape is a thin wrapper, which records
-	// the call and then runs the real tool. An INHERITED run stays where it is,
-	// exactly as it does for a download, so a mock leaf under a parent that
+	// <run> is the exception: that shape is a thin wrapper, which records the
+	// call and then runs the real tool. An INHERITED run stays where it is,
+	// exactly as it does for a download. A mock leaf under a parent that
 	// declares a run does not fire that run on the way past.
 	if node.Mock != nil {
 		logVerbose("leaf %q: standing in for a program", node.Name)
@@ -350,7 +357,7 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 	}
 
 	// The hand-off is the leaf's action: a <download> leaf never runs a command
-	// of its own, so an ancestor's <run> stays where it is instead of firing an
+	// of its own. An ancestor's <run> stays where it is instead of firing an
 	// unrelated request on the way to the queue.
 	if session != nil {
 		logVerbose("leaf %q: handing %d download declaration(s) to the queue", node.Name, len(node.Downloads))
@@ -418,16 +425,9 @@ func reportExecutions(c *cobra.Command, n int) {
 	}
 }
 
-// resolveContext assembles a leaf's data context from its non-flag half
-// (base: .arg, .env, and .rest in passthrough mode), the flags this
-// invocation supplies, and the merged vars.
+// resolveContext assembles a leaf's data context from its non-flag half (base: .arg, .env, and .rest in passthrough mode), the flags this invocation supplies, and the merged vars.
 //
-// Vars resolve again, because both halves depend on each other: a templated
-// flag default reads .var, and a var reads .flag. Pass a single runs without
-// flags purely to feed those defaults. Pass runs again over the templates a
-// single time gather has produced the whole flag map, cobra's declared
-// defaults included. Everything downstream — a URL, an entry, a jq program
-// kept in a <var> — therefore sees this run's flags.
+// Vars resolve again, because both halves depend on each other: a templated flag default reads .var, and a var reads .flag. Pass a single runs without flags purely to feed those defaults. Pass runs again over the original templates a single time gather has produced the whole flag map, cobra's declared defaults included. Everything downstream — a URL, an entry, a jq program kept in a <var> — therefore sees this run's flags.
 func resolveContext(vars, base map[string]any, gather func(preFlag map[string]any) (map[string]any, error)) (map[string]any, error) {
 	preFlag := maps.Clone(base)
 	preFlag["flag"] = map[string]any{}
@@ -458,9 +458,9 @@ const maxVarPasses = 10
 // renderVars runs each string leaf of the merged vars map through the
 // template engine with the given context. Vars may reference other vars: each
 // pass makes the pass's resolved values available at `.var`, iterating to a
-// fixpoint (capped at maxVarPasses). The templates are re-rendered each pass,
-// so already-resolved text is never double-processed. Non-string values pass
-// through.
+// fixpoint (capped at maxVarPasses). The original templates are re-rendered
+// each pass, so already-resolved text is never double-processed. Non-string
+// values pass through.
 func renderVars(vars map[string]any, data map[string]any) (map[string]any, error) {
 	if len(vars) == 0 {
 		return map[string]any{}, nil

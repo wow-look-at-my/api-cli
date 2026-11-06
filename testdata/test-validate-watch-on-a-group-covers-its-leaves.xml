@@ -1,0 +1,6 @@
+<config name="w">
+		<run>echo hi</run>
+		<command name="board" watch="5s">
+			<command name="a"/>
+			<command name="b" watch="500ms"/>
+		</command></config>

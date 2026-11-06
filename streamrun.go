@@ -1,3 +1,5 @@
+// streamSource is the leaf's run, opened as a byte stream rather than executed to completion: the chunker pulls from it.
+
 package main
 
 import (
@@ -105,14 +107,14 @@ func (s *streamSource) abandon() {
 	s.cmd.Wait()
 }
 
-// runStream runs a leaf's <stream> declaration: the source is the leaf's own
-// run, the chunker cuts it, the optional step transforms a single chunk at a
+// runStream runs a leaf's <stream> declaration. The source is the leaf's own
+// run. The chunker cuts it, the optional step transforms a single chunk at a
 // time, and each finished chunk goes to stdout.
 //
 // Chunks are written as they are produced, so a source that pauses after its
-// earliest chunk has already put that chunk in front of the user. Nothing
-// here holds more than a single chunk, and the write adds no bytes: the
-// concatenated chunks are the source, byte for byte.
+// earliest chunk has already put that chunk. That chunk is in front of the
+// user. Nothing here holds more than a single chunk, and the write adds no
+// bytes: the concatenated chunks are the source, byte for byte.
 func runStream(st *Stream, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any) int {
 	size := 0
 	if st.Mode == streamModeBytes {
@@ -223,7 +225,7 @@ func applyStreamStep(step *StreamStep, chunk []byte, index, offset int, data map
 	return out, nil
 }
 
-// streamCtx layers where a chunk sits in the run onto the leaf context, so a
+// streamCtx layers where a chunk sits in the run onto the leaf context. A
 // per-chunk step can name its position: `.stream.index`, `.stream.offset` and
 // `.stream.size`.
 func streamCtx(data map[string]any, index, offset, size int) map[string]any {

@@ -1,0 +1,7 @@
+<config name="t">
+		<preconditions><precondition>from the config</precondition></preconditions>
+		<command name="leaf" description="l">
+			<preconditions><precondition>from the leaf</precondition></preconditions>
+			<run>printf ok</run>
+		</command>
+	</config>

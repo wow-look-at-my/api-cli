@@ -1,3 +1,5 @@
+// execStdin / execStdout / execStderr are the I/O channels used when running the rendered command.
+
 package main
 
 import (
@@ -102,7 +104,7 @@ func captureExec(c *Cmd, cwd, stdin string, data any) (string, int) {
 }
 
 // captureExecTo captures stdout and sends stderr to errOut instead of the
-// process's own. Child stdin is always explicit, never inherited: the callers
+// process's own. Child stdin is always explicit, never inherited. The callers
 // are contexts where the parent's stdin is either the MCP protocol channel or
 // the user's terminal, and neither belongs to the child.
 func captureExecTo(c *Cmd, cwd, stdin string, data any, errOut io.Writer) (string, int) {
@@ -130,14 +132,13 @@ func captureExecTo(c *Cmd, cwd, stdin string, data any, errOut io.Writer) (strin
 	return outBuf.String(), 0
 }
 
-// captureExecCapped is the format-path capture variant. It buffers the
-// child's stdout up to maxBytes; if the child exceeds the cap, the buffered
-// prefix is flushed to execStdout and the remainder streams through. The
-// caller treats overflow == true as "skip formatting, output already streamed."
+// captureExecCapped is the format-path capture variant. It buffers the child's
+// stdout up to maxBytes. If the child exceeds the cap, the buffered prefix is
+// flushed to execStdout and the remainder streams through. The caller treats
+// overflow == true as "skip formatting, output already streamed."
 //
-// Returns (capturedOrEmpty, overflowed, exitCode). When overflowed is true the
-// returned string is empty — the caller MUST NOT format it; bytes are already
-// on stdout.
+// When overflowed is true the returned string is empty — the caller MUST
+// NOT format it; bytes are already on stdout.
 func captureExecCapped(c *Cmd, cwd, stdin string, data any, maxBytes int) (string, bool, int) {
 	if !c.Defined() {
 		fmt.Fprintln(execStderr, "error: command is empty")
@@ -267,7 +268,7 @@ func buildExecCmd(c *Cmd, data any) (*exec.Cmd, error) {
 //
 // Split out of buildExecCmd for the caller that cannot execute where it
 // renders: a <download> resolves its transport while the leaf's data context
-// still exists, and the queue runs the result later, on a worker, with no
+// still exists. The queue runs the result later, on a worker, with no
 // context in reach. Rendering stays in a single place either way.
 func resolveArgv(c *Cmd, data any) ([]string, error) {
 	if c.Shell {

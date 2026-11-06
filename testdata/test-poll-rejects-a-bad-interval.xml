@@ -1,0 +1,4 @@
+<config name="p"><command name="wait">
+		<steps><step name="job" until="{{ true }}" interval="soon"><run><argv>true</argv></run></step></steps>
+		<run><argv>true</argv></run>
+	</command></config>

@@ -1,0 +1,98 @@
+<?xml version="1.1" encoding="UTF-8"?>
+<Component xmlns="urn:tml:v1" name="Browse">
+	<Import src="./theme.tml"/>
+
+	<Property name="title" type="string" required="true"/>
+	<Property name="hint" type="string" default=""/>
+	<Property name="tree" type="string[]" default=""/>
+	<Property name="selected" type="int" default="0"/>
+
+	<Property name="path" type="string" default=""/>
+	<Property name="description" type="string" default=""/>
+	<Property name="runnable" type="bool" default="false"/>
+	<Property name="group" type="bool" default="false"/>
+	<Property name="fields" type="record[]" default=""/>
+	<Property name="line" type="string" default=""/>
+
+	<Property name="running" type="bool" default="false"/>
+	<Property name="status" type="string" default=""/>
+	<Property name="statusStyle" type="string" default="dim"/>
+	<Property name="output" type="string[]" default=""/>
+	<Property name="offset" type="int" default="0"/>
+
+	<Property name="confirming" type="bool" default="false"/>
+
+	<!-- One arg or flag of the selected command. A bool flag is a checkbox, everything else a text field. -->
+	<DataTemplate name="Field">
+		<Property name="id" type="string" required="true"/>
+		<Property name="label" type="string" required="true"/>
+		<Property name="hint" type="string" default=""/>
+		<Property name="text" type="bool" default="true"/>
+		<Property name="value" type="string" default=""/>
+		<Property name="cursor" type="int" default="0"/>
+		<Property name="checked" type="bool" default="false"/>
+		<Template>
+			<Grid columns="*[10..24],2*" gap="2">
+				<Text Grid.column="0" style="label" overflow="ellipsis">{label}</Text>
+				<Stack Grid.column="1" width="*">
+					<Textbox id="{id}" if="{text}" value="{value}" cursor="{cursor}" placeholder="{hint}" width="*"/>
+					<Checkbox id="{id}" if="{not text}" action="toggle:{id}" label="{hint}" checked="{checked}"/>
+				</Stack>
+			</Grid>
+		</Template>
+	</DataTemplate>
+
+	<Template>
+		<Canvas>
+			<Stack gap="1">
+				<Stack orientation="horizontal" gap="2">
+					<Text style="head">{title}</Text>
+					<Spinner kind="dots" color="{theme.accent}" if="{running}"/>
+					<Spacer width="*"/>
+					<Text style="dim" overflow="ellipsis">{hint}</Text>
+				</Stack>
+
+				<Grid columns="*[16..36],1*" rows="auto" gap="1">
+					<Border title="Commands" color="{theme.track}" Grid.column="0">
+						<List id="tree" items="{tree}" selected="{selected}"/>
+					</Border>
+
+					<Border title="{path}" color="{theme.track}" Grid.column="1">
+						<Stack gap="1" width="*">
+							<Text if="{description}">{description}</Text>
+							<Text style="dim" if="{group}">A group. Pick one of its commands on the left.</Text>
+							<Stack itemsSource="{fields}" itemTemplate="Field" width="*" if="{runnable}"/>
+							<Stack orientation="horizontal" gap="2" if="{runnable}">
+								<Button id="run" action="run" label="Run" variant="primary"/>
+								<Text style="dim" overflow="ellipsis">{line}</Text>
+							</Stack>
+						</Stack>
+					</Border>
+				</Grid>
+
+				<Border title="Output" color="{theme.track}" width="*" height="*">
+					<Stack width="*">
+						<Text style="{statusStyle}" if="{status}" overflow="ellipsis">{status}</Text>
+						<Scrollbox id="output" offset="{offset}" width="*" height="*">
+							<Stack>
+								<For each="{output}" as="row">
+									<Text overflow="clip">{row}</Text>
+								</For>
+							</Stack>
+						</Scrollbox>
+					</Stack>
+				</Border>
+			</Stack>
+
+			<Popup title="Confirm" color="{theme.warn}" if="{confirming}">
+				<Stack gap="1">
+					<Text>{path} asks for confirmation before it runs.</Text>
+					<Stack orientation="horizontal" gap="2">
+						<Button id="confirm-yes" action="confirm" label="Run it" variant="danger"/>
+						<Button id="confirm-no" action="cancel" label="Cancel"/>
+					</Stack>
+				</Stack>
+			</Popup>
+		</Canvas>
+	</Template>
+</Component>

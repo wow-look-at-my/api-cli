@@ -1,3 +1,5 @@
+// defaultFormatCap is the byte threshold above which captureExecCapped flushes to streaming and skips the format step.
+
 package main
 
 import (
@@ -92,7 +94,7 @@ func stdoutTTY() (bool, int) {
 
 // formatContext builds the data passed to format predicates and view
 // templates. parsed is the decoded child stdout (nil before exec for
-// when-predicate evaluation).
+// when-predicate evaluation). data is the leaf's full data context.
 func formatContext(parsed any, data map[string]any, isTTY bool, width int) map[string]any {
 	ctx := map[string]any{
 		"data":  parsed,
@@ -221,7 +223,7 @@ func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin strin
 		return streamRaw(), nil
 	}
 
-	// --as forces a representation even when the leaf declared no <fields>.
+	// --as forces a representation even when the leaf declared no <fields>: project nothing and let the data shape.
 	sink, _ := c.Root().PersistentFlags().GetString("as")
 	sink = strings.TrimSpace(sink)
 	if len(blocks) == 0 && sink != "" {
@@ -307,9 +309,10 @@ func streamRequest(request *Request, data map[string]any) int {
 }
 
 // runFieldsFormatted captures the leaf's JSON output and renders it through the
-// <fields> auto-formatter. Every block whose when= predicate holds renders, in
-// order, so a single leaf shows a table and a detail view on different calls,
-// or tables on the same call. A leaf whose blocks all sit out prints the raw body.
+// <fields> auto-formatter. Every block whose when= predicate holds renders. That
+// block is in order, so a single leaf shows a table and a detail view on different
+// calls, or tables on the same call. A leaf whose blocks all sit out prints the
+// raw body.
 func runFieldsFormatted(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, blocks []FieldsBlock, verdict userVerdict) int {
 	out, overflowed, code := captureRun(cmdTmpl, request, cwd, stdin, data)
 	if overflowed {
@@ -352,7 +355,7 @@ func runFieldsFormatted(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, s
 }
 
 // runTMLFormatted captures the leaf's JSON output and draws a single frame of
-// the component. A watch turns this into a terminal program (tmlrun.go); on its
+// the component. A watch turns this into a terminal program (tmlrun.go). On its
 // own it is a single frame on stdout, which is what makes the same declaration
 // testable without a terminal.
 func runTMLFormatted(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any, view *TML, width, height int) int {

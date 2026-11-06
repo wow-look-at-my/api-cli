@@ -1,0 +1,15 @@
+<?xml version="1.1" encoding="UTF-8"?>
+<Theme xmlns="urn:tml:v1" name="browse">
+	<Token name="accent" light="#1e66f5" dark="#7aa2f7"/>
+	<Token name="ok" light="#40a02b" dark="#9ece6a"/>
+	<Token name="bad" light="#d20f39" dark="#f7768e"/>
+	<Token name="warn" light="#df8e1d" dark="#e0af68"/>
+	<Token name="dim" light="#6c6f85" dark="#565f89"/>
+	<Token name="track" light="#ccd0da" dark="#3b4261"/>
+
+	<Style name="head" bold="true" fg="{theme.accent}"/>
+	<Style name="label" fg="{theme.accent}"/>
+	<Style name="dim" faint="true" fg="{theme.dim}"/>
+	<Style name="ok" fg="{theme.ok}"/>
+	<Style name="bad" bold="true" fg="{theme.bad}"/>
+</Theme>

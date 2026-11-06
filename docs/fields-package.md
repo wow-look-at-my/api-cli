@@ -1,6 +1,6 @@
 # The `fields` package
 
-`github.com/wow-look-at-my/api-cli/fields` is the `<fields>` auto-formatter, importable without the CLI. A program gives it decoded JSON and a declaration. It gets back a table, a `Label: value` list, lines, raw text, JSON, Markdown, CSV, or a timeline. The package parses no XML, reads no flag, and touches no terminal. As a result, a caller keeps its own configuration language.
+`github.com/wow-look-at-my/api-cli/fields` is the `<fields>` auto-formatter, importable without the CLI. A program gives it decoded JSON and a declaration. It gets back a table, a `Label: value` list, lines, raw text, JSON, Markdown, CSV, or a timeline. The package parses no XML, reads no flag, and touches no terminal. A caller keeps its own configuration language.
 
 ```go
 import "github.com/wow-look-at-my/api-cli/fields"
@@ -34,7 +34,7 @@ The reason is structural. A row is a line. A column is a position on that line. 
 
 A column carries spaces of gutter, and a column wider than 50 columns carries three. `AlignColumns` applies that rule, so a caller that uses the aligner on its own gets it too. `tableWidth` reads the same rule, which keeps a wide column from pushing the table past the width the drop decision was given.
 
-The `list` sink keeps the whole value instead, and indents the later lines under the first. As a result, a paragraph reads as one value. `raw`, `json` and `csv` carry the value exactly, and `csv` quotes it per RFC 4180.
+The `list` sink keeps the whole value instead, and indents the later lines under the first. A paragraph reads as one value. `raw`, `json` and `csv` carry the value exactly, and `csv` quotes it per RFC 4180.
 
 To show less than the whole value, use `firstline="true"` for the first line, or `truncate="N"` for a prefix.
 

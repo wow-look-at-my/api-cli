@@ -1,3 +1,5 @@
+// Both verdicts <join contiguous=> accepts.
+
 package main
 
 import (
@@ -52,7 +54,7 @@ func buildJoin(n *xnode) (*Join, error) {
 
 // validateJoin checks a single declaration's join grammar. group= and order=
 // only mean something to a join, so a declaration that carries them without a
-// single is a config that expects a concatenation nobody asked for.
+// single is a config. That config expects a concatenation nobody asked for.
 func validateJoin(d *Download, where string) error {
 	if d.Join == nil {
 		if d.Group != "" || d.Order != "" {
@@ -81,7 +83,7 @@ func validateJoin(d *Download, where string) error {
 // belongs to, where that bucket lands, and its place in the order.
 //
 // A value that is not a number fails here: concatenating in the wrong order
-// produces a plausible file that is silently wrong, which is worse than no file
+// produces a plausible file that is silently wrong. This is worse than no file
 // at all.
 func planJoin(d *Download, ctx map[string]any, dir string, idx int) (*joinPart, error) {
 	if d.Join == nil {
@@ -218,8 +220,8 @@ func (j *joiner) wait() []error {
 }
 
 // finish writes a single group's output. A group short a member is not written
-// at all: half a file that carries the real name reads as a complete capture,
-// and nothing downstream can tell the difference.
+// at all: half a file that carries the real name reads as a complete capture.
+// Nothing downstream can tell the difference.
 func (j *joiner) finish(g *joinGroup) error {
 	sort.SliceStable(g.members, func(a, b int) bool {
 		return g.members[a].spec.Join.Order < g.members[b].spec.Join.Order

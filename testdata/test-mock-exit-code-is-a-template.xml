@@ -1,0 +1,8 @@
+<config name="t">
+	<command name="cc" passthrough="true">
+		<mock exit="{{ if .mock.src }}0{{ else }}1{{ end }}">
+			<input name="src" match="\.c$"/>
+			<stderr>cc: no input files<value expr="{{ &quot;\n&quot; }}"/></stderr>
+		</mock>
+	</command>
+</config>

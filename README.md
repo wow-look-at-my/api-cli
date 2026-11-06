@@ -69,7 +69,7 @@ A leaf runs what its closest `<run>` ancestor gives it, then presents the output
 
 ## Placeholders
 
-Element content can mix plain text with multiple placeholder elements that compile to Go `text/template` source. You can always drop to a raw template with `expr=`, or type `{{ ... }}` in the text.
+Element content can mix plain text with three placeholder elements that compile to Go `text/template` source. You can always drop to a raw template with `expr=`, or type `{{ ... }}` in the text.
 
 | Placeholder | Compiles to | Notes |
 |-------------|-------------|-------|
@@ -116,7 +116,7 @@ The program gets the fully rendered request on top of the leaf's usual context. 
 | `.request.header_lines` | `["Accept: application/json", ...]`, for splatting. |
 
 - **The body goes to the program's stdin** unless the transport declares its own `<stdin>`. Stdin is explicit either way. A transport never inherits your terminal, so a program that reads stdin cannot hang and wait for one.
-- **A non-zero exit fails the request**, as a 4xx from the built-in client does. The program's stderr passes through untouched. The error also shows the start of its stdout, because that is often the error page.
+- **A non-zero exit fails the request**, as a 4xx from the built-in client does. The program's stderr passes through untouched. The error also shows the start of its stdout, because that is frequently the error page.
 - **Which transport runs**: the request's `transport=` attribute, then the registry's `default="true"` entry, then the built-in client. There is no override at run time. How a request reaches its endpoint is a property of that endpoint, not a user preference. The name `http` belongs to the built-in client, so `transport="http"` on one request opts that request out of a default transport. That is the public endpoint in an otherwise internal API.
 - `<cwd>` sets the program's working directory. A transport's `<run>` must be a command. It is the thing that performs a request. It cannot be one.
 
@@ -126,7 +126,7 @@ To build repeated flags, assemble a list and `spread` it.
 <argv><value expr="{{ $h := list }}{{ range .request.header_lines }}{{ $h = concat $h (list &quot;-H&quot; .) }}{{ end }}{{ spread $h }}"/></argv>
 ```
 
-An empty `spread` contributes no argument at all. That makes it the way to write a conditional argument. `{{ spread (ternary (list "--data-binary" "@-") (list) (ne .request.body "")) }}` adds arguments only when a body exists. A plain `<if>` leaves an empty string in the argv instead. See the `curl` transport in [`api.example.xml`](./api.example.xml) for both together.
+An empty `spread` contributes no argument at all. That makes it the way to write a conditional argument. `{{ spread (ternary (list "--data-binary" "@-") (list) (ne .request.body "")) }}` adds two arguments only when a body exists. A plain `<if>` leaves an empty string in the argv instead. See the `curl` transport in [`api.example.xml`](./api.example.xml) for both together.
 
 ## Downloads
 
@@ -155,7 +155,9 @@ go1.25rc1  Jun 10, 2026   12044
 
 A frame is one whole run of the leaf: the steps, the entry, the request and the formatter. Nothing is cached between frames, so a `<var>`, a step result and the response are all fresh each time. The frame keeps the real terminal size. A `<fields>` table therefore stays a table under a watch, rather than falling back to the piped representation.
 
-The output of the leaf and its diagnostics both land in the frame. A failed run reports the failure in place. The watch then continues. Ctrl-C ends the watch, leaves the last frame on screen and exits 130. A frame taller than the terminal is clipped. The last row then says how many lines it dropped. Redirected output gets no repainting: the frames append, which makes `--watch 5s ... > log` a poll log.
+The output of the leaf and its diagnostics both land in the frame. A failed run reports the failure in place. The watch then continues. Ctrl-C ends the watch, leaves the last frame on screen and exits 130. A frame taller than the terminal is clipped. The last row then says how many lines it dropped.
+
+Redirected output gets no repainting: the frames append, which makes `--watch 5s ... > log` a poll log.
 
 Leaves refuse to repeat. A `<download>` leaf transfers a file one time. `--watch` on it is an error. A leaf with a `confirm` prompt needs `--yes`, because the prompt draws into the frame where nobody can answer it.
 
@@ -173,6 +175,20 @@ A config can make the repeat the default. `watch="5s"` on a `<command>` says the
 ## Screens: `<tml>`
 
 [docs/screens-tml.md](docs/screens-tml.md) holds this section.
+
+## TUI
+
+The built-in `tui` subcommand opens an interactive explorer of the config. The left pane is the command tree. The right pane is a form for the selected command: one field per arg and flag, with a checkbox for a bool flag. The bottom pane shows the output of the last run.
+
+```bash
+api-cli tui --config github.xml
+```
+
+The up and down keys pick a command. Enter moves into its form. Tab moves between the fields, and enter in a field runs the command. Ctrl+R runs from anywhere, esc goes back to the tree, and q quits from the tree. Under the form is the command line that the run is equal to. You can copy it.
+
+A run is the same as that command line, with `--yes`. A command that declares `confirm=` asks in a popup first. An empty field is left out, so cobra applies the declared default. A variadic arg and a passthrough command split their field on spaces. A `string-slice` flag splits on commas. The `tui` subcommand needs a terminal on stdin and stdout.
+
+A config cannot declare a command named `tui`.
 
 ## Examples
 
@@ -291,6 +307,10 @@ A leaf that sets `passthrough="true"` accepts arbitrary positional args, which i
 
 **Constraints:** `passthrough` and `<arg>` are mutually exclusive, and `passthrough` sits on a leaf only. A flag takes `=` syntax and next-arg syntax. A `bool` flag consumes no value, and a `string-slice` flag accumulates. Filter `.rest` with `filterSuffix` and `filterPrefix`.
 
+## Client and server
+
+[docs/client-server.md](docs/client-server.md) holds this section. `--server` runs a config for `--client` callers on the far side of a sandbox, so the credentials and the contract stay on one side.
+
 ## Mock executables
 
 [docs/mock-executables.md](docs/mock-executables.md) holds this section.
@@ -323,7 +343,7 @@ Name: {{.data.name}}
 
 **An omitted `when=` means `{{.tty}}`.** A redirect, a pipe and the MCP server are not a terminal. Such a format prints the raw body, and everything the view added is gone. An agent that reads the output sees the unshaped response. Write `when="true"` for a view that must render everywhere, or use `<fields>`, which renders with no terminal and carries `--as` for the sink. `--format=always` forces the terminal answer for one call.
 
-`.data` differs between the systems, and the difference bites on a body with a `data` key. In a `<view>`, `.data` is the whole parsed body, so a JSON:API response reads `.data.data` for the resource and `.data.included` for the sideloaded records. In a `<field expr=>`, the record is `.` and its keys are promoted. The same resource therefore reads `{{.id}}`. The rest of the context stays on `$` (`$.data.included`, `$.var`, `$.arg`). A body with no `data` key follows the same rule. A view reads `.data.errors`. A field reads `errors` or `{{.errors}}`.
+`.data` differs between the two systems, and the difference bites on a body with a `data` key. In a `<view>`, `.data` is the whole parsed body, so a JSON:API response reads `.data.data` for the resource and `.data.included` for the sideloaded records. In a `<field expr=>`, the record is `.` and its keys are promoted. The same resource therefore reads `{{.id}}`. The rest of the context stays on `$` (`$.data.included`, `$.var`, `$.arg`). A body with no `data` key follows the same rule. A view reads `.data.errors`. A field reads `errors` or `{{.errors}}`.
 
 ```xml
 <!-- JSON:API: {"data":{"id":"1","attributes":{"title":"a"}},"included":[{"type":"tag","id":"9"}]} -->
@@ -347,6 +367,7 @@ Every [sprig v3](https://masterminds.github.io/sprig/) helper is available: `toJ
 | `shellquote`  | POSIX single-quote a value for the shell form of a command.                               |
 | `urlpath`     | URL-escape a single path segment.                                                         |
 | `spread`      | Splat a slice into multiple argv slots (or shell-quoted words). Works with `[]string`/`[]int`/`[]any`. |
+| `flagArgs`    | Rebuild the set flags as argv slots, sorted by name: `{{spread (flagArgs .flag)}}`. A zero value is left out. |
 | `fileExists` / `dirExists` | Path predicates, useful in `<preconditions>`.                              |
 | `segmentPattern` | The built-in path-segment regular expression, for an `<arg pattern=>`.                 |
 | `safeSegments` | The same rule as a predicate over one or more values. An absent value passes.             |
@@ -407,6 +428,8 @@ An attribute value is always raw, a template or a context path. A Go template ne
 | `--version`       |       |         | Print the binary's version. Needs no config. |
 | `--mcp <transport>` |     |         | Run the config as an MCP server: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes a tool named for its command path, with underscores (`users_get`). The HTTP and SSE servers also answer `GET /health`. The server behaves as `--format=always` does, with `.tty` true and width 80. A tool's `inputSchema` carries each arg's `pattern=`, and a call is checked against it. Over stdio, a client that closes stdin right after its last request still gets that request's answer. |
 | `--cors <level>`  |       | `strict`| CORS for the MCP HTTP/SSE server. See [CORS levels](#cors-levels). |
+| `--server <socket>` |     |         | Serve `--config` on a unix socket for `--client` callers. See [Client and server](#client-and-server). |
+| `--client <socket>` |     |         | As the first flag: run the rest of the command line on that server. Needs no config. |
 | `--install-mocks <dir>` | |        | Write one wrapper script per `<mock>` leaf into the directory, then exit. See [Mock executables](#mock-executables). |
 | `--quiet`         | `-q`  | false   | Suppress the `N executions` line. |
 | `--yes`           | `-y`  | false   | Skip `confirm` prompts. |
@@ -479,7 +502,7 @@ source <(./api-cli completion bash)
 - **Subcommands**: `user get|repos|orgs`, `repo get|issues|issue|prs|pr|pr-diff|pr-comments|releases|release|commits|commit|branches|tags|contents|readme|languages|topics`, `org get|members|repos`, `search repos|code|issues|users`, `rate-limit`.
 - **Token-aware**: picks up `$GITHUB_TOKEN` / `$GH_TOKEN` automatically (5000 vs 60 req/hr).
 - **Enterprise-ready**: set `$GITHUB_API_URL` for GitHub Enterprise Server.
-- **Noise stripping**: each response goes through an embedded `jq` `walk`. It drops `*url` links, `node_id`s, `reactions`, `permissions`, duplicate counts and more. That often cuts about 80% of the bytes. `GITHUB_RAW=1` opts out.
+- **Noise stripping**: each response goes through an embedded `jq` `walk`. It drops `*url` links, `node_id`s, `reactions`, `permissions`, duplicate counts and more. That frequently cuts about 80% of the bytes. `GITHUB_RAW=1` opts out.
 - **Fields views**: list endpoints become tables, single objects become `Label: value` lists, automatically by data shape.
 
 ```sh

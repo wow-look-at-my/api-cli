@@ -1,0 +1,8 @@
+<config name="t">
+	<command name="cc" passthrough="true">
+		<mock>
+			<input name="sources" match="\.c$" variadic="true" required="true"/>
+			<output over="mock.sources" path="build/{{ stem .item }}.o"/>
+		</mock>
+	</command>
+</config>

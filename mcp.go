@@ -1,3 +1,5 @@
+// corsLevel controls cross-origin handling for the HTTP and SSE transports; it is ignored for stdio.
+
 package main
 
 import (

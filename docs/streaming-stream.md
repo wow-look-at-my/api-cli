@@ -25,7 +25,7 @@ The leaf's own `<run>` supplies the bytes. It may be a shell command, an argv co
 | `<cwd>` / `<stdin>` | Optional. The step's working directory, and its stdin when something other than the chunk should arrive. |
 
 - **`chunk=` takes a size.** A plain byte count (`4096`) or a unit: `b`, `k`, `kb`, `m`, `mb`, `g`, `gb`, in any capitalization. `4kb`, `64k` and `4mb` all work. It is required in byte mode. An absent, unreadable or zero size is a load error that names the attribute. A boundary the author did not mean shows up much later as missing or doubled bytes.
-- **A line longer than any buffer still arrives whole.** The chunker reads on until it reaches the newline. A final line with no newline is a chunk of its own.
+- **A line longer than any buffer still arrives whole.** The chunker reads on until it reaches the newline. A last line with no newline is a chunk of its own.
 - **The per-chunk step is how a stream is transformed.** It sees one chunk. A filter, a decoder, or a line marker therefore costs one chunk of memory rather than one source of memory. A step that exits non-zero fails the leaf with a non-zero exit and a message naming the chunk. The raw chunk is not emitted, because a stream that quietly drops a region reads as a shorter stream.
 - **The step can name where it is.** `.stream.index` is the chunk's number, starting at 1. `.stream.offset` is the byte count before it. `.stream.size` is its own byte count.
 - **Nothing is added.** The chunks concatenate to the source, byte for byte. Nothing is inserted between them, and no trailing newline is added. A binary source -- NUL bytes and invalid UTF-8 included -- comes back unchanged. The same declaration therefore carries a log, a PCM stream, or a video.

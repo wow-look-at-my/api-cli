@@ -1,3 +1,5 @@
+// httpClient performs request-form leaves.
+
 package main
 
 import (
@@ -44,10 +46,10 @@ type renderedHeader struct{ Name, Value string }
 // the response body as a stream rather than as a captured string. The caller
 // closes it.
 //
-// This is the <stream> source: the body is what the chunker cuts, so reading it
+// This is the <stream> source. The body is what the chunker cuts, so reading it
 // whole earliest would defeat the feature on the a single input it exists for.
 // The status check is the a single doHTTP makes, and it happens before the
-// earliest byte is handed over, so an error status fails the run instead of
+// earliest byte is handed over. An error status fails the run instead of
 // streaming an error page as though it were the source.
 func doHTTPStream(p *preparedRequest, errOut io.Writer) (io.ReadCloser, int) {
 	var body io.Reader
@@ -314,7 +316,7 @@ var contextPath = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+)
 
 // jqProgram resolves a <response jq=> attribute to the program this invocation
 // runs. The attribute is a template, like <url> and <body>: a single that
-// carries a placeholder renders against the leaf context, so the program can
+// carries a placeholder renders against the leaf context. The program can
 // depend on this run's args and flags. A bare dotted name is a context path
 // instead, which is how a config keeps its program in a <var>. Anything else
 // is the program itself.

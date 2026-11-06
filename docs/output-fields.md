@@ -24,7 +24,9 @@ Automatic representation, by data shape:
 
 A table column carries spaces of gutter. A column wider than 50 columns carries three, because the eye loses a long run of prose against a two-space gap. The width that decides a column drop counts the same gutter.
 
-**A `table` or `markdown` cell is one line.** A row is a line. A column is a position on that line. So a run of whitespace that holds a newline or a tab becomes one space. A value with neither is untouched. The `list` sink keeps the whole value and indents its later lines under the first. `raw`, `json` and `csv` carry it exactly. Use `firstline="true"` or `truncate="N"` to show less.
+**A `table` or `markdown` cell is one line.** A row is a line. A column is a position on that line. So a run of whitespace that holds a newline or a tab becomes one space. A value with neither is untouched. The `list` sink keeps the whole value and indents its later lines under the first.
+
+`raw`, `json` and `csv` carry it exactly. Use `firstline="true"` or `truncate="N"` to show less.
 
 A map is one record unless some field reads `@key` or `@value`. That is the signal to walk it entry by entry. An array of scalars is `lines` only when the leaf declares no `<field>`. One declared field keeps the table shape.
 
@@ -41,7 +43,7 @@ A map is one record unless some field reads `@key` or `@value`. That is the sign
 
 `<fields over="path"/>` selects where the records live, in place of the whole body: `data.items`, a map for `@key` and `@value`, or `data.names` for scalars. The path reads against the body first (`items`), then against the whole context (`data.items`), so either spelling reaches the same records. A numeric step indexes a list (`pages.0.rows`). `footer=` adds a trailing summary line to the human sinks.
 
-**A path that names nothing is an error**, and so is one that names a scalar. The run exits non-zero and names the path. An empty table over exit multiple reads as an API that returned nothing, which is how a renamed field costs an afternoon. An empty **list** is a real answer. It stays quiet.
+**A path that names nothing is an error**, and so is one that names a scalar. The run exits non-zero and names the path. An empty table over the first exit reads as an API that returned nothing, which is how a renamed field costs an afternoon. An empty **list** is a real answer. It stays quiet.
 
 A request leaf with **no** `<fields>` at all prints its JSON body, as jq shaped it. Add `--as=table` to project nothing and to table the raw keys.
 
@@ -74,7 +76,7 @@ The first case is an optional arg that changes the response shape. The second is
 
 ## Timeline
 
-`--as=timeline` renders the records as a horizontal ASCII timeline with annotations, through [`ascii-timeline`](https://github.com/wow-look-at-my/ascii-timeline). Each record becomes one event, and the **field name** selects what that field contributes.
+`--as=timeline` renders the records as a horizontal ASCII timeline with annotations. It runs the [`ascii-timeline`](https://github.com/wow-look-at-my/ascii-timeline) executable, which must be on `PATH`. The apt and brew packages of api-cli depend on it, so they install it too. Without it the run fails with an error that says so. Each record becomes one event, and the **field name** selects what that field contributes.
 
 | Field name    | Event role                                              |
 |---------------|---------------------------------------------------------|

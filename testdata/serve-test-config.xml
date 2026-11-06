@@ -1,0 +1,13 @@
+<config name="gh">
+	<command name="pr">
+		<command name="view" description="show a pull request">
+			<arg name="args" variadic="true"/>
+			<flag name="json" type="string"/>
+			<flag name="web" type="bool"/>
+			<run><argv>echo</argv><argv>gh pr view</argv><argv>{{spread .arg.args}}</argv><argv>{{spread (flagArgs .flag)}}</argv></run>
+		</command>
+	</command>
+	<command name="where"><run><argv>pwd</argv></run></command>
+	<command name="secret"><run>printf %s "$SERVE_TEST_SECRET"</run></command>
+	<command name="fail"><run>exit 7</run></command>
+	<command name="cat"><run><argv>cat</argv></run></command></config>

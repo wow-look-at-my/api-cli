@@ -1,0 +1,4 @@
+<config name="t">
+	<run>printf '%s' {{.arg.id}}</run>
+	<command name="show"><arg name="id" type="int" required="true"/></command>
+</config>

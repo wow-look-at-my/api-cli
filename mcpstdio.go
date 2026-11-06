@@ -1,3 +1,5 @@
+// MCP over stdio.
+
 package main
 
 // MCP over stdio.

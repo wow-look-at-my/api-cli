@@ -15,7 +15,7 @@ import (
 )
 
 // pipelineServer stands in for an API whose listing is a job: submit names a
-// job, the job answers "pending" a single time, and the answer after that
+// job. The job answers "pending" a single time, and the answer after that
 // carries the parts.
 func pipelineServer(t *testing.T, missing string) *httptest.Server {
 	t.Helper()
@@ -65,9 +65,9 @@ func pipelineServer(t *testing.T, missing string) *httptest.Server {
 	return srv
 }
 
-// pipelineConfig is the whole acceptance case: fan out over the arguments,
-// poll each listing to completion, queue every part of every item together,
-// and leave a single joined file per item with no parts behind.
+// pipelineConfig is the whole acceptance case. Fan out over the arguments,
+// poll each listing to completion, queue every part of every item together.
+// Leave a single joined file per item with no parts behind.
 func pipelineConfig(srv *httptest.Server, contiguous string) string {
 	return `<config name="pull">
 		<downloads concurrency="2"/>

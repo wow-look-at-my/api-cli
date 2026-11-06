@@ -1,7 +1,8 @@
+// Declared <arg> and <flag> elements, on both sides of a run.
+
 package main
 
-// Declared <arg> and <flag> elements, on both sides of a run: registering
-// them on the cobra command.
+// Declared <arg> and <flag> elements, on both sides of a run.
 
 import (
 	"fmt"
@@ -117,7 +118,6 @@ func registerFlag(cmd *cobra.Command, f Flag) {
 				}
 			}
 		}
-		// StringArray (not StringSlice) so commas in values are preserved.
 		cmd.Flags().StringArrayP(f.Name, f.Short, def, f.Description)
 	}
 	if f.Required {
@@ -148,10 +148,10 @@ func registerConflicts(cmd *cobra.Command, flags []Flag) {
 
 // gatherArgs builds the .arg sub-map by converting positional args to their
 // declared types. A variadic arg (always last) collects all remaining values
-// into a typed slice; an unsupplied optional variadic arg yields an empty
+// into a typed slice. An unsupplied optional variadic arg yields an empty
 // slice so templates can range over it without nil checks.
 //
-// A template that reads it therefore sees a string, which is what a helper like
+// A template that reads it therefore sees a string. This is what a helper like
 // urlpath needs, instead of the nil that missingkey=empty renders as "<no
 // value>".
 func gatherArgs(node Command, args []string) (map[string]any, error) {

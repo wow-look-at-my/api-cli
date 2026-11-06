@@ -1,3 +1,5 @@
+// builtinTransportName selects the built-in net/http client.
+
 package main
 
 import (
@@ -98,7 +100,7 @@ func installTransports(cfg *Config) {
 }
 
 // resolveTransport picks the transport for a request: its own transport=,
-// else the registry default.
+// else the registry default, else the built-in client (a nil return).
 func resolveTransport(req *Request) (*Transport, error) {
 	return resolveTransportNamed(req.Transport)
 }
@@ -123,7 +125,7 @@ func resolveTransportNamed(name string) (*Transport, error) {
 }
 
 // downloadTransport is a transport resolved for a single download: the
-// program's argv with every template already rendered.
+// program's argv with every template already rendered, plus where to run it.
 type downloadTransport struct {
 	Name  string
 	Argv  []string
@@ -137,8 +139,8 @@ type downloadTransport struct {
 // The program sees the same `.request` context a request-form transport sees —
 // method, url, headers, header_lines — so a single program serves both. The
 // difference is on the way back: a download's stdout is streamed to the file
-// rather than buffered as a response body, because the whole point of the file
-// is that it need not fit in memory.
+// rather than buffered as a response body. This is because the whole point of
+// the file is that it need not fit in memory.
 func prepareDownloadTransport(name, rawURL string, headers []renderedHeader, ctx map[string]any) (*downloadTransport, error) {
 	t, err := resolveTransportNamed(name)
 	if err != nil || t == nil {

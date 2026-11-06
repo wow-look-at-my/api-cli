@@ -1,3 +1,5 @@
+// displayWidth returns the column width of s on a terminal.
+
 package fields
 
 import (

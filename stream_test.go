@@ -94,8 +94,7 @@ func TestChunker_EmptySourceYieldsNoChunk(t *testing.T) {
 	assert.Empty(t, chunks, "an empty source has nothing to emit, not one empty chunk")
 }
 
-// chunkedReader hands its data over a single byte at a time, so a chunker
-// that trusted a single read to fill.
+// chunkedReader hands its data over a single byte at a time.
 type chunkedReader struct {
 	data []byte
 	step int
@@ -191,7 +190,8 @@ func TestChunker_LineModeBinaryPayloadWithNulBytes(t *testing.T) {
 	assert.Equal(t, src, joined(chunks))
 }
 
-// growingReader emits a prefix and then blocks until released.
+// growingReader emits a prefix and then blocks until released, so a test can
+// observe how much a chunker hands over before the source is finished.
 type growingReader struct {
 	first   []byte
 	second  []byte

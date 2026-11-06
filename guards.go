@@ -1,7 +1,9 @@
+// The pieces a config guards its inputs with: the path-segment rule, and the load-time resolution that lets a pattern= name.
+
 package main
 
 // The pieces a config guards its inputs with: the path-segment rule, and the
-// load-time resolution that lets a pattern= name a <var>.
+// load-time resolution that lets a pattern= name.
 
 import (
 	"fmt"
@@ -22,7 +24,7 @@ var segmentPatternText = `^(?:[` + segmentSafe + `]|[` + segmentSafe + `][` + se
 
 var segmentRe = regexp.MustCompile(segmentPatternText)
 
-// segmentPattern hands that expression to a template.
+// segmentPattern hands that expression to a template, so a pattern= states the rule by name and no config carries a copy of the regular expression.
 func segmentPattern() string { return segmentPatternText }
 
 // safeSegments is the same rule as a predicate, for a <precondition> or an

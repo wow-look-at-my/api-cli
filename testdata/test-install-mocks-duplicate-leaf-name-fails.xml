@@ -1,0 +1,10 @@
+<config name="t">
+	<command name="cc" passthrough="true">
+		<mock><output path="a"/></mock>
+	</command>
+	<command name="alt">
+		<command name="cc" passthrough="true">
+			<mock><output path="b"/></mock>
+		</command>
+	</command>
+</config>

@@ -1,3 +1,5 @@
+// Mock is the <mock> element on a leaf: a declarative stand-in for a real program.
+
 package main
 
 import (
@@ -8,7 +10,7 @@ import (
 	"github.com/wow-look-at-my/go-containers/set"
 )
 
-// Mock is the <mock> element on a leaf: a declarative stand-in for a real program. The leaf's argv arrives through passthrough mode, <input> names the parts of it that matter, <output> writes the files the caller expects to find afterwards, and <record>
+// Mock is the <mock> element on a leaf: a declarative stand-in for a real program. The leaf's argv arrives through passthrough mode, <input> names the parts of it that matter, <output> writes the files the caller expects to find afterwards. And <record>
 // appends a single line per invocation to a log.
 type Mock struct {
 	Inputs  []MockInput  `json:"inputs,omitempty"`
@@ -22,7 +24,7 @@ type Mock struct {
 }
 
 // MockInput names a single part of the incoming argv. Match is a Go regular
-// expression tested against each element of .rest in order, so the declaration
+// expression tested against each element of .rest in order. The declaration
 // reads as the shape of the command line rather than as an index into it.
 type MockInput struct {
 	Name     string `json:"name"`
@@ -35,9 +37,9 @@ type MockInput struct {
 	re *regexp.Regexp // compiled at load
 }
 
-// MockOutput is a single file the mock writes. Path is a template, and the
-// element's text content is the file's body — also a template, and empty by
-// default, because a build tool reads a mock artifact's timestamp rather than its bytes.
+// MockOutput is a single file the mock writes. Path is a template, and the element's
+// text content is the file's body — also a template, and empty by default. This is
+// because a build tool reads a mock artifact's timestamp rather than its bytes.
 type MockOutput struct {
 	Over   string `json:"over,omitempty"`
 	When   string `json:"when,omitempty"`

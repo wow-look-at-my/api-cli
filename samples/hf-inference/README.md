@@ -1,6 +1,6 @@
 # Hugging Face Inference Endpoints
 
-`hf-inference.xml` wraps the Hugging Face Inference Endpoints API, version 2. That is the API behind `hf endpoints`. `api-cli` makes the HTTP requests itself, so you install nothing else -- no Python, no `huggingface_hub`.
+`hf-inference.xml` wraps the API of the Endpoints of the Hugging Face Inference, version 2. That is the API behind `hf endpoints`. `api-cli` makes the HTTP requests itself, so you install nothing else -- no Python, no `huggingface_hub`.
 
 Every call needs an access token in `$HF_TOKEN`. `$HUGGING_FACE_HUB_TOKEN` also works. The first argument of each command is the namespace, which is a user or an organization.
 

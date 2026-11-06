@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"net/http"
 	"net/http/httptest"
@@ -237,20 +239,7 @@ func TestTransport_HeaderLinesSpreadIntoArgv(t *testing.T) {
 }
 
 func TestParseXML_Transports(t *testing.T) {
-	cfg := mustParse(t, `<config name="x">
-	<transports>
-		<transport name="corp" default="true">
-			<run>
-				<argv>corp-http</argv>
-				<argv><value name="request.method"/></argv>
-				<argv><value name="request.url"/></argv>
-			</run>
-			<cwd>/tmp</cwd>
-			<stdin><value name="request.body"/></stdin>
-		</transport>
-	</transports>
-	<command name="c"><run><request transport="corp"><url>https://x/y</url></request></run></command>
-</config>`)
+	cfg := mustParse(t, testParseXML_TransportsXml)
 
 	require.Len(t, cfg.Transports, 1)
 	tr := cfg.Transports["corp"]
@@ -314,9 +303,9 @@ func TestValidate_TransportErrors(t *testing.T) {
 }
 
 // The curl transport shipped in api.example.xml is documentation users will
-// copy, so pin the argv it builds — in particular that a body reaches curl
-// rather than being dropped, and that a GET grows no stray empty arguments
-// from the conditional spread.
+// copy. Pin the argv it builds. This is in particular that a body reaches
+// curl rather than being dropped. This also is that a GET grows no stray
+// empty arguments from the conditional spread.
 func TestExampleCurlTransportArgv(t *testing.T) {
 	cfg, err := Load("api.example.xml")
 	require.NoError(t, err)
@@ -346,9 +335,12 @@ func TestExampleCurlTransportArgv(t *testing.T) {
 }
 
 func TestValidate_TransportAcceptsBuiltinNameOnRequest(t *testing.T) {
-	_, err := loadStr(t, `<config name="x">
-	<transports><transport name="a" default="true"><run>x</run></transport></transports>
-	<command name="c"><run><request transport="http"><url>u</url></request></run></command>
-</config>`)
+	_, err := loadStr(t, testValidate_TransportAcceptsBuiltinNameOnRequestXml)
 	assert.NoError(t, err)
 }
+
+//go:embed testdata/test-parse-xml-transports.xml
+var testParseXML_TransportsXml string
+
+//go:embed testdata/test-validate-transport-accepts-builtin-name-on-request.xml
+var testValidate_TransportAcceptsBuiltinNameOnRequestXml string

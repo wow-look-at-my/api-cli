@@ -45,7 +45,7 @@ func readmeLine(t *testing.T, marker string) string {
 
 func TestDocs_ReadmeNamesEverySink(t *testing.T) {
 	row := readmeLine(t, "| `--as <sink>`")
-	forcing := readmeSection(t, "### Forcing a representation")
+	forcing := readmeSection(t, "## Forcing a representation")
 	for _, sink := range fields.Sinks() {
 		assert.Contains(t, row, sink, "the --as row omits the %q sink", sink)
 		assert.Contains(t, forcing, sink, "the forcing section omits the %q sink", sink)
@@ -77,7 +77,7 @@ func eitherCase(name string) string {
 }
 
 func TestDocs_HashAlgosAreDocumented(t *testing.T) {
-	readme := readmeSection(t, "### Checking a download against a digest")
+	readme := readmeSection(t, "## Checking a download against a digest")
 	schema := schemaDoc
 	for algo := range hashAlgos {
 		assert.Contains(t, readme, algo, "the README omits the %q digest algorithm", algo)

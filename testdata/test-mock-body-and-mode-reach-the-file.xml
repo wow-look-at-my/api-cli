@@ -1,0 +1,10 @@
+<config name="t">
+	<command name="ld" passthrough="true">
+		<mock>
+			<input name="objects" match="\.o$" variadic="true"/>
+			<output path="app" mode="0755">#!/bin/sh
+<for each="mock.objects"># <value expr="{{ . }}"/>
+</for></output>
+		</mock>
+	</command>
+</config>

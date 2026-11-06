@@ -1,3 +1,5 @@
+// defaultMockMode is the mode of a mock artifact.
+
 package main
 
 import (
@@ -234,8 +236,7 @@ func writeMockBody(f mockFile) error {
 	if _, err := io.WriteString(fh, f.body); err != nil {
 		return fmt.Errorf("mock: %s: %w", f.path, err)
 	}
-	// A file that already existed keeps its old mode through O_CREATE, and a
-	// linker stand-in that produces a non-executable binary breaks.
+	// A file that already existed keeps.
 	if err := os.Chmod(f.path, f.mode); err != nil {
 		return fmt.Errorf("mock: %s: %w", f.path, err)
 	}
@@ -271,7 +272,7 @@ func copyMockFile(f mockFile) error {
 }
 
 // appendMockRecords writes a single line per <record>. The append is the whole
-// point: every tool in a parallel build points at a single file, and each call
+// point: every tool in a parallel build points at a single file. Each call
 // adds its own line without reading what is already there.
 func appendMockRecords(m *Mock, data map[string]any) error {
 	for i := range m.Records {
@@ -390,7 +391,7 @@ func mockWhen(when string, data map[string]any) (bool, error) {
 }
 
 // mockRecordsOf expands an over= into a single context per element, the same
-// contract a <download over=> carries: the element's keys are promoted and the
+// contract a <download over=> carries. The element's keys are promoted and the
 // element itself is .item.
 func mockRecordsOf(over string, data map[string]any, idx int) ([]map[string]any, error) {
 	if over == "" {

@@ -1,0 +1,7 @@
+<config name="t">
+		<command name="guarded">
+			<preconditions><precondition>guarded is closed</precondition></preconditions>
+			<command name="inner" description="i"><run>printf inner</run></command>
+		</command>
+		<command name="open" description="o"><run>printf open</run></command>
+	</config>

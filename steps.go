@@ -1,3 +1,5 @@
+// Defaults for a polling step.
+
 package main
 
 import (
@@ -49,7 +51,7 @@ func reportSkips(w io.Writer, skips []stepSkips) bool {
 // in results under the step's name. Steps see prior results through data, so a
 // later step's entry, url, or command can read `.result.<name>`.
 //
-// A step runs whichever of command/request it declares; declaring neither
+// A step runs whichever of command/request it declares. Declaring neither
 // inherits the leaf's effective run, which is how a step reuses the ancestor
 // <request> with nothing but a different <entry>. cwdTmpl/stdinTmpl are the
 // leaf's, likewise overridable per step.

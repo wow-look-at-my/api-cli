@@ -12,7 +12,8 @@ import (
 )
 
 // execCmd builds the root from cfg, sets argv, executes, and returns the
-// process exit code (as main would compute it).
+// process exit code (as main would compute it), plus anything written to
+// the exec'd child's stdout.
 func execCmd(t *testing.T, cfg *Config, argv ...string) (int, string) {
 	t.Helper()
 	code, out, _ := execCmdFull(t, cfg, argv...)
@@ -42,7 +43,7 @@ func execCmdFull(t *testing.T, cfg *Config, argv ...string) (int, string, string
 	// newRoot installs cfg's transports into package state.
 	prevTransports, prevDefault := transports, defaultTransport
 	t.Cleanup(func() { transports, defaultTransport = prevTransports, prevDefault })
-	// Same for the <downloads> settings newRoot publishes.
+	// Same for the <downloads> settings newRoot publishes, and for the shared queue.
 	prevDownloads := downloadDefaults
 	resetSharedQueue()
 	t.Cleanup(func() { downloadDefaults = prevDownloads; resetSharedQueue() })
@@ -281,7 +282,7 @@ func TestIntegration_StepInheritsAncestorCommand(t *testing.T) {
 	}
 	code, out := execCmd(t, cfg, "run")
 	require.Equal(t, 0, code)
-	// Step: printf '{"k":"hello"}' → .result.s = {k: "hello"} Final: printf '{"k":"hello"}'.
+	// Step: printf '{"k":"hello"}' → .result.s = {k: "hello"}.
 	assert.Equal(t, `{"k":"hello"}`, out)
 }
 

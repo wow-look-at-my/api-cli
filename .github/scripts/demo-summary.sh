@@ -12,7 +12,8 @@ if [[ ! -x "$artifact" ]]; then
     exit 1
 fi
 
-# `go-toolchain matrix` builds a single fat APE.
+# `go-toolchain matrix` builds a single fat APE. An APE rewrites its own
+# header on earliest exec, so the file stops matching its checksum.
 bin="$(mktemp -d)/api-cli"
 cp "$artifact" "$bin"
 chmod +x "$bin"

@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"encoding/json"
 	"io"
@@ -207,14 +209,7 @@ func TestHFInferenceSample_Create_ScalesToZeroByDefault(t *testing.T) {
 	assert.Equal(t, "POST", req.method)
 	assert.Equal(t, "/v2/endpoint/acme", req.path)
 	assert.Equal(t, "application/json", req.contentType)
-	assert.JSONEq(t, `{
-		"name":"llama-chat","type":"authenticated",
-		"provider":{"vendor":"aws","region":"us-east-1"},
-		"compute":{"accelerator":"gpu","instanceType":"nvidia-l4","instanceSize":"x1",
-			"scaling":{"minReplica":0,"maxReplica":1,"scaleToZeroTimeout":15}},
-		"model":{"repository":"meta-llama/Llama-3.1-8B-Instruct","framework":"pytorch",
-			"task":"text-generation","image":{"huggingface":{}}},
-		"tags":["chat"]}`, req.body)
+	assert.JSONEq(t, testHFInferenceSample_Create_ScalesToZeroByDefaultJson, req.body)
 }
 
 func TestHFInferenceSample_Create_NoTimeoutAboveZeroReplicas(t *testing.T) {
@@ -258,3 +253,6 @@ func TestHFInferenceSample_NoTokenSendsNothing(t *testing.T) {
 	assert.Contains(t, stderr, "set HF_TOKEN")
 	assert.Empty(t, stub.requests())
 }
+
+//go:embed testdata/test-hf-inference-sample-create-scales-to-zero-by-default.json
+var testHFInferenceSample_Create_ScalesToZeroByDefaultJson string

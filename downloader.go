@@ -1,3 +1,5 @@
+// retryDelay separates attempts at a fixed cadence: a slow origin is not a reason to wait exponentially longer for it.
+
 package main
 
 import (
@@ -27,8 +29,7 @@ import (
 var retryDelay = time.Second
 
 // downloadClient performs the transfers. Deliberately not httpClient: that a
-// single caps a whole request at 60s, which is a sane API deadline and a hard
-// ceiling on file size for a downloader.
+// single caps a whole request at 60s.
 var downloadClient = &http.Client{
 	Transport: &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
@@ -55,14 +56,14 @@ type downloadSpec struct {
 	URL     string
 	Dest    string
 	Headers []renderedHeader
-	// DestIsDir means Dest names a directory and the file name still has to come from the URL.
+	// DestIsDir means Dest names a directory.
 	DestIsDir bool
 	// Hash is the expected digest as lowercase hex, empty when the declaration supplied none.
 	Hash     string
 	HashAlgo string
 	// Transport is the resolved program that fetches this file in place of the built-in client.
 	Transport *downloadTransport
-	// Join, when set, makes this file a single member of a group.
+	// Join, when set, makes this file.
 	Join *joinPart
 }
 
@@ -250,7 +251,7 @@ func (q *downloadQueue) run(item *downloadItem) {
 		if err == nil {
 			item.end.Store(time.Now().UnixNano())
 			item.state.Store(dlDone)
-			// Name the algorithm on success: a verification you cannot see happen is indistinguishable from a single.
+			// Name the algorithm on success.
 			verified := ""
 			if item.spec.Hash != "" {
 				verified = ", " + item.spec.HashAlgo + " ok"
@@ -318,9 +319,9 @@ func (q *downloadQueue) fetch(item *downloadItem) (error, bool) {
 // stdout straight into the destination.
 //
 // Buffering it as a string the way a request-form transport does would put the
-// whole file in memory, so this is the a single place both paths differ. What
-// the program is handed is identical, and what happens to the bytes afterwards
-// -- the .part sibling, the byte count, the digest -- is the same code.
+// whole file in memory. This is the a single place both paths differ. What the
+// program is handed is identical, and what happens to the bytes afterwards --
+// the .part sibling, the byte count, the digest. The program is the same code.
 func (q *downloadQueue) fetchViaTransport(item *downloadItem) (error, bool) {
 	tr := item.spec.Transport
 	pf, err := openPart(item, urlFilename(item.spec.URL))
@@ -390,9 +391,9 @@ func (p *partFile) commit() (error, bool) {
 		return err, false
 	}
 	if p.digest != nil {
-		// The transfer completed, so the same URL will hand back the same bytes:
-		// a wrong digest is an answer, not a hiccup, and retrying only wastes
-		// the download again. The file never gets the real name.
+		// The transfer completed. The same URL will hand back the same bytes: a
+		// wrong digest is an answer, not a hiccup, and retrying only wastes the
+		// download again. The file never gets the real name.
 		if got := hex.EncodeToString(p.digest.Sum(nil)); got != p.item.spec.Hash {
 			os.Remove(p.part)
 			return fmt.Errorf("%s mismatch: expected %s, got %s", p.item.spec.HashAlgo, p.item.spec.Hash, got), false
@@ -528,7 +529,7 @@ type itemProgress struct {
 	Speed       float64
 	ETA         time.Duration
 	HasETA      bool
-	// TotalIsFloor marks an aggregate whose denominator is incomplete because some download.
+	// TotalIsFloor marks an aggregate whose denominator is incomplete.
 	TotalIsFloor bool
 	// Waiting is how long an in-flight item has gone without its first byte.
 	Waiting time.Duration

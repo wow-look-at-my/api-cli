@@ -1,3 +1,5 @@
+// Stream is a leaf's chunked-streaming action.
+
 package main
 
 import (
@@ -52,8 +54,9 @@ var chunkSizeUnits = map[string]int{
 
 // parseChunkSize reads a <stream chunk=> value: a plain byte count, or a count
 // with a unit suffix (4kb, 64k, 4mb). A size that is absent, unparseable or
-// empty is rejected, because a chunk boundary the author did not mean is a
-// streaming bug that only shows up as missing or doubled bytes much later.
+// empty is rejected. This is because a chunk. Boundary the author did not mean
+// is a streaming bug that only shows up as missing or doubled bytes much
+// later.
 func parseChunkSize(raw string) (int, error) {
 	s := strings.ToLower(strings.TrimSpace(raw))
 	if s == "" {
@@ -135,8 +138,9 @@ func buildStream(n *xnode) (*Stream, error) {
 }
 
 // validateStream checks a <stream> declaration at load time: the boundary it
-// names, that the leaf has a source to read, that the per-chunk step is a
-// command, and that the source is a single this can read incrementally.
+// names. That the leaf has a source to read. That leaf is that the per-chunk
+// step is a command, and that the source is a single this can read
+// incrementally.
 func validateStream(st *Stream, where string, haveRun bool, request *Request, transports map[string]*Transport) error {
 	if st == nil {
 		return nil
@@ -153,7 +157,7 @@ func validateStream(st *Stream, where string, haveRun bool, request *Request, tr
 	}
 
 	// Unlike a <download>, which carries its own URL, a <stream> has no source
-	// of its own: the bytes are the leaf's run, so a single must exist.
+	// of its own. The bytes are the leaf's run, so a single must exist.
 	if !haveRun {
 		return fmt.Errorf("%s: <stream> is the leaf's output shape, so it needs a <run> (its own or an ancestor's) to supply the bytes", where)
 	}
@@ -174,7 +178,7 @@ func validateStream(st *Stream, where string, haveRun bool, request *Request, tr
 
 // streamTransportName reports which transport a request would travel over,
 // without consulting the published registry: validate runs before the registry
-// is installed, so it reads the config's own entries.
+// is installed. It reads the config's own entries.
 func streamTransportName(req *Request, transports map[string]*Transport) string {
 	if name := strings.TrimSpace(req.Transport); name != "" {
 		return name
@@ -237,7 +241,7 @@ func (c *chunker) nextFixed() ([]byte, error) {
 
 // nextLine returns a single newline-terminated line, newline included. A line longer than the read block arrives whole, because the chunker keeps reading until it reaches the newline. A final line with no newline is still a chunk.
 //
-// Each read is a single call rather than a fill of the buffer: a line source that pauses mid-stream emits what it has, and a chunker that waited for a full block would sit on it.
+// Each read is a single call rather than a fill of the buffer: a line source that pauses mid-stream emits what it has. A chunker that waited for a full block would sit on it.
 func (c *chunker) nextLine() ([]byte, error) {
 	for {
 		if i := bytes.IndexByte(c.buf, '\n'); i >= 0 {

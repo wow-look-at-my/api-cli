@@ -41,13 +41,13 @@ A start is never announced. The slot already says that a transfer runs. A separa
 
 In a pipe there is no display. The `downloaded` lines stay on stderr, and the destination paths go to stdout, one per line, for whatever reads them next.
 
-The steps that feed a `<download>` report their progress too. On a terminal, the block holds one live line for the step that runs. It names the element, the poll attempt, and the `.status` field of the last response when the body has one. A retry shows as `retry 1/3`.
+The steps that feed a `<download>` report their progress too. On a terminal, the block holds one live line for the step that runs. It names the element, the poll try, and the `.status` field of the last response when the body has one. A retry shows as `retry 1/3`.
 
 ```
 jobs 7/20 JOB-7  attempt 4/30  status=pending
 ```
 
-Without the display (`--no-tui`, or stdout in a pipe), stderr gets one line per element when it finishes, such as `jobs 7/20 JOB-7: done`. A long poll also adds one line for every ten attempts that leave `until=` false. No line appears per attempt.
+Without the display (`--no-tui`, or stdout in a pipe), stderr gets one line per element when it finishes, such as `jobs 7/20 JOB-7: done`. A long poll also adds one line for every ten attempts that leave `until=` false. No line appears per try.
 
 - **`<download>` is the leaf's action.** It runs after the steps, and it stands in for the leaf's `<run>`. An inherited request therefore does not fire on the way.
 - **`when=`** is a Go-template predicate. A falsy render (empty, `false`, `0` or `no`) skips that declaration, so one leaf can carry a conditional set.
@@ -60,7 +60,7 @@ Without the display (`--no-tui`, or stdout in a pipe), stderr gets one line per 
 - **Mistakes fail before the first byte.** The plan step reports a `<url>` that renders to anything but an `http(s)` URL. It also reports records whose `<to>` renders one file path. A mistyped path is therefore not a timeout minutes later, and a `<to>` that forgot to vary does not overwrite itself N times.
 - **Failures are loud.** A 4xx is the answer. A 5xx or a network fault retries at a fixed one-second cadence. A transfer that still fails names its URL on stderr and exits non-zero, while the other files carry on.
 - Bytes land in a `.part` sibling first, so an interrupted transfer never leaves a truncated file under the real name.
-- **No resume.** Every attempt starts at byte zero. A leftover `.part` is overwritten rather than continued.
+- **No resume.** Every try starts at byte zero. A leftover `.part` is overwritten rather than continued.
 
 ## Joining the parts back: `<join>`
 
@@ -101,14 +101,14 @@ A `<download>` reaches its URL as a `<request>` does. It goes over the built-in 
 - **Selection matches requests**: the `transport=` attribute, then the registry's `default="true"` entry, then the built-in client. A config whose endpoints all need the program therefore needs it for its files too, and says nothing extra. `transport="http"` opts one download back to the built-in client.
 - **The program gets the same `.request` context** -- `method`, `url`, `headers` and `header_lines` -- so one program serves requests and downloads alike. `method` is `GET`, and there is no body. A download adds `progress_fd`, the fd for [progress reports](#reporting-progress-from-a-transport).
 - **Its stdout streams into the file** rather than into a buffered response body. That is the difference between the paths. It is also why a file larger than memory is fine. The `.part` sibling, the byte count and the digest check are the same code on both.
-- **A non-zero exit fails the download, and the queue retries it.** A program owns its own exit codes. curl says 22 for a 404 and 7 for a refused connection. This path therefore cannot tell an answer from a hiccup, unlike the built-in client, and it lets the attempt limit end the transfer. Its stderr is emitted above the slots.
+- **A non-zero exit fails the download, and the queue retries it.** A program owns its own exit codes. curl says 22 for a 404 and 7 for a refused connection. This path therefore cannot tell an answer from a hiccup, unlike the built-in client, and it lets the try limit end the transfer. Its stderr is emitted above the slots.
 - The size is unknown at the start, because there is no `Content-Length`. That file's row drops the bar and the percentage. It reports the bytes and the rate. A file with no bytes yet reads `waiting mm:ss`, which is the time since its transfer started. A frame where no file reported a length drops both columns outright. The total is marked as a floor. The program can supply both numbers itself on the [progress fd](#reporting-progress-from-a-transport).
 
 ## Reporting progress from a transport
 
-A program that holds the body until it finishes writes nothing to stdout mid-transfer. On Linux, api-cli then measures it from outside: the row shows the bytes the program and its child processes have read, from `/proc/<pid>/io`. That count includes protocol overhead and the program's own startup reads. As a result, it is close but not exact. Other systems have no `/proc`. The row reads `waiting` until the file lands.
+A program that holds the body until it finishes writes nothing to stdout mid-transfer. On Linux, api-cli then measures it from outside: the row shows the bytes the program and its child processes read, from `/proc/<pid>/io`. That count includes protocol overhead and the program's own startup reads. As a result, it is close but not exact. Other systems have no `/proc`. The row reads `waiting` until the file lands.
 
-The progress fd gives the exact number on every system. Wire it up whenever the program you delegate to does not stream its output. A report replaces the `/proc` estimate for that transfer.
+The progress fd gives the exact number on every system. Wire it up when the program you delegate to does not stream its output. A report replaces the `/proc` estimate for that transfer.
 
 api-cli gives every download transport a pipe on file descriptor 3. The variable `API_CLI_PROGRESS_FD` names it in the program's environment, and `.request.progress_fd` names it in the templates. The program writes one JSON object per line:
 
@@ -119,7 +119,7 @@ api-cli gives every download transport a pipe on file descriptor 3. The variable
 ```
 
 - **`done`** is the bytes received so far, and **`total`** is the file's size. Each is optional. A line needs at least one. A report replaces the previous one. It never adds to it.
-- **Stdout is still the file.** The final byte count, the `.part` rename and the digest come from stdout alone. A report only drives the row while the transfer is open.
+- **Stdout is still the file.** The last byte count, the `.part` rename and the digest come from stdout alone. A report only drives the row while the transfer is open.
 - **A bad line fails the download.** An unknown key, a missing value or a negative number stops the transfer with an error that names the line. The queue does not retry it, because the same program sends the same line again.
 - **A program that never writes to the fd is fine.** The row falls back to the `/proc` estimate on Linux, and to the stdout count elsewhere.
 
@@ -166,7 +166,7 @@ Write a report at most a few times a second. The display repaints every 100 ms, 
 
 - `algo=` is `sha256` (the default), `sha512`, `sha1`, or `md5`.
 - The body is a template like any other. The digest therefore usually comes from the same manifest record as the URL, or from a step that fetched a `.sha256` file.
-- **A mismatch is final.** The bytes arrived intact, so a second fetch cannot change the digest. The run reports the expected value and the actual value, then exits non-zero.
+- **A mismatch is last.** The bytes arrived intact. A second fetch cannot change the digest. The run reports the expected value and the actual value, then exits non-zero.
 - A success names the algorithm that passed: `downloaded x.iso (6.0 MiB, sha256 ok)`. A check you cannot see happen is one you cannot trust.
 - **The digest must look like a digest.** A renamed manifest field renders as the template engine's placeholder. The plan step rejects that before it fetches anything, rather than leave the file unverified in silence. A `sha256sum` line (`<hex>  <name>`) is acceptable, in any capitalization.
 - **To make the check optional per record**, render the body empty for a record that carries no digest: `<hash><if test="sha256"><value name="sha256"/></if></hash>`.

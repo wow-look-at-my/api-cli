@@ -1,3 +1,5 @@
+// TML presents a leaf through a Terminal Markup Language component.
+
 package main
 
 import (
@@ -172,7 +174,7 @@ func tmlEntry(src, dir string) string {
 	return filepath.Join(dir, src)
 }
 
-// loaded caches views by entry path, because a watch renders the same component many times and every Load re-reads.
+// loaded caches views by entry path.
 var loaded sync.Map
 
 type loadKey struct {

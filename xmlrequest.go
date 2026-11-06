@@ -1,3 +1,5 @@
+// The <request> half of the XML source: the element itself, its query and its headers.
+
 package main
 
 // The <request> half of the XML source: the element itself, its query and its

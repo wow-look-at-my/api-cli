@@ -1,3 +1,5 @@
+// A <tml> leaf under a watch runs as a real Bubble Tea program rather than through the repaint loop in watch.go.
+
 package main
 
 import (
@@ -77,8 +79,9 @@ func (m *tmlModel) View() tea.View {
 }
 
 // refresh runs the leaf into a buffer and keeps the result as the frame. The
-// run happens here rather than in a command, because the leaf writes through
-// the package's own output channels and runs cannot hold them at the same time.
+// run happens here rather than in a command. This is because the leaf writes
+// through the package's own output channels and runs cannot hold them at the
+// same time.
 func (m *tmlModel) refresh() tea.Cmd {
 	var buf bytes.Buffer
 	prev := ttyOverride

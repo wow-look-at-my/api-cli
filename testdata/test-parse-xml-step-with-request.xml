@@ -1,0 +1,10 @@
+<config name="x">
+	<command name="c">
+		<steps>
+			<step name="user">
+				<run><request method="POST"><url>https://api/x</url><body>hi</body></request></run>
+			</step>
+		</steps>
+		<run>echo {{.result.user}}</run>
+	</command>
+</config>

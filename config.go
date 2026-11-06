@@ -1,3 +1,5 @@
+// Config is the top-level JSON schema.
+
 package main
 
 import (
@@ -13,7 +15,7 @@ import (
 
 // Config is the top-level JSON schema.
 //
-// The CLI is a declarative alias system: each leaf command renders a `command`
+// The CLI is a declarative alias system. Each leaf command renders a `command`
 // template (inherited from an ancestor or overridden locally) against a data
 // context composed of args, flags, environment, vars, and the leaf's entry
 // variables. The rendered command is then executed.
@@ -41,7 +43,7 @@ type Config struct {
 // nodes print help.
 //
 // `entry` is arbitrary user-defined JSON — its string leaves are
-// template-rendered against {arg, flag, env, var, result} and the result is
+// template-rendered against {arg, flag, env, var, result}. The result is
 // exposed to the command template as `.entry`.
 //
 // `vars` merges into the ancestor chain, with the child winning on key
@@ -177,7 +179,7 @@ type Arg struct {
 // Flag is a named flag. Type is string|bool|int|string-slice (default string).
 //
 // `Default` for a string flag may itself be a template — it is rendered at
-// invocation time against {arg, flag, env, var}, so a flag default can be
+// invocation time against {arg, flag, env, var}. A flag default can be
 // derived from another arg or flag. Templated defaults only apply to the
 // "string" type.
 type Flag struct {
@@ -260,8 +262,8 @@ type Request struct {
 }
 
 // Transport is a user-supplied program that performs requests in place of the
-// built-in net/http client — for APIs whose authentication or wire format is
-// easier to delegate to an existing tool than to reproduce here.
+// built-in net/http client. This holds for APIs whose authentication or wire
+// format is easier to delegate to an existing tool than to reproduce here.
 type Transport struct {
 	Name     string `json:"name"`
 	Command  *Cmd   `json:"command,omitempty"`
@@ -310,8 +312,8 @@ type FieldsBlock struct {
 	Fields *Fields `json:"fields"`
 }
 
-// reservedCommandNames are the names cobra owns.
-var reservedCommandNames = set.Of("help", "completion", "__complete", "docs")
+// reservedCommandNames are the names cobra and the built-in subcommands own.
+var reservedCommandNames = set.Of("help", "completion", "__complete", "docs", "tui")
 
 // validFlagTypes are the accepted <flag type=> values. The empty string defaults to "string".
 var validFlagTypes = set.Of("", "string", "bool", "int", "string-slice")
@@ -479,7 +481,7 @@ func validateCommand(c *Command, where string, siblings map[string]bool, inherit
 		return fmt.Errorf("%s: name %q must not contain whitespace or slashes", where, c.Name)
 	}
 	if reservedCommandNames.Contains(c.Name) {
-		return fmt.Errorf("%s: name %q is reserved by cobra", where, c.Name)
+		return fmt.Errorf("%s: name %q is reserved for a built-in subcommand", where, c.Name)
 	}
 	if siblings[c.Name] {
 		return fmt.Errorf("%s: duplicate command name %q", where, c.Name)

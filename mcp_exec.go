@@ -1,3 +1,5 @@
+// mcpExecLeaf runs a leaf command and returns (output, isError).
+
 package main
 
 import (
@@ -85,7 +87,7 @@ func mcpExecAfterSteps(leaf *mcpLeaf, data map[string]any) (string, bool) {
 	}
 
 	// Same rule again for a <mock>, and the same exception: the leaf's own
-	// <run> makes it a thin wrapper, so the real program still runs after the
+	// <run> makes it a thin wrapper. The real program still runs after the
 	// records and the outputs land.
 	if leaf.node.Mock != nil {
 		var mockOut, mockErr bytes.Buffer

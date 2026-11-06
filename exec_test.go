@@ -123,7 +123,7 @@ func TestDoExec_ArgvSpreadEmpty(t *testing.T) {
 }
 
 func TestDoExec_ArgvSpreadOnlyEmptyFails(t *testing.T) {
-	// If spread yields empty slots and there are no other elements.
+	// If spread yields empty slots and there are no other elements, the argv is empty — a useful failure rather than running with no command.
 	captureExecStreams(t)
 	c := &Cmd{Argv: []string{"{{spread .arg.files}}"}}
 	data := map[string]any{"arg": map[string]any{"files": []string{}}}

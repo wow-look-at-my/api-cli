@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"net/http"
 	"net/http/httptest"
@@ -17,16 +19,12 @@ const githubSampleConfig = "samples/github/github.xml"
 // Canned GitHub "contents" API responses. Each carries a *url key so the test
 // also proves the request+jq noise filter ran (it must be stripped).
 const (
-	ghDirListingJSON = `[
-		{"name":"README.md","path":"README.md","sha":"aaa111","size":4096,"type":"file","download_url":"https://example.invalid/README.md"},
-		{"name":"llama","path":"llama","sha":"bbb222","size":0,"type":"dir","download_url":null}
-	]`
 	ghFileJSON = `{"name":"Dockerfile","path":"Dockerfile","sha":"deadbeefcafe","size":1328,"type":"file","encoding":"base64","content":"RlJPTQo=","download_url":"https://example.invalid/Dockerfile"}`
 )
 
 // githubSampleWithServer loads the real sample with its HTTP base URL pointed at
-// a stub that serves the contents API: a directory listing (array) for a
-// `/contents` request, a single file (object) for any deeper path.
+// a stub that serves the contents API. This covers a directory listing (array)
+// for a `/contents` request, a single file (object) for any deeper path.
 func githubSampleWithServer(t *testing.T) *Config {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -116,9 +114,10 @@ func TestGithubSample_RepoContents_SingleFile_MCP(t *testing.T) {
 	assertNoRepoProjectionLeak(t, out)
 }
 
-// When a representation is forced (--as table), the directory listing renders
-// with the entries' OWN derived columns (name/type/...), never the repo table's
-// columns — the most direct guard against the original "repo table" garbage.
+// The directory listing renders with the entries' OWN derived columns
+// (name/type/...), never the repo table's columns — the most direct guard
+// against the original "repo table" garbage. This happens when a representation
+// is forced (--as table).
 func TestGithubSample_RepoContents_AsTableUsesOwnColumns(t *testing.T) {
 	cfg := githubSampleWithServer(t)
 
@@ -131,3 +130,6 @@ func TestGithubSample_RepoContents_AsTableUsesOwnColumns(t *testing.T) {
 	assert.Contains(t, out, "llama")
 	assertNoRepoProjectionLeak(t, out)
 }
+
+//go:embed testdata/gh-dir-listing-json.json
+var ghDirListingJSON string

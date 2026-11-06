@@ -1,3 +1,5 @@
+// MarshalJSON encodes v indented, without HTML escaping, so a URL stays legible.
+
 package fields
 
 import (

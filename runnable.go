@@ -1,3 +1,5 @@
+// A runnable parent: a node that has subcommands and also executes, so a single name serves `tool [id]` and `tool sub`.
+
 package main
 
 // A runnable parent: a node that has subcommands and also executes, so a
