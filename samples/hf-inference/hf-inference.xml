@@ -1,0 +1,299 @@
+<?xml version="1.1" encoding="UTF-8"?>
+
+<!--
+	The Hugging Face Inference Endpoints API (v2), the API behind `hf endpoints`.
+	The spec is https://api.endpoints.huggingface.cloud/openapi.json.
+
+	HF_TOKEN (or HUGGING_FACE_HUB_TOKEN) holds the access token. Every call
+	needs one. HF_ENDPOINTS_API_URL points the config at another base URL.
+
+	Every command takes the namespace (a user or an organization) and, past
+	list and create, the endpoint name as positional arguments.
+-->
+
+<config
+	name="hf-inference"
+	schema="https://raw.githubusercontent.com/wow-look-at-my/api-cli-spec/master/api-cli.xsd">
+
+	<description>Manage Hugging Face Inference Endpoints: list, inspect, create, update, delete, pause, resume, scale to zero, and read logs. Set $HF_TOKEN to a Hugging Face access token.</description>
+
+	<vars>
+		<var name="api"><value name="env.HF_ENDPOINTS_API_URL" default="https://api.endpoints.huggingface.cloud/v2"/></var>
+		<!-- The two variables huggingface_hub reads, in its order. -->
+		<var name="token"><value expr='{{ or .env.HF_TOKEN .env.HUGGING_FACE_HUB_TOKEN }}'/></var>
+		<!-- The URL of one endpoint. list declares no name arg, so each part falls back to "". -->
+		<var name="endpoint"><value name="var.api"/>/endpoint/<value expr='{{ .arg.namespace | default "" | urlpath }}'/>/<value expr='{{ .arg.name | default "" | urlpath }}'/></var>
+	</vars>
+
+	<preconditions>
+		<precondition>{{ if not .var.token }}set HF_TOKEN to a Hugging Face access token{{ end }}</precondition>
+	</preconditions>
+
+	<!-- The read request every GET leaf inherits. A write leaf declares its own run. -->
+	<run>
+		<request method="GET">
+			<url><value name="var.api"/><value name="entry.path"/></url>
+			<query from="entry.query"/>
+			<header name="Accept">application/json</header>
+			<header name="Authorization">Bearer <value name="var.token"/></header>
+		</request>
+	</run>
+
+	<command name="list" description="List the Inference Endpoints in a namespace.">
+		<arg name="namespace" type="string" required="true" pattern="{{ segmentPattern }}" description="User or organization name."/>
+		<flag name="search" short="s" type="string" default="" description="Only endpoints whose name contains this text."/>
+		<flag name="state" type="string" default="" description="Comma-separated states: pending, initializing, updating, updateFailed, running, paused, failed, scaledToZero."/>
+		<flag name="type" type="string" default="" description="Comma-separated types: public, authenticated, private."/>
+		<flag name="task" type="string" default="" description="Comma-separated model tasks, such as text-generation."/>
+		<flag name="tags" type="string" default="" description="Comma-separated tags."/>
+		<flag name="sort" type="string" default="" description="createdAt (the API default), updatedAt or name."/>
+		<flag name="direction" type="string" default="" description="asc, or desc (the API default)."/>
+		<flag name="limit" short="n" type="int" default="20" description="Endpoints per page."/>
+		<flag name="cursor" type="string" default="" description="The page to read, from the footer of the previous page."/>
+		<fields over="data.items" footer="{{ .data.totalItems }} total{{ with .data.nextCursor }}, next page: --cursor {{ . }}{{ end }}">
+			<field name="name">name</field>
+			<field name="state">status.state</field>
+			<field name="model">model.repository</field>
+			<field name="task" default="-" priority="-2">model.task</field>
+			<field name="framework" priority="-3">model.framework</field>
+			<field name="instance" priority="-1" expr="{{ .compute.instanceType }} {{ .compute.instanceSize }}"/>
+			<field name="vendor" priority="-4">provider.vendor</field>
+			<field name="region" priority="-4">provider.region</field>
+		</fields>
+		<entry>
+			<path>/endpoint/<value name="arg.namespace" as="urlpath"/></path>
+			<query>
+				<param name="search"><value name="flag.search"/></param>
+				<param name="state"><value name="flag.state"/></param>
+				<param name="type"><value name="flag.type"/></param>
+				<param name="task"><value name="flag.task"/></param>
+				<param name="tags"><value name="flag.tags"/></param>
+				<param name="sortBy"><value name="flag.sort"/></param>
+				<param name="direction"><value name="flag.direction"/></param>
+				<param name="limit"><value name="flag.limit"/></param>
+				<param name="cursor"><value name="flag.cursor"/></param>
+			</query>
+		</entry>
+	</command>
+
+	<command name="get" description="Fetch one Inference Endpoint: its state, URL, model and compute.">
+		<arg name="namespace" type="string" required="true" pattern="{{ segmentPattern }}" description="User or organization name."/>
+		<arg name="name" type="string" required="true" pattern="{{ segmentPattern }}" description="Endpoint name."/>
+		<fields>
+			<field name="name">name</field>
+			<field name="type">type</field>
+			<field name="state">status.state</field>
+			<field name="message" default="-">status.message</field>
+			<field name="error" default="-">status.errorMessage</field>
+			<field name="url" default="-">status.url</field>
+			<field name="replicas" expr="{{ .status.readyReplica }}/{{ .status.targetReplica }}"/>
+			<field name="model">model.repository</field>
+			<field name="revision" default="-">model.revision</field>
+			<field name="task" default="-">model.task</field>
+			<field name="framework">model.framework</field>
+			<field name="accelerator">compute.accelerator</field>
+			<field name="instance" expr="{{ .compute.instanceType }} {{ .compute.instanceSize }}"/>
+			<field name="min_replica">compute.scaling.minReplica</field>
+			<field name="max_replica">compute.scaling.maxReplica</field>
+			<field name="scale_to_zero" default="-">compute.scaling.scaleToZeroTimeout</field>
+			<field name="vendor">provider.vendor</field>
+			<field name="region">provider.region</field>
+			<field name="tags" expr='{{ range $i, $t := .tags }}{{ if $i }}, {{ end }}{{ $t }}{{ end }}'/>
+			<field name="created">status.createdAt</field>
+			<field name="updated">status.updatedAt</field>
+		</fields>
+		<entry>
+			<path>/endpoint/<value name="arg.namespace" as="urlpath"/>/<value name="arg.name" as="urlpath"/></path>
+		</entry>
+	</command>
+
+	<!-- The defaults scale an idle endpoint to zero after 15 minutes, so a
+	     forgotten endpoint stops billing. -->
+	<command name="create" description="Create an Inference Endpoint. `hf endpoints hardware` lists the valid vendor, region, accelerator, instance type and size combinations.">
+		<arg name="namespace" type="string" required="true" pattern="{{ segmentPattern }}" description="User or organization name."/>
+		<arg name="name" type="string" required="true" pattern="{{ segmentPattern }}" description="Endpoint name: lowercase letters, digits and '-', 32 characters at most."/>
+		<flag name="repository" short="r" type="string" required="true" description="Model repository, such as meta-llama/Llama-3.1-8B-Instruct."/>
+		<flag name="framework" type="string" required="true" description="Framework, such as pytorch, vllm or custom."/>
+		<flag name="accelerator" type="string" required="true" description="cpu, gpu or neuron."/>
+		<flag name="instance-type" type="string" required="true" description="Instance type, such as nvidia-l4 or intel-spr."/>
+		<flag name="instance-size" type="string" required="true" description="Instance size, such as x1 or x4."/>
+		<flag name="vendor" type="string" required="true" description="Cloud vendor, such as aws or gcp."/>
+		<flag name="region" type="string" required="true" description="Cloud region, such as us-east-1."/>
+		<flag name="type" type="string" required="true" description="Access type: public (no token), authenticated (any Hugging Face token) or private (AWS PrivateLink only)."/>
+		<flag name="task" type="string" default="" description="Model task, such as text-generation."/>
+		<flag name="revision" type="string" default="" description="Model commit or branch. The API takes the latest main without it."/>
+		<flag name="min-replica" type="int" default="0" description="Fewest replicas. 0 lets the endpoint scale to zero."/>
+		<flag name="max-replica" type="int" default="1" description="Most replicas."/>
+		<flag name="scale-to-zero-timeout" type="int" default="15" description="Idle minutes before the endpoint scales to zero. Sent only with --min-replica 0."/>
+		<flag name="image" type="string" default='{"huggingface":{}}' description='The model.image object as JSON, such as {"custom":{"url":"ghcr.io/org/image:tag","port":8080}}.'/>
+		<flag name="tag" type="string-slice" description="An endpoint tag. Repeat it for more than one."/>
+		<run>
+			<request method="POST">
+				<url><value name="var.api"/>/endpoint/<value name="arg.namespace" as="urlpath"/></url>
+				<header name="Accept">application/json</header>
+				<header name="Content-Type">application/json</header>
+				<header name="Authorization">Bearer <value name="var.token"/></header>
+				<body>
+					{{- $scaling := dict "minReplica" (index .flag "min-replica") "maxReplica" (index .flag "max-replica") -}}
+					{{- if eq (index .flag "min-replica") 0 }}{{ $_ := set $scaling "scaleToZeroTimeout" (index .flag "scale-to-zero-timeout") }}{{ end -}}
+					{{- $compute := dict "accelerator" .flag.accelerator "instanceType" (index .flag "instance-type") "instanceSize" (index .flag "instance-size") "scaling" $scaling -}}
+					{{- $model := dict "repository" .flag.repository "framework" .flag.framework "image" (mustFromJson .flag.image) -}}
+					{{- with .flag.revision }}{{ $_ := set $model "revision" . }}{{ end -}}
+					{{- with .flag.task }}{{ $_ := set $model "task" . }}{{ end -}}
+					{{- $body := dict "name" .arg.name "type" .flag.type "provider" (dict "vendor" .flag.vendor "region" .flag.region) "compute" $compute "model" $model -}}
+					{{- with .flag.tag }}{{ $_ := set $body "tags" . }}{{ end -}}
+					{{- toJson $body -}}
+				</body>
+			</request>
+		</run>
+		<fields>
+			<field name="name">name</field>
+			<field name="type">type</field>
+			<field name="state">status.state</field>
+			<field name="message" default="-">status.message</field>
+			<field name="url" default="-">status.url</field>
+		</fields>
+	</command>
+
+	<!-- PUT carries a partial spec: a field that is not set stays as it is. An
+	     int flag left at -1 is not set. -->
+	<command name="update" description="Change an Inference Endpoint. Only the flags given change.">
+		<arg name="namespace" type="string" required="true" pattern="{{ segmentPattern }}" description="User or organization name."/>
+		<arg name="name" type="string" required="true" pattern="{{ segmentPattern }}" description="Endpoint name."/>
+		<flag name="repository" short="r" type="string" default="" description="Model repository."/>
+		<flag name="framework" type="string" default="" description="Framework, such as pytorch, vllm or custom."/>
+		<flag name="revision" type="string" default="" description="Model commit or branch."/>
+		<flag name="task" type="string" default="" description="Model task."/>
+		<flag name="image" type="string" default="" description="The model.image object as JSON."/>
+		<flag name="accelerator" type="string" default="" description="cpu, gpu or neuron."/>
+		<flag name="instance-type" type="string" default="" description="Instance type."/>
+		<flag name="instance-size" type="string" default="" description="Instance size."/>
+		<flag name="min-replica" type="int" default="-1" description="Fewest replicas. -1 leaves it as it is."/>
+		<flag name="max-replica" type="int" default="-1" description="Most replicas. -1 leaves it as it is."/>
+		<flag name="scale-to-zero-timeout" type="int" default="-1" description="Idle minutes before the endpoint scales to zero. -1 leaves it as it is."/>
+		<flag name="type" type="string" default="" description="Access type: public, authenticated or private."/>
+		<flag name="tag" type="string-slice" description="An endpoint tag. Repeat it for more than one. The list replaces the current tags."/>
+		<run>
+			<request method="PUT">
+				<url><value name="var.endpoint"/></url>
+				<header name="Accept">application/json</header>
+				<header name="Content-Type">application/json</header>
+				<header name="Authorization">Bearer <value name="var.token"/></header>
+				<body>
+					{{- $model := dict -}}
+					{{- with .flag.repository }}{{ $_ := set $model "repository" . }}{{ end -}}
+					{{- with .flag.framework }}{{ $_ := set $model "framework" . }}{{ end -}}
+					{{- with .flag.revision }}{{ $_ := set $model "revision" . }}{{ end -}}
+					{{- with .flag.task }}{{ $_ := set $model "task" . }}{{ end -}}
+					{{- with .flag.image }}{{ $_ := set $model "image" (mustFromJson .) }}{{ end -}}
+					{{- $scaling := dict -}}
+					{{- if ge (index .flag "min-replica") 0 }}{{ $_ := set $scaling "minReplica" (index .flag "min-replica") }}{{ end -}}
+					{{- if ge (index .flag "max-replica") 0 }}{{ $_ := set $scaling "maxReplica" (index .flag "max-replica") }}{{ end -}}
+					{{- if ge (index .flag "scale-to-zero-timeout") 0 }}{{ $_ := set $scaling "scaleToZeroTimeout" (index .flag "scale-to-zero-timeout") }}{{ end -}}
+					{{- $compute := dict -}}
+					{{- with .flag.accelerator }}{{ $_ := set $compute "accelerator" . }}{{ end -}}
+					{{- with index .flag "instance-type" }}{{ $_ := set $compute "instanceType" . }}{{ end -}}
+					{{- with index .flag "instance-size" }}{{ $_ := set $compute "instanceSize" . }}{{ end -}}
+					{{- if $scaling }}{{ $_ := set $compute "scaling" $scaling }}{{ end -}}
+					{{- $body := dict -}}
+					{{- if $model }}{{ $_ := set $body "model" $model }}{{ end -}}
+					{{- if $compute }}{{ $_ := set $body "compute" $compute }}{{ end -}}
+					{{- with .flag.type }}{{ $_ := set $body "type" . }}{{ end -}}
+					{{- with .flag.tag }}{{ $_ := set $body "tags" . }}{{ end -}}
+					{{- toJson $body -}}
+				</body>
+			</request>
+		</run>
+		<fields>
+			<field name="name">name</field>
+			<field name="state">status.state</field>
+			<field name="message" default="-">status.message</field>
+			<field name="replicas" expr="{{ .status.readyReplica }}/{{ .status.targetReplica }}"/>
+			<field name="url" default="-">status.url</field>
+		</fields>
+	</command>
+
+	<command name="delete" description="Delete an Inference Endpoint. This cannot be undone. pause or scale-to-zero stops the billing and keeps the endpoint." confirm="Delete the Inference Endpoint {{ .arg.namespace }}/{{ .arg.name }}? This cannot be undone.">
+		<arg name="namespace" type="string" required="true" pattern="{{ segmentPattern }}" description="User or organization name."/>
+		<arg name="name" type="string" required="true" pattern="{{ segmentPattern }}" description="Endpoint name."/>
+		<run>
+			<request method="DELETE">
+				<url><value name="var.endpoint"/></url>
+				<header name="Accept">application/json</header>
+				<header name="Authorization">Bearer <value name="var.token"/></header>
+			</request>
+		</run>
+	</command>
+
+	<command name="pause" description="Pause an Inference Endpoint. A paused endpoint does not bill and stays down until resume.">
+		<arg name="namespace" type="string" required="true" pattern="{{ segmentPattern }}" description="User or organization name."/>
+		<arg name="name" type="string" required="true" pattern="{{ segmentPattern }}" description="Endpoint name."/>
+		<run>
+			<request method="POST">
+				<url><value name="var.endpoint"/>/pause</url>
+				<header name="Accept">application/json</header>
+				<header name="Authorization">Bearer <value name="var.token"/></header>
+			</request>
+		</run>
+		<fields>
+			<field name="name">name</field>
+			<field name="state">status.state</field>
+			<field name="message" default="-">status.message</field>
+			<field name="replicas" expr="{{ .status.readyReplica }}/{{ .status.targetReplica }}"/>
+		</fields>
+	</command>
+
+	<command name="resume" description="Resume a paused or stopped Inference Endpoint. The API answers 400 for an endpoint that already runs.">
+		<arg name="namespace" type="string" required="true" pattern="{{ segmentPattern }}" description="User or organization name."/>
+		<arg name="name" type="string" required="true" pattern="{{ segmentPattern }}" description="Endpoint name."/>
+		<run>
+			<request method="POST">
+				<url><value name="var.endpoint"/>/resume</url>
+				<header name="Accept">application/json</header>
+				<header name="Authorization">Bearer <value name="var.token"/></header>
+			</request>
+		</run>
+		<fields>
+			<field name="name">name</field>
+			<field name="state">status.state</field>
+			<field name="message" default="-">status.message</field>
+			<field name="replicas" expr="{{ .status.readyReplica }}/{{ .status.targetReplica }}"/>
+		</fields>
+	</command>
+
+	<command name="scale-to-zero" description="Scale an Inference Endpoint to zero replicas. The next request wakes it. The endpoint needs a scale-to-zero timeout.">
+		<arg name="namespace" type="string" required="true" pattern="{{ segmentPattern }}" description="User or organization name."/>
+		<arg name="name" type="string" required="true" pattern="{{ segmentPattern }}" description="Endpoint name."/>
+		<run>
+			<request method="POST">
+				<url><value name="var.endpoint"/>/scale-to-zero</url>
+				<header name="Accept">application/json</header>
+				<header name="Authorization">Bearer <value name="var.token"/></header>
+			</request>
+		</run>
+		<fields>
+			<field name="name">name</field>
+			<field name="state">status.state</field>
+			<field name="message" default="-">status.message</field>
+			<field name="replicas" expr="{{ .status.readyReplica }}/{{ .status.targetReplica }}"/>
+		</fields>
+	</command>
+
+	<!-- The logs body is text, so it passes through as it arrives. -->
+	<command name="logs" description="Read the logs of an Inference Endpoint.">
+		<arg name="namespace" type="string" required="true" pattern="{{ segmentPattern }}" description="User or organization name."/>
+		<arg name="name" type="string" required="true" pattern="{{ segmentPattern }}" description="Endpoint name."/>
+		<flag name="replica" type="string" default="" description="Only this replica."/>
+		<flag name="tail" short="n" type="int" default="0" description="The most lines to return. 0 sends no limit."/>
+		<flag name="line-max-length" type="int" default="0" description="Cut each line at this length. 0 sends no limit."/>
+		<entry>
+			<path>/endpoint/<value name="arg.namespace" as="urlpath"/>/<value name="arg.name" as="urlpath"/>/logs</path>
+			<query>
+				<param name="replica"><value name="flag.replica"/></param>
+				<param name="tail"><value expr="{{ if .flag.tail }}{{ .flag.tail }}{{ end }}"/></param>
+				<param name="line_max_length"><value expr='{{ if index .flag "line-max-length" }}{{ index .flag "line-max-length" }}{{ end }}'/></param>
+			</query>
+		</entry>
+	</command>
+
+</config>

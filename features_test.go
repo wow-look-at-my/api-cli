@@ -10,7 +10,7 @@ import (
 )
 
 // These live in their own file to keep integration_test.go focused on the
-// original integration scenarios.
+// integration scenarios.
 
 // --- Variadic args ---
 
