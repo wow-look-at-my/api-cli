@@ -1,0 +1,8 @@
+{
+		"name":"llama-chat","type":"authenticated",
+		"provider":{"vendor":"aws","region":"us-east-1"},
+		"compute":{"accelerator":"gpu","instanceType":"nvidia-l4","instanceSize":"x1",
+			"scaling":{"minReplica":0,"maxReplica":1,"scaleToZeroTimeout":15}},
+		"model":{"repository":"meta-llama/Llama-3.1-8B-Instruct","framework":"pytorch",
+			"task":"text-generation","image":{"huggingface":{}}},
+		"tags":["chat"]}

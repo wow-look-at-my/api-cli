@@ -186,7 +186,9 @@ api-cli tui --config github.xml
 
 The up and down keys pick a command. Enter moves into its form. Tab moves between the fields, and enter in a field runs the command. Ctrl+R runs from anywhere, esc goes back to the tree, and q quits from the tree. Under the form is the command line that the run is equal to. You can copy it.
 
-A run is the same as that command line, with `--yes`. A command that declares `confirm=` asks in a popup first. An empty field is left out, so cobra applies the declared default. A variadic arg and a passthrough command split their field on spaces. A `string-slice` flag splits on commas. The `tui` subcommand needs a terminal on stdin and stdout. A config cannot declare a command named `tui`.
+A run is the same as that command line, with `--yes`. A command that declares `confirm=` asks in a popup first. An empty field is left out, so cobra applies the declared default. A variadic arg and a passthrough command split their field on spaces. A `string-slice` flag splits on commas. The `tui` subcommand needs a terminal on stdin and stdout.
+
+A config cannot declare a command named `tui`.
 
 ## Examples
 
