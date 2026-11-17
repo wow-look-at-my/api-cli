@@ -55,7 +55,7 @@ func buildJoin(n *xnode) (*Join, error) {
 		if req != nil {
 			return nil, fmt.Errorf("<join><run>: the program is an <argv> list or shell text, not a <request>")
 		}
-		if !cmd.Defined() {
+		if !cmd.Defined() || (cmd.Shell && cmd.Template == "") {
 			return nil, fmt.Errorf("<join><run>: the program is empty")
 		}
 		j.Run = cmd
