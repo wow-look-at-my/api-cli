@@ -221,6 +221,34 @@ func TestBrowseModelToggleAndErrors(t *testing.T) {
 	assert.Equal(t, "bad", m.statusStyle)
 }
 
+func TestBrowseModelEventsAndExits(t *testing.T) {
+	h := newBrowseHarness(t)
+	m := h.m
+
+	assert.False(t, m.update(h, tml.Resize{Width: 90, Height: 20}), "a resize is not consumed")
+	assert.Equal(t, 90, m.width)
+	assert.Equal(t, 20, m.height)
+
+	h.press("down", "enter")
+	assert.True(t, m.update(h, tml.Event{Kind: tml.Changed, ID: "arg-owner", Value: "zed"}))
+	assert.Equal(t, "zed", m.field("arg-owner").value, "the field keeps an edit from the textbox")
+
+	assert.True(t, m.update(h, tml.Event{Kind: tml.Activated, ID: "tree", Y: 0}))
+	assert.Equal(t, 0, m.sel, "a click on a tree row picks it")
+
+	h.press("esc")
+	focused, _ := m.view.UI().Focused()
+	assert.Equal(t, "tree", focused, "esc in the form goes back to the tree")
+	assert.False(t, h.quit)
+	h.press("esc")
+	assert.True(t, h.quit, "esc in the tree quits")
+
+	h.quit = false
+	h.press("ctrl+c")
+	assert.True(t, h.quit)
+	assert.Equal(t, interruptExitCode, m.code)
+}
+
 func TestBrowseTreeWindowsTheSelection(t *testing.T) {
 	h := newBrowseHarness(t)
 	m := h.m
