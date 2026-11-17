@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"fmt"
 	"net/http"
@@ -32,26 +34,11 @@ func joinRunConfig(srv *httptest.Server, partsDir, run string) string {
 			group="{{ .id }}" order="{{ .n }}">
 			<url>` + srv.URL + `/part/<value name="id"/>/<value name="n"/></url>
 			<to>` + partsDir + `/<value name="id"/>/<value name="n"/>.part</to>
-			<join to="{{ .id }}.out" cleanup="true">` + run + `</join>
-		</download>
-	</command></config>`
+			<join to="{{ .id }}.out" cleanup="true">` + run + joinRunConfigXml
 }
 
 func TestJoinRun_Parses(t *testing.T) {
-	cfg, err := loadStr(t, `<config name="j"><command name="pull">
-		<download group="g">
-			<url>https://example.test/x</url>
-			<to>p.part</to>
-			<join to="out.mp4">
-				<run>
-					<argv>ffmpeg</argv>
-					<argv>-i</argv>
-					<argv><value name="join.input"/></argv>
-					<argv><value name="join.output"/></argv>
-				</run>
-			</join>
-		</download>
-	</command></config>`)
+	cfg, err := loadStr(t, testJoinRun_ParsesXml)
 	require.NoError(t, err)
 	run := cfg.Commands[0].Downloads[0].Join.Run
 	require.NotNil(t, run)
@@ -71,10 +58,7 @@ func TestJoinRun_RejectsBadGrammar(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := loadStr(t, `<config name="j"><command name="pull">
-				<download group="g">
-					<url>https://example.test/x</url>
-					<to>p.part</to>`+tc.join+`
+			_, err := loadStr(t, testJoinRun_RejectsBadGrammarXml+tc.join+`
 				</download>
 			</command></config>`)
 			require.Error(t, err)
@@ -232,3 +216,12 @@ func TestJoinRun_CleanupRemovesPartsAndInput(t *testing.T) {
 func TestCommandLine(t *testing.T) {
 	assert.Equal(t, `ffmpeg -i /a/b.h264 'x y' ''`, commandLine([]string{"ffmpeg", "-i", "/a/b.h264", "x y", ""}))
 }
+
+//go:embed testdata/join-run-config.xml
+var joinRunConfigXml string
+
+//go:embed testdata/test-join-run-parses.xml
+var testJoinRun_ParsesXml string
+
+//go:embed testdata/test-join-run-rejects-bad-grammar.xml
+var testJoinRun_RejectsBadGrammarXml string
