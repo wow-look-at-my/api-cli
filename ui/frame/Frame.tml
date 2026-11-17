@@ -1,0 +1,9 @@
+<?xml version="1.1" encoding="UTF-8"?>
+<!-- A frame that a leaf already rendered, shown as it is. Its escape sequences keep their colours. -->
+<Component xmlns="urn:tml:v1" name="Frame">
+	<Property name="frame" type="string" default=""/>
+
+	<Template>
+		<Text overflow="clip">{frame}</Text>
+	</Template>
+</Component>
