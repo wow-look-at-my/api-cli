@@ -6,9 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wow-look-at-my/tml"
+	"github.com/wow-look-at-my/tml/input"
 )
 
 //go:embed testdata/browse-config.xml
@@ -109,31 +110,17 @@ func TestBrowseExec(t *testing.T) {
 	assert.Contains(t, out, "Error:", "a cobra error lands in the output pane")
 }
 
-func key(s string) tea.KeyPressMsg {
-	switch s {
-	case "enter":
-		return tea.KeyPressMsg{Code: tea.KeyEnter}
-	case "down":
-		return tea.KeyPressMsg{Code: tea.KeyDown}
-	case "up":
-		return tea.KeyPressMsg{Code: tea.KeyUp}
-	case "tab":
-		return tea.KeyPressMsg{Code: tea.KeyTab}
-	case "esc":
-		return tea.KeyPressMsg{Code: tea.KeyEscape}
-	case "backspace":
-		return tea.KeyPressMsg{Code: tea.KeyBackspace}
-	}
-	r := []rune(s)[0]
-	return tea.KeyPressMsg{Code: r, Text: s}
-}
-
-// browseHarness drives the model with keys, and runs each command it asks for in place.
+// browseHarness is the program for the model: it sends keys, and runs each command in place.
 type browseHarness struct {
 	t    *testing.T
 	m    *browseModel
 	runs [][]string
+	quit bool
 }
+
+func (h *browseHarness) Quit() { h.quit = true }
+
+func (h *browseHarness) Go(work func() tml.Msg) { h.m.update(h, work()) }
 
 func newBrowseHarness(t *testing.T) *browseHarness {
 	t.Helper()
@@ -148,26 +135,16 @@ func newBrowseHarness(t *testing.T) *browseHarness {
 	return h
 }
 
+// press sends each key as a program does: to the model first, then to the focus ring.
 func (h *browseHarness) press(keys ...string) {
 	for _, k := range keys {
-		_, cmd := h.m.Update(key(k))
-		h.drain(cmd)
-		h.m.frame()
-	}
-}
-
-// drain runs the commands a key produced, except the spinner's ticker.
-func (h *browseHarness) drain(cmd tea.Cmd) {
-	if cmd == nil {
-		return
-	}
-	switch msg := cmd().(type) {
-	case tea.BatchMsg:
-		for _, c := range msg {
-			h.drain(c)
+		msg := input.ParseKey(k)
+		if !h.m.update(h, msg) {
+			for _, event := range h.m.view.UI().Update(msg) {
+				h.m.update(h, event)
+			}
 		}
-	case browseRunMsg:
-		h.m.Update(msg)
+		h.m.frame()
 	}
 }
 
@@ -201,7 +178,7 @@ func TestBrowseModelFillAndRun(t *testing.T) {
 	assert.Empty(t, h.runs)
 
 	h.press("enter")
-	h.drain(m.act("confirm"))
+	m.act(h, "confirm")
 	require.Len(t, h.runs, 1)
 	assert.Equal(t, []string{"repos", "list", "acme"}, h.runs[0])
 	assert.False(t, m.running)
@@ -216,25 +193,27 @@ func TestBrowseModelToggleAndErrors(t *testing.T) {
 	m := h.m
 
 	h.press("down", "enter")
-	h.drain(m.act("toggle:flag-archived"))
+	m.act(h, "toggle:flag-archived")
 	assert.True(t, m.field("flag-archived").checked)
 
 	m.view.UI().Focus("tree")
 	h.press("q")
+	assert.True(t, h.quit)
 	assert.Equal(t, 0, m.code)
 
 	m.pick(1)
 	m.entry().fields[0].value = ""
-	h.drain(m.start())
+	m.start(h)
 	assert.Equal(t, "owner is required", m.status)
 	assert.Empty(t, h.runs)
 
 	m.pick(0)
-	assert.Nil(t, m.start(), "a group does not run")
+	m.start(h)
+	assert.Empty(t, h.runs, "a group does not run")
 	assert.Contains(t, m.frame(), "A group.")
 
 	m.pick(4)
-	h.drain(m.start())
+	m.start(h)
 	assert.Equal(t, [][]string{{"fail"}}, h.runs)
 
 	m.finish(browseRunMsg{line: "tool fail", output: "broke\n", code: 3})

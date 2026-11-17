@@ -5,20 +5,20 @@ package main
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 	"unicode"
 	"unicode/utf8"
 
-	tea "charm.land/bubbletea/v2"
 	"golang.org/x/term"
 
 	"github.com/spf13/cobra"
 	"github.com/wow-look-at-my/tml"
+	"github.com/wow-look-at-my/tml/input"
 	"github.com/wow-look-at-my/tml/sema"
 )
 
@@ -40,7 +40,11 @@ type browseRunMsg struct {
 	code   int
 }
 
-type browseTickMsg time.Time
+// browseHost is the part of a tml.Program that the browser uses. A test supplies its own.
+type browseHost interface {
+	Quit()
+	Go(work func() tml.Msg)
+}
 
 type browseModel struct {
 	view    *tml.View
@@ -84,11 +88,15 @@ func runBrowse(cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	program, err := tml.NewProgram(m)
+	program, err := tml.NewProgram(m.view, m)
 	if err != nil {
 		return err
 	}
-	if _, err := program.Run(); err != nil {
+	err = program.Run()
+	if errors.Is(err, tml.ErrInterrupted) {
+		m.code, err = interruptExitCode, nil
+	}
+	if err != nil {
 		return err
 	}
 	exitCode = m.code
@@ -142,146 +150,146 @@ func browseExec(cfg *Config, argv []string, width, height int) (string, int) {
 
 func (m *browseModel) entry() *browseEntry { return m.entries[m.sel] }
 
-func (m *browseModel) Init() tea.Cmd { return nil }
+// Update takes one message from the program.
+func (m *browseModel) Update(p *tml.Program, msg tml.Msg) bool { return m.update(p, msg) }
 
-func (m *browseModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *browseModel) update(host browseHost, msg tml.Msg) bool {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
+	case tml.Resize:
 		m.width, m.height = msg.Width, msg.Height
-		return m, nil
-	case browseTickMsg:
-		if !m.running {
-			return m, nil
-		}
-		m.view.Advance()
-		return m, browseTick()
 	case browseRunMsg:
 		m.finish(msg)
-		return m, nil
-	case tea.KeyPressMsg:
-		if cmd, handled := m.key(msg); handled {
-			return m, cmd
-		}
+		return true
+	case tml.Key:
+		return m.key(host, msg)
+	case tml.Event:
+		m.event(host, msg)
+		return true
 	}
+	return false
+}
 
-	var cmd tea.Cmd
-	for _, event := range m.view.UI().Update(msg) {
-		switch event.Kind {
-		case tml.Activated:
-			if event.ID == "tree" && event.Y >= 0 {
-				m.pick(m.treeStart() + event.Y)
-				continue
-			}
-			cmd = m.act(event.Action)
-		case tml.Scrolled:
-			m.scroll(event.ID, event.Delta)
+// event handles what the focus ring made of a key or a click.
+func (m *browseModel) event(host browseHost, event tml.Event) {
+	switch event.Kind {
+	case tml.Activated:
+		if event.ID == "tree" && event.Y >= 0 {
+			m.pick(m.treeStart() + event.Y)
+			return
+		}
+		m.act(host, event.Action)
+	case tml.Scrolled:
+		m.scroll(event.ID, event.Delta)
+	case tml.Changed:
+		if f := m.field(event.ID); f != nil {
+			f.value = event.Value
 		}
 	}
-	if m.code != 0 || cmd != nil {
-		return m, cmd
-	}
-	return m, nil
 }
 
 // key handles the keys the browser keeps for itself. Typing goes to the field
 // that has focus. Everything else falls through to the focus ring.
-func (m *browseModel) key(msg tea.KeyPressMsg) (tea.Cmd, bool) {
+func (m *browseModel) key(host browseHost, msg tml.Key) bool {
 	focused, _ := m.view.UI().Focused()
 	switch msg.String() {
 	case "ctrl+c":
 		m.code = interruptExitCode
-		return tea.Quit, true
+		host.Quit()
+		return true
 	case "esc":
 		if m.confirming {
 			m.confirming = false
 			m.status, m.statusStyle = "cancelled", "dim"
-			return nil, true
+			return true
 		}
 		if focused != "tree" {
 			m.view.UI().Focus("tree")
-			return nil, true
+			return true
 		}
-		return tea.Quit, true
+		host.Quit()
+		return true
 	case "ctrl+r":
-		return m.start(), true
+		m.start(host)
+		return true
 	case "pgup":
 		m.scroll("output", -m.pageRows())
-		return nil, true
+		return true
 	case "pgdown":
 		m.scroll("output", m.pageRows())
-		return nil, true
+		return true
 	}
 	if m.confirming {
-		return nil, false
+		return false
 	}
 	if focused == "tree" || focused == "" {
 		switch msg.String() {
 		case "q":
-			return tea.Quit, true
+			host.Quit()
+			return true
 		case "up", "k":
 			m.pick(m.sel - 1)
-			return nil, true
+			return true
 		case "down", "j":
 			m.pick(m.sel + 1)
-			return nil, true
+			return true
 		case "enter", "right", "l":
-			return m.enter(), true
+			m.enter(host)
+			return true
 		}
-		return nil, false
+		return false
 	}
 	field := m.field(focused)
 	if field == nil || field.isBool() {
-		return nil, false
+		return false
 	}
 	switch msg.String() {
 	case "enter":
-		return m.start(), true
+		m.start(host)
+		return true
 	case "backspace":
 		if _, size := utf8.DecodeLastRuneInString(field.value); size > 0 {
 			field.value = field.value[:len(field.value)-size]
 		}
-		return nil, true
+		return true
 	case "ctrl+u":
 		field.value = ""
-		return nil, true
+		return true
 	}
-	if r := msg.Code; msg.Text != "" && unicode.IsPrint(r) && msg.Mod&^tea.ModShift == 0 {
+	if r := msg.Code; msg.Text != "" && unicode.IsPrint(r) && msg.Mod&^input.Shift == 0 {
 		field.value += msg.Text
-		return nil, true
+		return true
 	}
-	return nil, false
+	return false
 }
 
 // enter moves from the tree into the form, or runs a command that takes no input.
-func (m *browseModel) enter() tea.Cmd {
+func (m *browseModel) enter(host browseHost) {
 	e := m.entry()
-	if !e.runnable() {
-		return nil
+	switch {
+	case !e.runnable():
+	case len(e.fields) == 0:
+		m.start(host)
+	default:
+		m.view.UI().Focus(e.fields[0].id)
 	}
-	if len(e.fields) == 0 {
-		return m.start()
-	}
-	m.view.UI().Focus(e.fields[0].id)
-	return nil
 }
 
-func (m *browseModel) act(action string) tea.Cmd {
+func (m *browseModel) act(host browseHost, action string) {
 	kind, arg, _ := strings.Cut(action, ":")
 	switch kind {
 	case "run":
-		return m.start()
+		m.start(host)
 	case "toggle":
 		if f := m.field(arg); f != nil {
 			f.checked = !f.checked
 		}
 	case "confirm":
 		m.confirming = false
-		return m.launch(m.pending)
+		m.launch(host, m.pending)
 	case "cancel":
 		m.confirming = false
 		m.status, m.statusStyle = "cancelled", "dim"
 	}
-	return nil
 }
 
 func (m *browseModel) field(id string) *browseField {
@@ -315,34 +323,34 @@ func (m *browseModel) pageRows() int { return max(1, m.height/3) }
 
 // start validates the form and runs it, through the confirm popup when the
 // command asks for one.
-func (m *browseModel) start() tea.Cmd {
+func (m *browseModel) start(host browseHost) {
 	e := m.entry()
 	if m.running || !e.runnable() {
-		return nil
+		return
 	}
 	argv, err := e.argv()
 	if err != nil {
 		m.status, m.statusStyle = err.Error(), "bad"
-		return nil
+		return
 	}
 	if e.confirm != "" {
 		m.pending, m.confirming = argv, true
 		m.view.UI().Focus("confirm-no")
-		return nil
+		return
 	}
-	return m.launch(argv)
+	m.launch(host, argv)
 }
 
-func (m *browseModel) launch(argv []string) tea.Cmd {
+// launch runs argv off the program's goroutine. The program moves the spinner while it runs.
+func (m *browseModel) launch(host browseHost, argv []string) {
 	m.running = true
-	m.status, m.statusStyle = "running "+commandLine(m.name, argv), "dim"
-	exec, width, height := m.exec, m.outputWidth(), m.height
 	line := commandLine(m.name, argv)
-	run := func() tea.Msg {
+	m.status, m.statusStyle = "running "+line, "dim"
+	exec, width, height := m.exec, m.outputWidth(), m.height
+	host.Go(func() tml.Msg {
 		out, code := exec(argv, width, height)
 		return browseRunMsg{line: line, output: out, code: code}
-	}
-	return tea.Batch(run, browseTick())
+	})
 }
 
 func (m *browseModel) finish(msg browseRunMsg) {
@@ -354,10 +362,6 @@ func (m *browseModel) finish(msg browseRunMsg) {
 	} else {
 		m.status, m.statusStyle = fmt.Sprintf("exit %d  %s", msg.code, msg.line), "bad"
 	}
-}
-
-func browseTick() tea.Cmd {
-	return tea.Tick(120*time.Millisecond, func(t time.Time) tea.Msg { return browseTickMsg(t) })
 }
 
 // browseLines splits output into the rows the output pane draws. A tab has no
@@ -398,15 +402,17 @@ func (m *browseModel) hint() string {
 	}
 }
 
-func (m *browseModel) View() tea.View {
-	view := tea.NewView(m.frame())
-	view.AltScreen = true
-	view.MouseMode = tea.MouseModeAllMotion
-	return view
+// frame renders one screen as text. A render failure is shown rather than swallowed.
+func (m *browseModel) frame() string {
+	out, err := m.view.Render(m.Props(), m.width, m.height)
+	if err != nil {
+		return "browse: " + err.Error()
+	}
+	return out
 }
 
-// frame renders one screen. A render failure is shown rather than swallowed.
-func (m *browseModel) frame() string {
+// Props is what the program draws the screen from.
+func (m *browseModel) Props() tml.Props {
 	e := m.entry()
 	start, rows := m.treeStart(), m.treeRows()
 	labels := make([]string, 0, rows)
@@ -441,7 +447,7 @@ func (m *browseModel) frame() string {
 	if style == "" {
 		style = "dim"
 	}
-	out, err := m.view.Render(tml.Props{
+	return tml.Props{
 		"title":       sema.StringValue(m.name),
 		"hint":        sema.StringValue(m.hint()),
 		"tree":        sema.ListValue(labels),
@@ -458,9 +464,5 @@ func (m *browseModel) frame() string {
 		"output":      sema.ListValue(m.output),
 		"offset":      sema.StringValue(strconv.Itoa(m.offset)),
 		"confirming":  sema.BoolValue(m.confirming),
-	}, m.width, m.height)
-	if err != nil {
-		return "browse: " + err.Error()
 	}
-	return out
 }
