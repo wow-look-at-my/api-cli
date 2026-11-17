@@ -233,15 +233,15 @@ func TestBrowseModelEventsAndExits(t *testing.T) {
 	assert.True(t, m.update(h, tml.Event{Kind: tml.Changed, ID: "arg-owner", Value: "zed"}))
 	assert.Equal(t, "zed", m.field("arg-owner").value, "the field keeps an edit from the textbox")
 
-	assert.True(t, m.update(h, tml.Event{Kind: tml.Activated, ID: "tree", Y: 0}))
-	assert.Equal(t, 0, m.sel, "a click on a tree row picks it")
-
 	h.press("esc")
 	focused, _ := m.view.UI().Focused()
 	assert.Equal(t, "tree", focused, "esc in the form goes back to the tree")
 	assert.False(t, h.quit)
 	h.press("esc")
 	assert.True(t, h.quit, "esc in the tree quits")
+
+	assert.True(t, m.update(h, tml.Event{Kind: tml.Activated, ID: "tree", Y: 0}))
+	assert.Equal(t, 0, m.sel, "a click on a tree row picks it")
 
 	h.quit = false
 	h.press("ctrl+c")
