@@ -36,7 +36,7 @@ One example is the rule that a leaf needs a run, its own or an ancestor's. api-c
 | `<entry>` | Leaf-only. `<path>`, `<query>`, or user-defined keys -> `.entry`. |
 | `<preconditions><precondition>` | A non-empty render is a fatal error message (exit 1). It runs before `<steps>`, so `.result` holds nothing. A config that reads `.result` there fails to load. Declared on any node, and the whole subtree runs it. |
 | `<fields when=>` / `<format>` | The automatic output shape, or a legacy format. Leaf-only, and never both. `<fields>` repeats: every block whose `when=` holds renders. |
-| `<download over= when= transport= group= order=>` | Leaf-only, repeatable. Hands URLs to the download queue. A `<join>` child concatenates a group. See [Downloads](#downloads). |
+| `<download over= when= transport= group= order=>` | Leaf-only, repeatable. Hands URLs to the download queue. A `<join>` child concatenates a group, and its optional `<run>` makes the output from `.join.input` into `.join.output`. See [Downloads](#downloads). |
 | `<stream mode= chunk=>` | Leaf-only. Cuts the leaf's own run into chunks and emits each as it is whole. An optional `<run>` child transforms one chunk at a time. See [Streaming](#streaming-stream). |
 | `<mock exit=>` | Leaf-only. Stands in for a program. `<input>`, `<output>`, `<record>`, `<stdout>`, `<stderr>`. See [Mock executables](#mock-executables). |
 | `<command>` | Nested subcommands. A node with children prints help, unless it declares `runnable="true"`. |

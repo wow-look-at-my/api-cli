@@ -1,0 +1,14 @@
+<config name="j"><command name="pull">
+		<download group="g">
+			<url>https://example.test/x</url>
+			<to>p.part</to>
+			<join to="out.mp4">
+				<run>
+					<argv>ffmpeg</argv>
+					<argv>-i</argv>
+					<argv><value name="join.input"/></argv>
+					<argv><value name="join.output"/></argv>
+				</run>
+			</join>
+		</download>
+	</command></config>

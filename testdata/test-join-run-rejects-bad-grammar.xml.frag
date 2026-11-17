@@ -1,0 +1,7 @@
+<config name="j"><command name="pull">
+	<download group="g">
+		<url>https://example.test/x</url>
+		<to>p.part</to>
+		@JOIN@
+	</download>
+</command></config>
