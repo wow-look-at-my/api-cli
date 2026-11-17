@@ -39,7 +39,7 @@ The block comes off the screen when the queue drains, and the run's summary foll
 
 A start is never announced. The slot already says that a transfer runs. A separate `downloading` line only doubles the volume.
 
-In a pipe there is no display. The `downloaded` lines stay on stderr, and the destination paths go to stdout, one per line, for whatever reads them next.
+In a pipe there is no display. The `downloaded` lines stay on stderr, and the destination paths go to stdout, one per line, for whatever reads them next. A joined group lists its output once, in place of its parts, and only after the join writes it.
 
 The steps that feed a `<download>` report their progress too. On a terminal, the block holds one live line for the step that runs. It names the element, the poll try, and the `.status` field of the last response when the body has one. A retry shows as `retry 1/3`.
 
@@ -85,6 +85,39 @@ An API that hands out a capture in numbered parts wants those parts back as one 
 - **`contiguous=`** reports a hole in the numbering: `warn` logs it and still writes, `error` fails the group and writes nothing. It needs `order=`, because the numbers are what it checks. It reads the whole numbers between the lowest and the highest. A listing that stops early therefore looks complete to it.
 - Each member needs its own `<to>`. That `<to>` must name a file. The parts are separate files until the join makes them one.
 - The output goes through a `.part` sibling too. An interrupted join therefore leaves no truncated file under the real name.
+
+### Making the output with a program: `<join><run>`
+
+Joined parts are not always the file you want. A raw video stream needs a mux step before it plays. A `<run>` inside `<join>` names the program that turns the joined parts into the output.
+
+```xml
+<join to="{{ .clip }}.mp4" cleanup="true">
+	<run>
+		<argv>ffmpeg</argv>
+		<argv>-fflags</argv>
+		<argv>+genpts</argv>
+		<argv>-f</argv>
+		<argv><value name="format"/></argv>
+		<argv>-i</argv>
+		<argv><value name="join.input"/></argv>
+		<argv>-c</argv>
+		<argv>copy</argv>
+		<argv>-f</argv>
+		<argv>mp4</argv>
+		<argv><value name="join.output"/></argv>
+	</run>
+</join>
+```
+
+- The `<run>` takes an `<argv>` list or shell text, as any `<run>` does. A `<request>` is not a program, so the loader rejects one here.
+- It renders against the record that `to=` renders against, plus `.join.input` and `.join.output`. Every part of a group must render the same program, so read only the values the whole group shares. A program that differs between parts fails the group.
+- **`.join.input`** is the joined parts, in order. It is a temporary file in `.run.tmpdir`, not the output.
+- **`.join.output`** is the `.part` sibling of the `to=` path. The program writes there. The file gets its real name only when the program exits 0. Name the output format yourself, as `-f mp4` does above, because a program cannot guess it from a `.part` extension.
+- The order per group: every part lands, the parts join into `.join.input`, the program runs, and then `cleanup="true"` removes the parts and `.join.input`.
+- Each group runs its program as soon as its own parts join, while other groups still transfer. `--concurrency` caps the programs that run at one time, as it caps the transfers.
+- **A program that fails fails its group.** A non-zero exit, or an exit 0 with nothing at `.join.output`, names the group, the command and the exit status on stderr. The run then exits non-zero. Nothing lands under the real name, and the group keeps its parts. The other groups continue.
+- A `running ffmpeg for clip.mp4` line marks the start of the program, and the `joined` line marks its success. The program's stdout and stderr print between them, above the download display, as a transport's stderr does. Stdout of api-cli stays the list of files that landed. The program gets no stdin.
+- Without a `<run>`, the joined parts are the output.
 
 ## A working directory for the parts: `.run.tmpdir`
 

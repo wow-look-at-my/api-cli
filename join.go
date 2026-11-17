@@ -27,6 +27,8 @@ type Join struct {
 	Cleanup bool   `json:"cleanup,omitempty"`
 	// Contiguous reports a gap in the group's numeric order: "warn" logs it, "error" fails the run and writes nothing.
 	Contiguous string `json:"contiguous,omitempty"`
+	// Run makes the output from the joined parts. Nil writes the joined parts as the output.
+	Run *Cmd `json:"run,omitempty"`
 }
 
 // buildJoin parses a <join> child. Its attributes are templates over the same
@@ -35,12 +37,28 @@ func buildJoin(n *xnode) (*Join, error) {
 	if err := checkAttrs(n, "to", "cleanup", "contiguous"); err != nil {
 		return nil, err
 	}
-	if len(n.Children()) > 0 {
-		return nil, fmt.Errorf("<join>: takes no children")
-	}
 	j := &Join{
 		To:         strings.TrimSpace(n.Attr("to")),
 		Contiguous: strings.ToLower(strings.TrimSpace(n.Attr("contiguous"))),
+	}
+	for _, child := range n.Children() {
+		if child.Name() != "run" {
+			return nil, fmt.Errorf("<join>: unexpected child element <%s>, only <run> is allowed", child.Name())
+		}
+		if j.Run != nil {
+			return nil, fmt.Errorf("<join>: declares <run> twice")
+		}
+		cmd, req, err := buildRun(child)
+		if err != nil {
+			return nil, fmt.Errorf("<join>: %w", err)
+		}
+		if req != nil {
+			return nil, fmt.Errorf("<join><run>: the program is an <argv> list or shell text, not a <request>")
+		}
+		if !cmd.Defined() || (cmd.Shell && cmd.Template == "") {
+			return nil, fmt.Errorf("<join><run>: the program is empty")
+		}
+		j.Run = cmd
 	}
 	if raw := strings.TrimSpace(n.Attr("cleanup")); raw != "" {
 		v, err := strconv.ParseBool(raw)
@@ -105,6 +123,9 @@ func planJoin(d *Download, ctx map[string]any, dir string, idx int) (*joinPart, 
 		return nil, fmt.Errorf("download[%d]: <join to=> rendered empty", idx)
 	}
 	part.Dest = underDir(dir, to)
+	if err := planJoinRun(d.Join.Run, part, ctx, to); err != nil {
+		return nil, fmt.Errorf("download[%d]: <join><run>: %w", idx, err)
+	}
 
 	if d.Order == "" {
 		return part, nil
@@ -131,16 +152,23 @@ type joinPart struct {
 	HasOrder   bool
 	Cleanup    bool
 	Contiguous string
+	// Argv is the rendered <join><run>. It reads Input, the joined parts.
+	Argv  []string
+	Input string
 }
 
 // joiner concatenates each group of parts into its output.
 type joiner struct {
 	log func(string, ...any)
+	// errOut receives the stdout and stderr of a <join><run> program.
+	errOut io.Writer
 
 	mu       sync.Mutex
 	groups   map[string]*joinGroup
 	failures []error
 	wg       sync.WaitGroup
+	// slots caps how many <join><run> programs run at one time. Nil is no cap.
+	slots chan struct{}
 }
 
 // joinGroup is a single output and the members it still waits for.
@@ -154,7 +182,7 @@ type joinGroup struct {
 // newJoiner counts the membership of every group in a planned run. It returns
 // nil when no declaration asked for a join, which keeps that run's fast path
 // free of the bookkeeping.
-func newJoiner(specs []downloadSpec, log func(string, ...any)) *joiner {
+func newJoiner(specs []downloadSpec, log func(string, ...any), errOut io.Writer) *joiner {
 	groups := map[string]*joinGroup{}
 	for _, spec := range specs {
 		if spec.Join == nil {
@@ -173,7 +201,10 @@ func newJoiner(specs []downloadSpec, log func(string, ...any)) *joiner {
 	if log == nil {
 		log = func(string, ...any) {}
 	}
-	return &joiner{log: log, groups: groups}
+	if errOut == nil {
+		errOut = io.Discard
+	}
+	return &joiner{log: log, errOut: errOut, groups: groups}
 }
 
 // note takes a single finished download. The last member of a group starts
@@ -240,12 +271,15 @@ func (j *joiner) finish(g *joinGroup) error {
 	if err := j.checkDest(g); err != nil {
 		return err
 	}
+	if err := j.checkRun(g); err != nil {
+		return err
+	}
 	if err := j.checkGaps(g); err != nil {
 		return err
 	}
 
-	if err := concatFiles(g.dest, g.members); err != nil {
-		return fmt.Errorf("%s: %w", g.dest, err)
+	if err := j.write(g); err != nil {
+		return err
 	}
 	j.log("joined %s (%d parts)", filepath.Base(g.dest), len(g.members))
 
@@ -253,7 +287,43 @@ func (j *joiner) finish(g *joinGroup) error {
 		for _, item := range g.members {
 			os.Remove(item.dest())
 		}
+		if g.spec.Input != "" {
+			os.Remove(g.spec.Input)
+		}
 		pruneEmptyDirs(g.members)
+	}
+	return nil
+}
+
+// write makes the group's output. Without a <run>, the joined parts are the
+// output. With one, the parts join into the input and the program writes the
+// output. Either way, bytes land in a .part sibling and get the real name last.
+func (j *joiner) write(g *joinGroup) error {
+	part := g.dest + ".part"
+	if g.spec.Argv == nil {
+		if err := concatFiles(part, g.members); err != nil {
+			return fmt.Errorf("%s: %w", g.dest, err)
+		}
+		return renameOutput(part, g.dest)
+	}
+	if err := concatFiles(g.spec.Input, g.members); err != nil {
+		return fmt.Errorf("%s: join the parts into %s: %w", g.dest, g.spec.Input, err)
+	}
+	// The program writes the output, so its directory must exist first.
+	if err := os.MkdirAll(filepath.Dir(g.dest), 0o755); err != nil {
+		return fmt.Errorf("%s: %w", g.dest, err)
+	}
+	if err := j.runProgram(g, part); err != nil {
+		return err
+	}
+	return renameOutput(part, g.dest)
+}
+
+// renameOutput gives a finished .part file its real name.
+func renameOutput(part, dest string) error {
+	if err := os.Rename(part, dest); err != nil {
+		os.Remove(part)
+		return fmt.Errorf("%s: %w", dest, err)
 	}
 	return nil
 }
@@ -316,32 +386,31 @@ func missingOrders(members []*downloadItem) []string {
 	return out
 }
 
-// concatFiles streams the parts into a single file, in the order given. It
-// writes a .part sibling exactly as a transfer does, so an interrupted join
-// never leaves a truncated file wearing the output's name.
-func concatFiles(dest string, members []*downloadItem) error {
-	if dir := filepath.Dir(dest); dir != "" && dir != "." {
+// concatFiles streams the parts into path, in the order given. A failure
+// removes what it wrote. The caller gives path a name that is not the output's,
+// so an interrupted join never leaves a truncated file wearing that name.
+func concatFiles(path string, members []*downloadItem) error {
+	if dir := filepath.Dir(path); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
 	}
-	tmp := dest + ".part"
-	out, err := os.Create(tmp)
+	out, err := os.Create(path)
 	if err != nil {
 		return err
 	}
 	for _, item := range members {
 		if err := appendFile(out, item.dest()); err != nil {
 			out.Close()
-			os.Remove(tmp)
+			os.Remove(path)
 			return err
 		}
 	}
 	if err := out.Close(); err != nil {
-		os.Remove(tmp)
+		os.Remove(path)
 		return err
 	}
-	return os.Rename(tmp, dest)
+	return nil
 }
 
 // appendFile copies a single part into the open output. io.Copy streams it,
