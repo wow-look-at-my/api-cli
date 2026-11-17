@@ -1,20 +1,23 @@
-// A <tml> leaf under a watch runs as a real Bubble Tea program rather than through the repaint loop in watch.go.
+// A <tml> leaf under a watch runs as a tml program rather than through the repaint loop in watch.go.
 
 package main
 
 import (
 	"bytes"
+	"embed"
+	"errors"
+	"io/fs"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
-
 	"github.com/wow-look-at-my/tml"
+	"github.com/wow-look-at-my/tml/sema"
 )
 
-// A <tml> leaf under a watch runs as a real Bubble Tea program rather than through the repaint loop in watch.go.
+//go:embed ui/frame
+var frameUI embed.FS
 
 // tmlTickMsg asks the model to run the leaf again.
-type tmlTickMsg time.Time
+type tmlTickMsg struct{}
 
 type tmlModel struct {
 	every         time.Duration
@@ -22,75 +25,94 @@ type tmlModel struct {
 	frame         string
 	width, height int
 	code          int
+	// cancel stops the tick that waits.
+	cancel func()
 }
 
 // runTMLProgram paints body's output every interval until the user quits.
 func runTMLProgram(every time.Duration, body func() error) error {
-	_, width, height := stdoutSize()
-	m := &tmlModel{every: every, body: body, width: width, height: height}
-	if m.width <= 0 {
-		m.width, m.height = 80, 24
-	}
-	program, err := tml.NewProgram(m)
+	return runTMLWith(every, body, tml.ProgramOptions{NoMouse: true})
+}
+
+func runTMLWith(every time.Duration, body func() error, opts tml.ProgramOptions) error {
+	sub, err := fs.Sub(frameUI, "ui/frame")
 	if err != nil {
 		return err
 	}
-	final, err := program.Run()
+	view, err := tml.Load(sub, "Frame.tml", tml.Options{Dark: true})
 	if err != nil {
 		return err
 	}
-	if done, ok := final.(*tmlModel); ok && done.code != 0 {
-		exitCode = done.code
+	m := &tmlModel{every: every, body: body}
+	program, err := tml.NewProgram(view, m, opts)
+	if err != nil {
+		return err
+	}
+	err = program.Run()
+	if m.cancel != nil {
+		m.cancel()
+	}
+	if errors.Is(err, tml.ErrInterrupted) {
+		m.code, err = interruptExitCode, nil
+	}
+	if err != nil {
+		return err
+	}
+	if m.code != 0 {
+		exitCode = m.code
 	}
 	return nil
 }
 
-func (m *tmlModel) Init() tea.Cmd { return m.refresh() }
+// Props is the last frame that the leaf printed.
+func (m *tmlModel) Props() tml.Props { return tml.Props{"frame": sema.StringValue(m.frame)} }
 
-func (m *tmlModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+// Update takes one message from the program. A resize runs the leaf again at the new size.
+func (m *tmlModel) Update(p *tml.Program, msg tml.Msg) bool {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
+	case tml.Resize:
 		m.width, m.height = msg.Width, msg.Height
-		return m, m.refresh()
-	case tea.KeyPressMsg:
+		m.refresh(p)
+		return true
+	case tml.Key:
 		switch msg.String() {
 		case "ctrl+c":
 			m.code = interruptExitCode
-			return m, tea.Quit
+			p.Quit()
 		case "q", "esc":
-			return m, tea.Quit
+			p.Quit()
 		case "r":
-			return m, m.refresh()
+			m.refresh(p)
+		default:
+			return false
 		}
-	case tml.RepaintMsg:
-		return m, m.refresh()
-	case tmlTickMsg:
-		return m, m.refresh()
+		return true
+	case tml.RepaintMsg, tmlTickMsg:
+		m.refresh(p)
+		return true
 	}
-	return m, nil
+	return false
 }
 
-// View draws the last frame on the alternate screen, which is what keeps a
-// repeating dashboard from scrolling the user's shell history away.
-func (m *tmlModel) View() tea.View {
-	view := tea.NewView(m.frame)
-	view.AltScreen = true
-	return view
-}
-
-// refresh runs the leaf into a buffer and keeps the result as the frame. The
-// run happens here rather than in a command. This is because the leaf writes
-// through the package's own output channels and runs cannot hold them at the
-// same time.
-func (m *tmlModel) refresh() tea.Cmd {
+// refresh runs the leaf into a buffer, keeps the result as the frame, and sets
+// the next tick. The run stays on the program's goroutine, because the leaf
+// writes through the package's output channels and the runs cannot share them.
+func (m *tmlModel) refresh(p *tml.Program) {
 	var buf bytes.Buffer
+	width, height := m.width, m.height
+	if width <= 0 || height <= 0 {
+		width, height = 80, 24
+	}
 	prev := ttyOverride
-	ttyOverride = &termSize{width: m.width, height: m.height}
+	ttyOverride = &termSize{width: width, height: height}
 	err := captureInto(&buf, m.body)
 	ttyOverride = prev
 	if err != nil {
 		buf.WriteString("\nerror: " + err.Error() + "\n")
 	}
 	m.frame = buf.String()
-	return tea.Tick(m.every, func(t time.Time) tea.Msg { return tmlTickMsg(t) })
+	if m.cancel != nil {
+		m.cancel()
+	}
+	m.cancel = p.After(m.every, tmlTickMsg{})
 }
