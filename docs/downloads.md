@@ -39,7 +39,7 @@ The block comes off the screen when the queue drains, and the run's summary foll
 
 A start is never announced. The slot already says that a transfer runs. A separate `downloading` line only doubles the volume.
 
-In a pipe there is no display. The `downloaded` lines stay on stderr, and the destination paths go to stdout, one per line, for whatever reads them next.
+In a pipe there is no display. The `downloaded` lines stay on stderr, and the destination paths go to stdout, one per line, for whatever reads them next. A joined group lists its output once, in place of its parts, and only after the join writes it.
 
 The steps that feed a `<download>` report their progress too. On a terminal, the block holds one live line for the step that runs. It names the element, the poll try, and the `.status` field of the last response when the body has one. A retry shows as `retry 1/3`.
 

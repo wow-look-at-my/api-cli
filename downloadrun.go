@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/wow-look-at-my/go-containers/set"
 	"golang.org/x/term"
 )
 
@@ -151,12 +152,14 @@ func reportJoins(errs []error, code int) int {
 func reportDownloads(items []*downloadItem, elapsed time.Duration, tty bool) int {
 	var bytes int64
 	ok, failed := 0, 0
+	listed := set.New[string]()
 	for _, item := range items {
 		if item.state.Load() == dlDone {
 			ok++
 			bytes += item.done.Load()
-			if !tty {
-				fmt.Fprintln(execStdout, item.dest())
+			if p := landedPath(item); !tty && p != "" && !listed.Contains(p) {
+				listed.Add(p)
+				fmt.Fprintln(execStdout, p)
 			}
 			continue
 		}
@@ -174,6 +177,18 @@ func reportDownloads(items []*downloadItem, elapsed time.Duration, tty bool) int
 		}
 	}
 	return 1
+}
+
+// landedPath is the file an item leaves behind. A joined part is not the
+// result: its group's output is, and only when the join wrote it.
+func landedPath(item *downloadItem) string {
+	if item.spec.Join == nil {
+		return item.dest()
+	}
+	if _, err := os.Stat(item.spec.Join.Dest); err != nil {
+		return ""
+	}
+	return item.spec.Join.Dest
 }
 
 // mcpRunDownloads performs a leaf's downloads for an MCP tool call and reports

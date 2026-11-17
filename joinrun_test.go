@@ -106,7 +106,8 @@ func TestIntegration_JoinRunTransformsTheOutput(t *testing.T) {
 	}
 	assert.Contains(t, errOut, "running sh for good.out")
 	assert.Contains(t, errOut, "joined good.out (2 parts)")
-	assert.NotContains(t, stdout, ".joined", "stdout lists the downloaded parts, never the temporary input")
+	assert.ElementsMatch(t, []string{filepath.Join(out, "good.out"), filepath.Join(out, "bad.out")}, strings.Fields(stdout),
+		"stdout lists each group's output once, never its parts or the joined input")
 }
 
 // A program that fails fails its group only. The output never gets its real
@@ -120,8 +121,9 @@ func TestIntegration_JoinRunFailureKeepsTheParts(t *testing.T) {
 	cfg, err := loadStr(t, joinRunConfig(srv, parts, run))
 	require.NoError(t, err)
 
-	code, _, errOut := execCmdFull(t, cfg, "pull", "--download-dir", out)
+	code, stdout, errOut := execCmdFull(t, cfg, "pull", "--download-dir", out)
 	assert.Equal(t, 1, code)
+	assert.Equal(t, filepath.Join(out, "good.out")+"\n", stdout, "a group that failed lists nothing")
 	assert.Contains(t, errOut, `group "bad": <join><run>`)
 	assert.Contains(t, errOut, "exited with exit status 3")
 	assert.Contains(t, errOut, "the parts are kept")
