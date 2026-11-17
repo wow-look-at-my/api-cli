@@ -108,7 +108,7 @@ func (s *downloadSession) run(dls []Download, data map[string]any) int {
 
 	logVerbose("downloads: %d queued at concurrency %d", len(specs), s.settings.Concurrency)
 	start := time.Now()
-	j := newJoiner(specs, s.batch.log)
+	j := newJoiner(specs, s.batch.log, s.batch.errOut)
 	s.batch.onDone = j.note
 	for _, spec := range specs {
 		s.batch.add(spec)
@@ -180,7 +180,7 @@ func mcpRunDownloads(dls []Download, data map[string]any) (string, bool) {
 	if len(specs) == 0 {
 		return "no downloads: every <download> was skipped or matched nothing", false
 	}
-	j := newJoiner(specs, batch.log)
+	j := newJoiner(specs, batch.log, batch.errOut)
 	batch.onDone = j.note
 	for _, spec := range specs {
 		batch.add(spec)
