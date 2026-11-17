@@ -154,6 +154,24 @@ func TestIntegration_JoinRunThatWritesNothingFails(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(out, "clips", "good.out"))
 }
 
+// --concurrency caps the join programs too. Each program holds a lock directory
+// for a while, so programs at one time fail the second one.
+func TestIntegration_JoinRunHonoursConcurrency(t *testing.T) {
+	srv := partServer(t)
+	swapDownloadClient(t, srv)
+	out, parts := t.TempDir(), t.TempDir()
+
+	lock := filepath.Join(parts, "lock")
+	run := `<run>mkdir ` + lock + ` || exit 7; sleep 0.2; rmdir ` + lock + `; cp <value name="join.input"/> <value name="join.output"/></run>`
+	cfg, err := loadStr(t, joinRunConfig(srv, parts, run))
+	require.NoError(t, err)
+
+	code, _, errOut := execCmdFull(t, cfg, "pull", "--download-dir", out, "--concurrency", "1")
+	require.Equal(t, 0, code, "stderr: %s", errOut)
+	assert.FileExists(t, filepath.Join(out, "clips", "good.out"))
+	assert.FileExists(t, filepath.Join(out, "clips", "bad.out"))
+}
+
 // Every part of a group must render the same program.
 func TestIntegration_JoinRunMustAgreeAcrossTheGroup(t *testing.T) {
 	srv := partServer(t)

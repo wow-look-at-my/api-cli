@@ -114,6 +114,7 @@ Joined parts are not always the file you want. A raw video stream needs a mux st
 - **`.join.input`** is the joined parts, in order. It is a temporary file in `.run.tmpdir`, not the output.
 - **`.join.output`** is the `.part` sibling of the `to=` path. The program writes there. The file gets its real name only when the program exits 0. Name the output format yourself, as `-f mp4` does above, because a program cannot guess it from a `.part` extension.
 - The order per group: every part lands, the parts join into `.join.input`, the program runs, and then `cleanup="true"` removes the parts and `.join.input`.
+- Each group runs its program as soon as its own parts join, while other groups still transfer. `--concurrency` caps the programs that run at one time, as it caps the transfers.
 - **A program that fails fails its group.** A non-zero exit, or an exit 0 with nothing at `.join.output`, names the group, the command and the exit status on stderr. The run then exits non-zero. Nothing lands under the real name, and the group keeps its parts. The other groups continue.
 - A `running ffmpeg for clip.mp4` line marks the start of the program, and the `joined` line marks its success. The program's stdout and stderr print between them, above the download display, as a transport's stderr does. Stdout of api-cli stays the list of files that landed. The program gets no stdin.
 - Without a `<run>`, the joined parts are the output.

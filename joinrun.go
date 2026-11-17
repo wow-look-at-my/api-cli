@@ -58,11 +58,23 @@ func (j *joiner) checkRun(g *joinGroup) error {
 	return nil
 }
 
+// limitPrograms lets at most n <join><run> programs run at one time.
+func (j *joiner) limitPrograms(n int) {
+	if j == nil || n < 1 {
+		return
+	}
+	j.slots = make(chan struct{}, n)
+}
+
 // runProgram runs a group's <join><run>. The program's stdout and stderr go to
 // errOut, because stdout of this process lists the files that landed. A
 // failure removes what the program wrote and keeps the parts.
 func (j *joiner) runProgram(g *joinGroup, part string) error {
 	argv := g.spec.Argv
+	if j.slots != nil {
+		j.slots <- struct{}{}
+		defer func() { <-j.slots }()
+	}
 	j.log("running %s for %s", filepath.Base(argv[0]), filepath.Base(g.dest))
 
 	cmd := exec.Command(argv[0], argv[1:]...)

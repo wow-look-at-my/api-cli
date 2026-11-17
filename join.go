@@ -167,6 +167,8 @@ type joiner struct {
 	groups   map[string]*joinGroup
 	failures []error
 	wg       sync.WaitGroup
+	// slots caps how many <join><run> programs run at one time. Nil is no cap.
+	slots chan struct{}
 }
 
 // joinGroup is a single output and the members it still waits for.
