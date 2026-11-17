@@ -206,8 +206,9 @@ func TestJoinRun_CleanupRemovesPartsAndInput(t *testing.T) {
 	assert.Contains(t, log.String(), "running cp for whole.out")
 }
 
-func TestCommandLine(t *testing.T) {
-	assert.Equal(t, `ffmpeg -i /a/b.h264 'x y' ''`, commandLine([]string{"ffmpeg", "-i", "/a/b.h264", "x y", ""}))
+func TestShownArgv(t *testing.T) {
+	assert.Equal(t, "ffmpeg -i /a/b.h264", shownArgv([]string{"ffmpeg", "-i", "/a/b.h264"}))
+	assert.Empty(t, shownArgv(nil))
 }
 
 //go:embed testdata/join-run-config.xml.frag

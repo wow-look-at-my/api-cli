@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"strings"
 )
 
 // planJoinRun renders a join's program against the part's record, plus
@@ -53,7 +52,7 @@ func (j *joiner) checkRun(g *joinGroup) error {
 	for _, item := range g.members {
 		if !slices.Equal(item.spec.Join.Argv, g.spec.Argv) {
 			return fmt.Errorf("group %q: <join><run> rendered both `%s` and `%s`; it can read only the values every part of the group shares",
-				g.spec.Group, commandLine(g.spec.Argv), commandLine(item.spec.Join.Argv))
+				g.spec.Group, shownArgv(g.spec.Argv), shownArgv(item.spec.Join.Argv))
 		}
 	}
 	return nil
@@ -69,7 +68,7 @@ func (j *joiner) runProgram(g *joinGroup, part string) error {
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Stdout = j.errOut
 	cmd.Stderr = j.errOut
-	logVerbose("join: exec %s", commandLine(argv))
+	logVerbose("join: exec %s", shownArgv(argv))
 	err := cmd.Run()
 	if err == nil {
 		if _, serr := os.Stat(part); serr != nil {
@@ -85,17 +84,13 @@ func (j *joiner) runProgram(g *joinGroup, part string) error {
 		err = fmt.Errorf("exited with %s", exit)
 	}
 	return fmt.Errorf("%s: group %q: <join><run> `%s` %v; the parts are kept",
-		g.dest, g.spec.Group, commandLine(argv), err)
+		g.dest, g.spec.Group, shownArgv(argv), err)
 }
 
-// commandLine shows an argv the way a shell reads it back.
-func commandLine(argv []string) string {
-	out := make([]string, len(argv))
-	for i, a := range argv {
-		if a == "" || strings.ContainsAny(a, " \t\n'\"\\$`;&|<>()*?[]#~") {
-			a = shellQuote(a)
-		}
-		out[i] = a
+// shownArgv shows an argv the way a shell reads it back.
+func shownArgv(argv []string) string {
+	if len(argv) == 0 {
+		return ""
 	}
-	return strings.Join(out, " ")
+	return commandLine(argv[0], argv[1:])
 }
