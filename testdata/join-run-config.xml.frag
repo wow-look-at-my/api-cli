@@ -3,6 +3,6 @@
 		group="{{ .id }}" order="{{ .n }}">
 		<url>@URL@/part/<value name="id"/>/<value name="n"/></url>
 		<to>@PARTS@/<value name="id"/>/<value name="n"/>.part</to>
-		<join to="{{ .id }}.out" cleanup="true">@RUN@</join>
+		<join to="clips/{{ .id }}.out" cleanup="true">@RUN@</join>
 	</download>
 </command></config>

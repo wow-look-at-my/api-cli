@@ -97,16 +97,16 @@ func TestIntegration_JoinRunTransformsTheOutput(t *testing.T) {
 	require.Equal(t, 0, code, "stderr: %s", errOut)
 
 	for _, id := range []string{"good", "bad"} {
-		body, rerr := os.ReadFile(filepath.Join(out, id+".out"))
-		require.NoError(t, rerr)
+		body, rerr := os.ReadFile(filepath.Join(out, "clips", id+".out"))
+		require.NoError(t, rerr, "the program writes into a directory the join made for it")
 		want := strings.ToUpper(fmt.Sprintf("[%s/1][%s/2]", id, id))
 		assert.Equal(t, want, string(body))
-		assert.NoFileExists(t, filepath.Join(out, id+".out.part"))
+		assert.NoFileExists(t, filepath.Join(out, "clips", id+".out.part"))
 		assert.NoDirExists(t, filepath.Join(parts, id), "cleanup= removes the parts")
 	}
 	assert.Contains(t, errOut, "running sh for good.out")
 	assert.Contains(t, errOut, "joined good.out (2 parts)")
-	assert.ElementsMatch(t, []string{filepath.Join(out, "good.out"), filepath.Join(out, "bad.out")}, strings.Fields(stdout),
+	assert.ElementsMatch(t, []string{filepath.Join(out, "clips", "good.out"), filepath.Join(out, "clips", "bad.out")}, strings.Fields(stdout),
 		"stdout lists each group's output once, never its parts or the joined input")
 }
 
@@ -123,18 +123,18 @@ func TestIntegration_JoinRunFailureKeepsTheParts(t *testing.T) {
 
 	code, stdout, errOut := execCmdFull(t, cfg, "pull", "--download-dir", out)
 	assert.Equal(t, 1, code)
-	assert.Equal(t, filepath.Join(out, "good.out")+"\n", stdout, "a group that failed lists nothing")
+	assert.Equal(t, filepath.Join(out, "clips", "good.out")+"\n", stdout, "a group that failed lists nothing")
 	assert.Contains(t, errOut, `group "bad": <join><run>`)
 	assert.Contains(t, errOut, "exited with exit status 3")
 	assert.Contains(t, errOut, "the parts are kept")
 	assert.Contains(t, errOut, "muxer says hi", "the program's stderr reaches the user")
 
-	assert.NoFileExists(t, filepath.Join(out, "bad.out"))
-	assert.NoFileExists(t, filepath.Join(out, "bad.out.part"))
+	assert.NoFileExists(t, filepath.Join(out, "clips", "bad.out"))
+	assert.NoFileExists(t, filepath.Join(out, "clips", "bad.out.part"))
 	assert.FileExists(t, filepath.Join(parts, "bad", "1.part"), "a failed group keeps its parts, cleanup= or not")
 	assert.FileExists(t, filepath.Join(parts, "bad", "2.part"))
 
-	body, err := os.ReadFile(filepath.Join(out, "good.out"))
+	body, err := os.ReadFile(filepath.Join(out, "clips", "good.out"))
 	require.NoError(t, err, "the other group still lands")
 	assert.Equal(t, "[good/1][good/2]", string(body))
 }
@@ -151,7 +151,7 @@ func TestIntegration_JoinRunThatWritesNothingFails(t *testing.T) {
 	code, _, errOut := execCmdFull(t, cfg, "pull", "--download-dir", out)
 	assert.Equal(t, 1, code)
 	assert.Contains(t, errOut, "exited 0 but wrote no file at .join.output")
-	assert.NoFileExists(t, filepath.Join(out, "good.out"))
+	assert.NoFileExists(t, filepath.Join(out, "clips", "good.out"))
 }
 
 // Every part of a group must render the same program.

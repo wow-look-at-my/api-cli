@@ -307,6 +307,10 @@ func (j *joiner) write(g *joinGroup) error {
 	if err := concatFiles(g.spec.Input, g.members); err != nil {
 		return fmt.Errorf("%s: join the parts into %s: %w", g.dest, g.spec.Input, err)
 	}
+	// The program writes the output, so its directory must exist first.
+	if err := os.MkdirAll(filepath.Dir(g.dest), 0o755); err != nil {
+		return fmt.Errorf("%s: %w", g.dest, err)
+	}
 	if err := j.runProgram(g, part); err != nil {
 		return err
 	}
