@@ -29,12 +29,7 @@ func partServer(t *testing.T) *httptest.Server {
 // joinRunConfig is a two-group join whose parts land in partsDir, with run as
 // the <join>'s program.
 func joinRunConfig(srv *httptest.Server, partsDir, run string) string {
-	return `<config name="j"><command name="pull">
-		<download over="{{ toJson (list (dict &quot;id&quot; &quot;good&quot; &quot;n&quot; 1) (dict &quot;id&quot; &quot;good&quot; &quot;n&quot; 2) (dict &quot;id&quot; &quot;bad&quot; &quot;n&quot; 1) (dict &quot;id&quot; &quot;bad&quot; &quot;n&quot; 2)) }}"
-			group="{{ .id }}" order="{{ .n }}">
-			<url>` + srv.URL + `/part/<value name="id"/>/<value name="n"/></url>
-			<to>` + partsDir + `/<value name="id"/>/<value name="n"/>.part</to>
-			<join to="{{ .id }}.out" cleanup="true">` + run + joinRunConfigXml
+	return strings.NewReplacer("@URL@", srv.URL, "@PARTS@", partsDir, "@RUN@", run).Replace(joinRunConfigXml)
 }
 
 func TestJoinRun_Parses(t *testing.T) {
@@ -58,9 +53,7 @@ func TestJoinRun_RejectsBadGrammar(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := loadStr(t, testJoinRun_RejectsBadGrammarXml+tc.join+`
-				</download>
-			</command></config>`)
+			_, err := loadStr(t, strings.Replace(testJoinRun_RejectsBadGrammarXml, "@JOIN@", tc.join, 1))
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.want)
 		})
@@ -217,11 +210,11 @@ func TestCommandLine(t *testing.T) {
 	assert.Equal(t, `ffmpeg -i /a/b.h264 'x y' ''`, commandLine([]string{"ffmpeg", "-i", "/a/b.h264", "x y", ""}))
 }
 
-//go:embed testdata/join-run-config.xml
+//go:embed testdata/join-run-config.xml.frag
 var joinRunConfigXml string
 
 //go:embed testdata/test-join-run-parses.xml
 var testJoinRun_ParsesXml string
 
-//go:embed testdata/test-join-run-rejects-bad-grammar.xml
+//go:embed testdata/test-join-run-rejects-bad-grammar.xml.frag
 var testJoinRun_RejectsBadGrammarXml string

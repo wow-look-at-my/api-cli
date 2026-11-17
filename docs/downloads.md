@@ -86,6 +86,38 @@ An API that hands out a capture in numbered parts wants those parts back as one 
 - Each member needs its own `<to>`. That `<to>` must name a file. The parts are separate files until the join makes them one.
 - The output goes through a `.part` sibling too. An interrupted join therefore leaves no truncated file under the real name.
 
+### Making the output with a program: `<join><run>`
+
+Joined parts are not always the file you want. A raw video stream needs a mux step before it plays. A `<run>` inside `<join>` names the program that turns the joined parts into the output.
+
+```xml
+<join to="{{ .clip }}.mp4" cleanup="true">
+	<run>
+		<argv>ffmpeg</argv>
+		<argv>-fflags</argv>
+		<argv>+genpts</argv>
+		<argv>-f</argv>
+		<argv><value name="format"/></argv>
+		<argv>-i</argv>
+		<argv><value name="join.input"/></argv>
+		<argv>-c</argv>
+		<argv>copy</argv>
+		<argv>-f</argv>
+		<argv>mp4</argv>
+		<argv><value name="join.output"/></argv>
+	</run>
+</join>
+```
+
+- The `<run>` takes an `<argv>` list or shell text, as any `<run>` does. A `<request>` is not a program, so the loader rejects one here.
+- It renders against the record that `to=` renders against, plus `.join.input` and `.join.output`. Every part of a group must render the same program, so read only the values the whole group shares. A program that differs between parts fails the group.
+- **`.join.input`** is the joined parts, in order. It is a temporary file in `.run.tmpdir`, not the output.
+- **`.join.output`** is the `.part` sibling of the `to=` path. The program writes there. The file gets its real name only when the program exits 0. Name the output format yourself, as `-f mp4` does above, because a program cannot guess it from a `.part` extension.
+- The order per group: every part lands, the parts join into `.join.input`, the program runs, and then `cleanup="true"` removes the parts and `.join.input`.
+- **A program that fails fails its group.** A non-zero exit, or an exit 0 with nothing at `.join.output`, names the group, the command and the exit status on stderr. The run then exits non-zero. Nothing lands under the real name, and the group keeps its parts. The other groups continue.
+- A `running ffmpeg for clip.mp4` line marks the start of the program, and the `joined` line marks its success. The program's stdout and stderr print between them, above the download display, as a transport's stderr does. Stdout of api-cli stays the list of files that landed. The program gets no stdin.
+- Without a `<run>`, the joined parts are the output.
+
 ## A working directory for the parts: `.run.tmpdir`
 
 A leaf that declares `<download>` gets a scratch directory of its own at `.run.tmpdir`. The directory is removed when the run ends, whatever the outcome. Parts that a `<join>` consumes belong there, so nothing outside the config has to make a directory and pass it in. Files you mean to keep go under the download directory instead, which this never touches.
