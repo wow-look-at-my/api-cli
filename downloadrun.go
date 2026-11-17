@@ -48,9 +48,22 @@ func startDownloadSession(c *cobra.Command) *downloadSession {
 		fmt.Fprintln(errOut, msg)
 	}
 	s.batch.log = func(format string, args ...any) { line(fmt.Sprintf(format, args...)) }
-	s.batch.errOut = errOut
+	// A program's output takes the same lock, so it never interleaves with a log line.
+	s.batch.errOut = &lockedWriter{mu: &mu, w: errOut}
 	stepWatch = &stepWatcher{log: line}
 	return s
+}
+
+// lockedWriter serializes writes from several goroutines onto one writer.
+type lockedWriter struct {
+	mu *sync.Mutex
+	w  io.Writer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
 }
 
 // startTUI takes over the terminal. A display that cannot start says why, and
@@ -169,9 +182,11 @@ func reportDownloads(items []*downloadItem, elapsed time.Duration, tty bool) int
 func mcpRunDownloads(dls []Download, data map[string]any) (string, bool) {
 	settings := resolveDownloadSettings(nil)
 	var log strings.Builder
+	var mu sync.Mutex
+	logOut := &lockedWriter{mu: &mu, w: &log}
 	batch := sharedQueue(settings.Concurrency, settings.Retries).batch(func(format string, args ...any) {
-		fmt.Fprintf(&log, format+"\n", args...)
-	}, &log)
+		fmt.Fprintf(logOut, format+"\n", args...)
+	}, logOut)
 
 	specs, err := planDownloads(dls, data, settings.Dir)
 	if err != nil {
