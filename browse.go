@@ -9,17 +9,14 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"strconv"
+	"slices"
 	"strings"
-	"unicode"
-	"unicode/utf8"
+	"time"
 
 	"golang.org/x/term"
 
 	"github.com/spf13/cobra"
 	"github.com/wow-look-at-my/tml"
-	"github.com/wow-look-at-my/tml/input"
-	"github.com/wow-look-at-my/tml/sema"
 )
 
 //go:embed ui/browse

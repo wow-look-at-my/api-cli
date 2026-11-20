@@ -40,7 +40,7 @@ func TestFlattenBrowse(t *testing.T) {
 	for _, e := range entries {
 		labels = append(labels, e.label())
 	}
-	assert.Equal(t, []string{"repos/", "  list", "files", "raw", "fail"}, labels)
+	assert.Equal(t, []string{"repos ▾", "  list", "files", "raw", "fail"}, labels)
 
 	list := browseEntryAt(t, entries, "repos list")
 	assert.Equal(t, "Really?", list.confirm, "confirm= is inherited")
@@ -97,17 +97,18 @@ func TestBrowseExec(t *testing.T) {
 	t.Serial()
 	cfg := loadBrowseConfig(t)
 
-	out, code := browseExec(cfg, []string{"repos", "list", "--limit=5", "--topic=a", "--topic=b", "acme"}, 80, 24)
-	assert.Equal(t, 0, code)
-	assert.Contains(t, out, "list acme 5 false a+b", "confirm is skipped, because the browser asked already")
+	out := browseExec(cfg, []string{"repos", "list", "--limit=5", "--topic=a", "--topic=b", "acme"}, 80, 24)
+	assert.Equal(t, 0, out.code)
+	assert.Contains(t, out.text, "list acme 5 false a+b", "confirm is skipped, because the browser asked already")
+	assert.Equal(t, out.text, out.raw, "a shell command prints its body as it is")
 
-	out, code = browseExec(cfg, []string{"fail"}, 80, 24)
-	assert.Equal(t, 3, code)
-	assert.Contains(t, out, "broke")
+	out = browseExec(cfg, []string{"fail"}, 80, 24)
+	assert.Equal(t, 3, out.code)
+	assert.Contains(t, out.text, "broke")
 
-	out, code = browseExec(cfg, []string{"repos", "list"}, 80, 24)
-	assert.Equal(t, 1, code)
-	assert.Contains(t, out, "Error:", "a cobra error lands in the output pane")
+	out = browseExec(cfg, []string{"repos", "list"}, 80, 24)
+	assert.Equal(t, 1, out.code)
+	assert.Contains(t, out.text, "Error:", "a cobra error lands in the output pane")
 }
 
 // browseHarness is the program for the model: it sends keys, and runs each command in place.
@@ -116,11 +117,30 @@ type browseHarness struct {
 	m    *browseModel
 	runs [][]string
 	quit bool
+	// deferred queues work instead of running it, for a test that steps through it.
+	deferred bool
+	queue    []func() tml.Msg
 }
 
 func (h *browseHarness) Quit() { h.quit = true }
 
-func (h *browseHarness) Go(work func() tml.Msg) { h.m.update(h, work()) }
+func (h *browseHarness) Go(work func() tml.Msg) {
+	if h.deferred {
+		h.queue = append(h.queue, work)
+		return
+	}
+	h.m.update(h, work())
+}
+
+// step runs the oldest queued work and hands its message to the model.
+func (h *browseHarness) step() {
+	if len(h.queue) == 0 {
+		return
+	}
+	work := h.queue[0]
+	h.queue = h.queue[1:]
+	h.m.update(h, work())
+}
 
 func newBrowseHarness(t *testing.T) *browseHarness {
 	t.Helper()
@@ -128,11 +148,17 @@ func newBrowseHarness(t *testing.T) *browseHarness {
 	m, err := newBrowseModel(loadBrowseConfig(t))
 	require.NoError(t, err)
 	h := &browseHarness{t: t, m: m}
-	m.exec = func(argv []string, _, _ int) (string, int) {
+	m.exec = func(argv []string, _, _ int) browseOutput {
 		h.runs = append(h.runs, argv)
-		return "ran " + strings.Join(argv, " ") + "\n\tdone", 0
+		text := "ran " + strings.Join(argv, " ") + "\n\tdone"
+		return browseOutput{text: text, raw: text}
 	}
 	return h
+}
+
+func (h *browseHarness) focused() string {
+	f, _ := h.m.view.UI().Focused()
+	return f
 }
 
 // press sends each key as a program does: to the model first, then to the focus ring.
@@ -159,30 +185,32 @@ func TestBrowseModelFillAndRun(t *testing.T) {
 	m := h.m
 
 	h.press("down")
-	assert.Equal(t, []string{"repos", "list"}, m.entry().path)
+	assert.Equal(t, []string{"repos", "list"}, m.cur.path)
 	h.press("enter")
-	focused, _ := m.view.UI().Focused()
-	assert.Equal(t, "arg-owner", focused)
+	assert.Equal(t, "arg-owner", h.focused(), "enter on a command with an empty required arg fills it in")
 
 	h.typeText("acmx")
 	h.press("backspace")
 	h.typeText("e")
-	assert.Equal(t, "acme", m.entry().fields[0].value)
+	assert.Equal(t, "acme", m.cur.fields[0].value)
 	assert.Contains(t, m.frame(), "tool repos list acme")
 
 	h.press("enter")
 	assert.True(t, m.confirming, "repos asks for confirmation")
+	assert.Contains(t, m.frame(), "Really?", "the popup shows the command's own prompt")
 	assert.Empty(t, h.runs)
 	h.press("esc")
 	assert.False(t, m.confirming)
 	assert.Empty(t, h.runs)
 
 	h.press("enter")
-	m.act(h, "confirm")
+	m.act("confirm")
 	require.Len(t, h.runs, 1)
 	assert.Equal(t, []string{"repos", "list", "acme"}, h.runs[0])
 	assert.False(t, m.running)
-	assert.Equal(t, []string{"ran repos list acme", "    done"}, m.output)
+	require.NotNil(t, m.top())
+	assert.Equal(t, []string{"ran repos list acme", "    done"}, m.top().lines())
+	assert.Equal(t, viewText, m.top().view, "output that is not JSON shows as text")
 	frame := m.frame()
 	assert.Contains(t, frame, "exit 0")
 	assert.Contains(t, frame, "ran repos list acme")
@@ -192,8 +220,9 @@ func TestBrowseModelToggleAndErrors(t *testing.T) {
 	h := newBrowseHarness(t)
 	m := h.m
 
-	h.press("down", "enter")
-	m.act(h, "toggle:flag-archived")
+	h.press("down", "right")
+	assert.Equal(t, "arg-owner", h.focused(), "the right arrow moves into the form")
+	m.act("toggle:flag-archived")
 	assert.True(t, m.field("flag-archived").checked)
 
 	m.view.UI().Focus("tree")
@@ -201,23 +230,29 @@ func TestBrowseModelToggleAndErrors(t *testing.T) {
 	assert.True(t, h.quit)
 	assert.Equal(t, 0, m.code)
 
-	m.pick(1)
-	m.entry().fields[0].value = ""
-	m.start(h)
+	list := browseEntryAt(t, m.entries, "repos list")
+	m.pick(list)
+	list.fields[0].value = ""
+	m.start(false)
 	assert.Equal(t, "owner is required", m.status)
+	assert.Equal(t, "arg-owner", h.focused(), "a missing input takes the focus")
 	assert.Empty(t, h.runs)
 
-	m.pick(0)
-	m.start(h)
+	m.pick(m.entries[0])
+	m.start(false)
 	assert.Empty(t, h.runs, "a group does not run")
-	assert.Contains(t, m.frame(), "A group.")
+	assert.Contains(t, m.frame(), "Repositories.")
 
-	m.pick(4)
-	m.start(h)
+	m.pick(browseEntryAt(t, m.entries, "fail"))
+	m.start(false)
 	assert.Equal(t, [][]string{{"fail"}}, h.runs)
 
-	m.finish(browseRunMsg{line: "tool fail", output: "broke\n", code: 3})
-	assert.Equal(t, "exit 3  tool fail", m.status)
+	m.runID++
+	m.launched = &pendingRun{entry: m.cur, argv: []string{"fail"}}
+	m.running = true
+	m.finish(browseRunMsg{id: m.runID, line: "tool fail", out: browseOutput{text: "broke\n", raw: "broke\n", code: 3}})
+	assert.Contains(t, m.status, "exit 3")
+	assert.Contains(t, m.status, "tool fail")
 	assert.Equal(t, "bad", m.statusStyle)
 }
 
@@ -229,19 +264,18 @@ func TestBrowseModelEventsAndExits(t *testing.T) {
 	assert.Equal(t, 90, m.width)
 	assert.Equal(t, 20, m.height)
 
-	h.press("down", "enter")
+	h.press("down", "right")
 	assert.True(t, m.update(h, tml.Event{Kind: tml.Changed, ID: "arg-owner", Value: "zed"}))
 	assert.Equal(t, "zed", m.field("arg-owner").value, "the field keeps an edit from the textbox")
 
 	h.press("esc")
-	focused, _ := m.view.UI().Focused()
-	assert.Equal(t, "tree", focused, "esc in the form goes back to the tree")
+	assert.Equal(t, "tree", h.focused(), "esc in the form goes back to the tree")
 	assert.False(t, h.quit)
 	h.press("esc")
 	assert.True(t, h.quit, "esc in the tree quits")
 
 	assert.True(t, m.update(h, tml.Event{Kind: tml.Activated, ID: "tree", Y: 0}))
-	assert.Equal(t, 0, m.sel, "a click on a tree row picks it")
+	assert.Equal(t, m.entries[0], m.cur, "a click on a tree row picks it")
 
 	h.quit = false
 	h.press("ctrl+c")
@@ -254,9 +288,47 @@ func TestBrowseTreeWindowsTheSelection(t *testing.T) {
 	m := h.m
 	m.height = 10
 	assert.Equal(t, 3, m.treeRows())
-	m.pick(4)
+	m.pick(browseEntryAt(t, m.entries, "fail"))
 	assert.Equal(t, 2, m.treeStart())
-	assert.NotContains(t, m.frame(), "repos/")
+	assert.NotContains(t, m.frame(), "repos ▾")
+}
+
+func TestBrowseTreeCollapsesAndFilters(t *testing.T) {
+	h := newBrowseHarness(t)
+	m := h.m
+
+	h.press("left")
+	assert.True(t, m.entries[0].collapsed, "left shuts a group")
+	assert.Len(t, m.visible(), 4)
+	assert.Contains(t, m.frame(), "repos ▸")
+	h.press("enter")
+	assert.False(t, m.entries[0].collapsed, "enter opens a shut group")
+
+	h.press("down", "left")
+	assert.Equal(t, m.entries[0], m.cur, "left on a child goes to its group")
+
+	h.press("/")
+	assert.Equal(t, "filter", h.focused())
+	h.typeText("fa")
+	assert.Equal(t, []string{"fail"}, entryPaths(m.visible()))
+	assert.Equal(t, "fail", m.cur.pathString(), "the selection follows the first match")
+	h.press("esc")
+	assert.Empty(t, m.filter)
+	assert.Equal(t, "tree", h.focused())
+
+	h.press("/")
+	h.typeText("list")
+	assert.Equal(t, []string{"repos", "repos list"}, entryPaths(m.visible()), "a match keeps its group")
+	h.press("enter")
+	assert.Equal(t, "arg-owner", h.focused(), "enter from the filter opens what it found")
+}
+
+func entryPaths(list []*browseEntry) []string {
+	out := make([]string, len(list))
+	for i, e := range list {
+		out[i] = e.pathString()
+	}
+	return out
 }
 
 func TestTUISubcommand(t *testing.T) {

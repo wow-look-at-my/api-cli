@@ -207,7 +207,7 @@ func (m *browseModel) schedule(f *resultFrame) {
 	if f.entry.watch == "" {
 		return
 	}
-	interval, err := parseWatchInterval(f.entry.watch)
+	interval, err := parseWatchInterval("watch=", f.entry.watch)
 	if err != nil || interval <= 0 {
 		return
 	}
