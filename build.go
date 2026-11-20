@@ -83,6 +83,7 @@ func buildCommand(node Command, inheritedVars map[string]any, inheritedPre []str
 		if count != nil {
 			cmd.Args = chainArgs(count, matchArgPatterns(node, argPatterns(node)))
 		}
+		cmd.ValidArgsFunction = argChoiceCompletion(node)
 
 		for _, f := range node.Flags {
 			registerFlag(cmd, f)
@@ -243,6 +244,9 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 		})
 	}
 	if err != nil {
+		return err
+	}
+	if err := checkChoices(node, data, func(name string) bool { return cliSupplied(c, node, args, name) }); err != nil {
 		return err
 	}
 

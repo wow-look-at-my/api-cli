@@ -33,6 +33,9 @@ func validateArgsAndFlags(c *Command, where string) error {
 		if a.Variadic && i != len(c.Args)-1 {
 			return fmt.Errorf("%s: variadic arg %q must be the last arg", aw, a.Name)
 		}
+		if err := validateChoices(a.Choices, a.Type, aw); err != nil {
+			return err
+		}
 		if !a.Required {
 			requiredAfterOptional = true
 		} else if requiredAfterOptional {
@@ -65,6 +68,12 @@ func validateArgsAndFlags(c *Command, where string) error {
 		}
 		if strings.HasPrefix(fl.Name, "no-") {
 			return fmt.Errorf("%s: flag name %q cannot start with \"no-\" (reserved for bool negation)", fw, fl.Name)
+		}
+		if err := validateChoices(fl.Choices, fl.Type, fw); err != nil {
+			return err
+		}
+		if err := validateFlagDefaultChoice(fl, fw); err != nil {
+			return err
 		}
 	}
 	for i, fl := range c.Flags {
@@ -122,6 +131,14 @@ func registerFlag(cmd *cobra.Command, f Flag) {
 	}
 	if f.Required {
 		_ = cmd.MarkFlagRequired(f.Name)
+	}
+	if len(f.Choices) > 0 {
+		choices := f.Choices
+		usage := strings.TrimSpace(f.Description + " (one of: " + strings.Join(choices, ", ") + ")")
+		cmd.Flags().Lookup(f.Name).Usage = usage
+		_ = cmd.RegisterFlagCompletionFunc(f.Name, func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+			return choices, cobra.ShellCompDirectiveNoFileComp
+		})
 	}
 }
 
