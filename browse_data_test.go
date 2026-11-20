@@ -224,6 +224,34 @@ func TestBrowseClickOnARow(t *testing.T) {
 	assert.Equal(t, []string{"repos", "view", "acme", "web"}, h.runs[len(h.runs)-1])
 }
 
+// The GitHub sample shows both halves: links it declares, and links the browser finds on its own.
+func TestBrowseGithubSampleLinks(t *testing.T) {
+	cfg, err := Load("samples/github/github.xml")
+	require.NoError(t, err)
+	m, err := newBrowseModel(cfg)
+	require.NoError(t, err)
+
+	repos := m.byPath["user repos"]
+	repos.fields[0].value = "octocat"
+	rec := map[string]any{"full_name": "octocat/hello", "name": "hello", "owner": map[string]any{"login": "octocat"}}
+	links := m.linksFor(repos, rec, repos.inputs())
+	require.NotEmpty(t, links)
+	assert.Equal(t, "Open", links[0].label)
+	assert.Equal(t, "repo get", links[0].target.pathString())
+	assert.Equal(t, "octocat/hello", links[0].values["repo"])
+
+	issues := m.byPath["repo issues"]
+	issues.fields[0].value = "octocat/hello"
+	links = m.linksFor(issues, map[string]any{"number": int64(7), "title": "bug"}, issues.inputs())
+	require.NotEmpty(t, links, "nothing declares a link from an issue, so these are inferred")
+	assert.Equal(t, "repo issue", links[0].target.pathString(), "number comes from the row, repo from the form it ran with")
+	assert.Equal(t, map[string]string{"repo": "octocat/hello", "number": "7"}, links[0].values)
+
+	prs := m.byPath["repo prs"]
+	links = m.linksFor(prs, map[string]any{"number": int64(7)}, map[string]string{"repo": "octocat/hello"})
+	assert.Equal(t, "repo pr", links[0].target.pathString(), "the declared link goes first")
+}
+
 func TestBrowseHelpPopup(t *testing.T) {
 	h := newDataHarness(t)
 	h.press("?")

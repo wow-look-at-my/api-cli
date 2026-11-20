@@ -130,12 +130,21 @@
 			<entry>
 				<path><if test="arg.username">/users/<value name="arg.username" as="urlpath"/><else/>/user</if></path>
 			</entry>
+			<!-- A user record calls its name login, and the commands below call it username, so the links say which is which. -->
+			<tui>
+				<link to="user repos" label="Repositories">
+					<with name="username" field="login"/>
+				</link>
+				<link to="user orgs" label="Organizations">
+					<with name="username" field="login"/>
+				</link>
+			</tui>
 		</command>
 		<command name="repos" description="List a user's public repositories.">
 			<arg name="username" type="string" required="true"/>
 			<flag name="limit" short="n" type="int" default="30" description="Items per page (max 100)."/>
 			<flag name="page" short="p" type="int" default="1" description="Page number."/>
-			<flag name="sort" type="string" default="updated" description="created|updated|pushed|full_name."/>
+			<flag name="sort" type="string" default="updated" choices="created,updated,pushed,full_name" description="Sort order."/>
 			<fields>
 				<field name="name">full_name</field>
 				<field name="stars">stargazers_count</field>
@@ -143,6 +152,21 @@
 				<field name="lang" default="-">language</field>
 				<field name="description" default="-" priority="-2">description</field>
 			</fields>
+			<!-- The repo commands take owner/name, which a repository record holds as full_name. -->
+			<tui>
+				<link to="repo get" label="Open">
+					<with name="repo" field="full_name"/>
+				</link>
+				<link to="repo issues" label="Issues">
+					<with name="repo" field="full_name"/>
+				</link>
+				<link to="repo prs" label="Pull requests">
+					<with name="repo" field="full_name"/>
+				</link>
+				<link to="repo dash" label="Dashboard">
+					<with name="repo" field="full_name"/>
+				</link>
+			</tui>
 			<entry>
 				<path>/users/<value name="arg.username" as="urlpath"/>/repos</path>
 				<query>
@@ -167,7 +191,7 @@
 
 	<command name="repo" description="Read repository info.">
 		<command name="get" description="Fetch a repository.">
-			<arg name="repo" type="string" required="true" description="owner/name."/>
+			<arg name="repo" type="string" required="true" description="owner/name." suggest="user repos" suggest-field="full_name"/>
 			<fields>
 				<field name="repo">full_name</field>
 				<field name="description" default="-">description</field>
@@ -220,7 +244,7 @@
 		</command>
 		<command name="issues" description="List issues for a repository.">
 			<arg name="repo" type="string" required="true" description="owner/name."/>
-			<flag name="state" type="string" default="open" description="open|closed|all."/>
+			<flag name="state" type="string" default="open" choices="open,closed,all" description="Which issues."/>
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
 			<flag name="labels" type="string" default="" description="Comma-separated label names."/>
@@ -259,7 +283,11 @@
 		</command>
 		<command name="prs" description="List pull requests for a repository.">
 			<arg name="repo" type="string" required="true" description="owner/name."/>
-			<flag name="state" type="string" default="open" description="open|closed|all."/>
+			<flag name="state" type="string" default="open" choices="open,closed,all" description="Which pull requests."/>
+			<!-- A row's number fits an issue as well as a pull request, so this says which one enter opens. -->
+			<tui>
+				<link to="repo pr"/>
+			</tui>
 			<flag name="limit" short="n" type="int" default="30"/>
 			<flag name="page" short="p" type="int" default="1"/>
 			<fields>
