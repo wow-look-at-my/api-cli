@@ -46,7 +46,7 @@ func (m *browseModel) linksFor(src *browseEntry, rec map[string]any, carried map
 				link.fromRecord++
 			}
 		}
-		fillLink(&link, rec, carried)
+		fillLink(&link, src, rec, carried)
 		out = append(out, link)
 	}
 
@@ -56,7 +56,7 @@ func (m *browseModel) linksFor(src *browseEntry, rec map[string]any, carried map
 			continue
 		}
 		link := browseLink{target: target, values: map[string]string{}}
-		fillLink(&link, rec, carried)
+		fillLink(&link, src, rec, carried)
 		if link.fromRecord == 0 || len(link.missing) > 0 {
 			continue
 		}
@@ -84,8 +84,9 @@ func (m *browseModel) linksFor(src *browseEntry, rec map[string]any, carried map
 }
 
 // fillLink completes a link's values. An arg, and a required flag, take a record field of the same name.
+// A row of a listing named for the plural of an arg is one of those things, so that arg takes the row's identity.
 // Any input still empty takes the value the user typed for that name elsewhere.
-func fillLink(link *browseLink, rec map[string]any, carried map[string]string) {
+func fillLink(link *browseLink, src *browseEntry, rec map[string]any, carried map[string]string) {
 	for i := range link.target.fields {
 		f := &link.target.fields[i]
 		name := f.name()
@@ -97,6 +98,13 @@ func fillLink(link *browseLink, rec map[string]any, carried map[string]string) {
 		}
 		if f.arg != nil || f.required {
 			if v, ok := recordValue(rec, name); ok {
+				link.values[name] = v
+				link.fromRecord++
+				continue
+			}
+		}
+		if f.arg != nil && pluralOf(src.node.Name, name) {
+			if v, ok := identityValue(rec); ok {
 				link.values[name] = v
 				link.fromRecord++
 				continue
@@ -163,6 +171,27 @@ func recordValue(rec map[string]any, name string) (string, bool) {
 		}
 		s := fields.DisplayValue(v)
 		return s, s != ""
+	}
+	return "", false
+}
+
+// pluralOf reports whether a command name is the plural of an input name: repos for repo, branches for branch.
+func pluralOf(command, input string) bool {
+	c, i := normName(command), normName(input)
+	return c == i+"s" || c == i+"es" || (strings.HasSuffix(i, "y") && c == i[:len(i)-1]+"ies")
+}
+
+// identityKeysForLinks are the fields that name a record to another command, in order.
+var identityKeysForLinks = []string{"full_name", "slug", "id", "key", "name"}
+
+// identityValue is the value that names a record to another command.
+func identityValue(rec map[string]any) (string, bool) {
+	for _, k := range identityKeysForLinks {
+		if v, ok := rec[k]; ok && isScalar(v) && v != nil {
+			if s := fields.DisplayValue(v); s != "" {
+				return s, true
+			}
+		}
 	}
 	return "", false
 }

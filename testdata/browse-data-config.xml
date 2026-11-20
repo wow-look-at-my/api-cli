@@ -24,6 +24,13 @@
 		</fields>
 		<run>printf '{"items":[{"number":1,"title":"broken for <value name="arg.owner"/>","body":"long text"}]}'</run>
 	</command>
+	<command name="tags" description="Tags.">
+		<run>printf '%s' '[{"name":"v1","sha":"abc"},{"name":"v2","sha":"def"}]'</run>
+	</command>
+	<command name="tag" description="One tag.">
+		<arg name="tag" required="true"/>
+		<run>printf '{"name":"%s","sha":"abc"}' <value name="arg.tag"/></run>
+	</command>
 	<command name="internal">
 		<tui hidden="true"/>
 		<run>echo secret</run>

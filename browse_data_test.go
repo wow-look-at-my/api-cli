@@ -252,6 +252,23 @@ func TestBrowseGithubSampleLinks(t *testing.T) {
 	assert.Equal(t, "repo pr", links[0].target.pathString(), "the declared link goes first")
 }
 
+func TestBrowseInfersALinkFromAPluralListing(t *testing.T) {
+	h := newDataHarness(t)
+	h.m.pick(h.m.byPath["tags"])
+	h.press("enter")
+	assert.Equal(t, []string{"tags"}, h.runs[len(h.runs)-1], "enter runs a command that takes no input")
+	links := h.m.links()
+	require.NotEmpty(t, links)
+	assert.Equal(t, "tag", links[0].target.pathString(), "a row of tags is a tag, so it fills the tag arg")
+	assert.Equal(t, map[string]string{"tag": "v1"}, links[0].values)
+	h.press("down", "enter")
+	assert.Equal(t, []string{"tag", "v2"}, h.runs[len(h.runs)-1])
+
+	assert.True(t, pluralOf("branches", "branch"))
+	assert.True(t, pluralOf("policies", "policy"))
+	assert.False(t, pluralOf("issues", "repo"))
+}
+
 func TestBrowsePages(t *testing.T) {
 	h := newBrowseHarness(t)
 	e := browseEntryAt(t, h.m.entries, "fail")
