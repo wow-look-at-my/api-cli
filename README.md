@@ -178,17 +178,15 @@ A config can make the repeat the default. `watch="5s"` on a `<command>` says the
 
 ## TUI
 
-The built-in `tui` subcommand opens an interactive explorer of the config. The left pane is the command tree. The right pane is a form for the selected command: one field per arg and flag, with a checkbox for a bool flag. The bottom pane shows the output of the last run.
+The built-in `tui` subcommand turns any config into a terminal app, with no extra markup. Each command gets a form. A JSON result becomes a table you can step into. A record links to the commands whose inputs it can fill. A history takes you back.
 
 ```bash
 api-cli tui --config github.xml
 ```
 
-The up and down keys pick a command. Enter moves into its form. Tab moves between the fields, and enter in a field runs the command. Ctrl+R runs from anywhere, esc goes back to the tree, and q quits from the tree. Under the form is the command line that the run is equal to. You can copy it.
+A `<tui>` element on a command adjusts what the browser inferred: its label, the columns, where the records sit, and the links a record opens. `choices=` on an arg or a flag makes a picker, and every reader enforces it. `suggest=` lists likely values from another command. [docs/tui.md](docs/tui.md) covers all of it, with the keys.
 
-A run is the same as that command line, with `--yes`. A command that declares `confirm=` asks in a popup first. An empty field is left out, so cobra applies the declared default. A variadic arg and a passthrough command split their field on spaces. A `string-slice` flag splits on commas. The `tui` subcommand needs a terminal on stdin and stdout.
-
-A config cannot declare a command named `tui`.
+The `tui` subcommand needs a terminal on stdin and stdout. A config cannot declare a command named `tui`.
 
 ## Examples
 

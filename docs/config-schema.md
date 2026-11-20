@@ -45,6 +45,8 @@ One example is the rule that a leaf needs a run, its own or an ancestor's. api-c
 
 `<arg name= type="string|int" required= variadic= pattern= description=/>`. A `variadic` arg comes last, and it collects the rest into a typed slice. Pair it with `spread`. A required arg cannot follow an optional one, because cobra counts positions and nothing can fill the gap. `pattern=` is a Go regular expression every supplied value must match, and a [runnable parent](#a-parent-that-also-runs) requires one on each arg. It is also a template. It can name a `<var>` or the built-in `{{ segmentPattern }}`. An MCP tool call is checked against it too, and the tool's `inputSchema` states it.
 
+`choices="a,b,c"` on an arg or a flag is the closed set of values it takes. The command line rejects any other value, shell completion offers the set, and the MCP `inputSchema` publishes it as an `enum`. A bool takes none, and a flag's default must be one of them. `suggest="repos list"` and `suggest-field="name"` name a command that lists likely values, for the `tui` subcommand. See [docs/tui.md](tui.md).
+
 **Every declared arg is present.** An omitted optional arg holds the zero value of its type. That is `""` for a string, `0` for an int, and an empty slice for a variadic. A string reaches `urlpath .arg.id`, and every other helper that takes a string, with no guard around it. The same holds on the MCP side for a tool argument the caller leaves out.
 
 One predicate covers both cases. `{{ .arg.id }}` is truthy when the arg is present, and `{{ not .arg.id }}` is truthy when it is omitted. That is the same truthiness `<if test=>` uses, so `<if test="arg.id">` and `when="{{ .arg.id }}"` always agree.
