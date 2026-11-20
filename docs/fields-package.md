@@ -23,8 +23,6 @@ out, err := fields.Render(nil, f, body, map[string]any{"data": body}, "", 0)
 | `Renderer` | The template evaluator the caller injects (see below). |
 | `KnownSink`, `Sinks` | The representation names `Render` accepts. |
 | `Lookup`, `LookupValue` | Resolve a dotted path through decoded JSON, maps by key and lists by index. |
-| `MarshalJSON`, `SortedKeys`, `JSONTypeName` | The JSON helpers the sinks use, exported because a caller formatting alongside them wants the same output. |
-| `DisplayWidth`, `StripANSI`, `AlignColumns`, `PadRight`, `PadLeft` | The width-aware aligner, usable on its own for any terminal table. |
 
 ## A column sink gets one line per cell
 
@@ -34,13 +32,13 @@ The reason is structural. A row is a line. A column is a position on that line. 
 
 A column carries spaces of gutter, and a column wider than 50 columns carries three. `AlignColumns` applies that rule, so a caller that uses the aligner on its own gets it too. `tableWidth` reads the same rule, which keeps a wide column from pushing the table past the width the drop decision was given.
 
-The `list` sink keeps the whole value instead, and indents the later lines under the first. A paragraph reads as one value. `raw`, `json` and `csv` carry the value exactly, and `csv` quotes it per RFC 4180.
+The `list` sink keeps the whole value instead, and indents the later lines under the first. A paragraph reads as one value.
 
 To show less than the whole value, use `firstline="true"` for the first line, or `truncate="N"` for a prefix.
 
 ## The renderer is injected, not built
 
-A `Field`'s `Expr` and a `Fields`' `Footer` are Go templates. The caller decides which helper functions they see. api-cli's own templates call `shellquote`, `spread` and `tabwriter`, which mean nothing to another program. So `Render` takes a `Renderer` instead of building one.
+A `Field`'s `Expr` and a `Fields`' `Footer` are Go templates. So `Render` takes a `Renderer` instead of building one.
 
 A declaration that carries neither `Expr` nor `Footer` may pass `nil`. One that carries either gets an error naming the field, not a nil dereference.
 
