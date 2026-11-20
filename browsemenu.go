@@ -77,7 +77,7 @@ func (m *browseModel) menuStart() int {
 
 func (m *browseModel) openMenu(title string, items []string, choose func(int)) {
 	m.menu = &browseMenu{title: title, items: items, choose: choose}
-	m.view.UI().Focus("menu")
+	m.focus("menu")
 }
 
 // pickChoice opens the choices of a choice field. The first item puts the field back on its default.
@@ -92,7 +92,7 @@ func (m *browseModel) pickChoice(f *browseField) {
 				field.value = choices[i-1]
 			}
 		}
-		m.view.UI().Focus(id)
+		m.focus(id)
 	})
 }
 
@@ -186,7 +186,7 @@ func (m *browseModel) suggested(msg browseSuggestMsg) {
 		if field := m.field(id); field != nil {
 			field.value = values[i]
 		}
-		m.view.UI().Focus(id)
+		m.focus(id)
 	})
 }
 

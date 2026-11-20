@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wow-look-at-my/tml"
-	"github.com/wow-look-at-my/tml/input"
 )
 
 //go:embed testdata/browse-data-config.xml
@@ -38,8 +37,7 @@ func listAcme(h *browseHarness) {
 	h.m.pick(browseEntryAt(h.t, h.m.entries, "repos list"))
 	h.press("right")
 	h.typeText("acme")
-	h.t.Logf("before enter: cur %q running %v field %v confirming %v menu %v help %v value %q", h.m.cur.pathString(), h.m.running, h.m.field(h.focused()) != nil, h.m.confirming, h.m.menu != nil, h.m.help, h.m.cur.fields[0].value)
-	h.t.Logf("key returns %v", h.m.key(input.ParseKey("enter")))
+	h.press("enter")
 	require.NotNil(h.t, h.m.top(), "status %q, focus %q, runs %v", h.m.status, h.focused(), h.runs)
 }
 
@@ -161,7 +159,7 @@ func TestBrowseRowFilter(t *testing.T) {
 func TestBrowseChoiceField(t *testing.T) {
 	h := newDataHarness(t)
 	h.m.pick(browseEntryAt(t, h.m.entries, "repos list"))
-	h.m.view.UI().Focus("flag-state")
+	h.m.focus("flag-state")
 	f := h.m.field("flag-state")
 	h.press("right")
 	assert.Equal(t, "open", f.value)
@@ -207,7 +205,7 @@ func TestBrowseMemoryAndAutorun(t *testing.T) {
 	assert.Equal(t, []string{"issues", "zed"}, h.runs[len(h.runs)-1])
 
 	runs := len(h.runs)
-	h.m.view.UI().Focus("tree")
+	h.m.focus("tree")
 	h.m.pick(browseEntryAt(t, h.m.entries, "repos list"))
 	assert.Equal(t, "zed", h.m.cur.fields[0].value, "owner was typed elsewhere, so it is filled in here")
 	require.Len(t, h.runs, runs+1, "an autorun command with every input filled runs when it is picked")

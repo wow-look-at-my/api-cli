@@ -225,7 +225,7 @@ func TestBrowseModelToggleAndErrors(t *testing.T) {
 	m.act("toggle:flag-archived")
 	assert.True(t, m.field("flag-archived").checked)
 
-	m.view.UI().Focus("tree")
+	m.focus("tree")
 	h.press("q")
 	assert.True(t, h.quit)
 	assert.Equal(t, 0, m.code)

@@ -167,12 +167,21 @@ func newBrowseModel(cfg *Config) (*browseModel, error) {
 		}
 	}
 	m.frame()
-	m.view.UI().Focus("tree")
+	m.focus("tree")
 	return m, nil
 }
 
 // collapseAbove is the tree size past which the browser opens with its top-level groups shut.
 const collapseAbove = 40
+
+// focus moves the keyboard to id.
+func (m *browseModel) focus(id string) {
+	if m.view.UI().Focus(id) {
+		return
+	}
+	m.frame()
+	m.view.UI().Focus(id)
+}
 
 // browseExec runs argv in this process, exactly as the command line would,
 // and captures everything it prints. The browser is the confirmation, so the
@@ -352,14 +361,14 @@ func (m *browseModel) start(push bool) {
 	if err != nil {
 		m.setStatus(err.Error(), "bad")
 		if miss := e.missing(); len(miss) > 0 {
-			m.view.UI().Focus(miss[0].id)
+			m.focus(miss[0].id)
 		}
 		return
 	}
 	run := &pendingRun{entry: e, argv: argv, push: push || m.top() == nil}
 	if e.confirm != "" {
 		m.pending, m.confirming = run, true
-		m.view.UI().Focus("confirm-no")
+		m.focus("confirm-no")
 		return
 	}
 	m.launch(run)

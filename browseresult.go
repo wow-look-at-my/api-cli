@@ -196,10 +196,10 @@ func (m *browseModel) cycleView() {
 // focusResult moves the keyboard to whatever the result pane draws.
 func (m *browseModel) focusResult() {
 	if f := m.top(); f != nil && f.view == viewData {
-		m.view.UI().Focus("result")
+		m.focus("result")
 		return
 	}
-	m.view.UI().Focus("output")
+	m.focus("output")
 }
 
 // schedule asks for the next run of a command that declares watch=.
@@ -408,7 +408,7 @@ func (m *browseModel) follow(l browseLink) {
 	m.cur = t
 	if miss := t.missing(); len(miss) > 0 {
 		m.setStatus("fill in "+miss[0].label+" to open "+t.pathString(), "bad")
-		m.view.UI().Focus(miss[0].id)
+		m.focus(miss[0].id)
 		return
 	}
 	m.start(true)

@@ -55,7 +55,7 @@ func (m *browseModel) key(msg tml.Key) bool {
 		return m.treeKey(msg)
 	}
 	if k == "esc" {
-		m.view.UI().Focus("tree")
+		m.focus("tree")
 		return true
 	}
 	return m.fieldKey(focused, msg)
@@ -104,7 +104,7 @@ func (m *browseModel) treeKey(msg tml.Key) bool {
 		m.pickVisible(len(vis) - 1)
 	case "/":
 		m.filtering = true
-		m.view.UI().Focus("filter")
+		m.focus("filter")
 	case "left", "h":
 		switch {
 		case m.cur.group() && !m.cur.collapsed:
@@ -135,11 +135,11 @@ func (m *browseModel) enter(run bool) {
 		e.collapsed = true
 	case !e.runnable():
 	case run && len(e.missing()) > 0:
-		m.view.UI().Focus(e.missing()[0].id)
+		m.focus(e.missing()[0].id)
 	case run || len(e.fields) == 0:
 		m.start(false)
 	default:
-		m.view.UI().Focus(e.fields[0].id)
+		m.focus(e.fields[0].id)
 	}
 }
 
@@ -148,10 +148,10 @@ func (m *browseModel) filterKey(msg tml.Key) bool {
 	switch msg.String() {
 	case "esc":
 		m.filter, m.filtering = "", false
-		m.view.UI().Focus("tree")
+		m.focus("tree")
 	case "enter":
 		m.filtering = false
-		m.view.UI().Focus("tree")
+		m.focus("tree")
 		if vis := m.visible(); len(vis) > 0 && !containsEntry(vis, m.cur) {
 			m.pick(vis[0])
 		}
@@ -240,14 +240,14 @@ func (m *browseModel) resultKey(msg tml.Key) bool {
 	case "/":
 		if f != nil && f.view == viewData {
 			m.rowFiltering = true
-			m.view.UI().Focus("rowfilter")
+			m.focus("rowfilter")
 		}
 	case "esc":
 		if m.rowFilter != "" {
 			m.rowFilter = ""
 			return true
 		}
-		m.view.UI().Focus("tree")
+		m.focus("tree")
 	case "q":
 		m.host.Quit()
 	case "tab", "shift+tab":
@@ -348,7 +348,7 @@ func (m *browseModel) focusAfterMenu() {
 		m.focusResult()
 		return
 	}
-	m.view.UI().Focus("tree")
+	m.focus("tree")
 }
 
 // scroll moves whatever the wheel turned over.
