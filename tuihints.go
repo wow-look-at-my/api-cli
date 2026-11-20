@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/wow-look-at-my/go-containers/set"
 	"strings"
 )
 
@@ -156,12 +157,12 @@ func validateNodeTUI(c *Command, path string, index map[string]*Command) error {
 		if !ok {
 			return fmt.Errorf("%s: to=%q names no command that runs", where, l.To)
 		}
-		seen := map[string]bool{}
+		seen := set.New[string]()
 		for _, w := range l.With {
-			if seen[w.Name] {
+			if seen.Contains(w.Name) {
 				return fmt.Errorf("%s: <with name=%q> is declared twice", where, w.Name)
 			}
-			seen[w.Name] = true
+			seen.Add(w.Name)
 			if !declaresInput(target, w.Name) {
 				return fmt.Errorf("%s: <with name=%q>: %q declares no arg or flag of that name", where, w.Name, l.To)
 			}

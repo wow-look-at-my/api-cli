@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/wow-look-at-my/api-cli/fields"
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 // browseLink opens target with values filled in from a record.
@@ -31,13 +32,13 @@ func (m *browseModel) linksFor(src *browseEntry, rec map[string]any, carried map
 		return nil
 	}
 	var out []browseLink
-	declared := map[*browseEntry]bool{}
+	declared := set.New[*browseEntry]()
 	for _, l := range src.hints.Links {
 		target := m.byPath[l.To]
 		if target == nil {
 			continue
 		}
-		declared[target] = true
+		declared.Add(target)
 		link := browseLink{label: l.Label, target: target, explicit: true, values: map[string]string{}}
 		for _, w := range l.With {
 			if v, ok := withValue(w, rec, carried); ok {
@@ -51,7 +52,7 @@ func (m *browseModel) linksFor(src *browseEntry, rec map[string]any, carried map
 
 	var inferred []browseLink
 	for _, target := range m.entries {
-		if target == src || declared[target] || !target.runnable() || len(target.fields) == 0 {
+		if target == src || declared.Contains(target) || !target.runnable() || len(target.fields) == 0 {
 			continue
 		}
 		link := browseLink{target: target, values: map[string]string{}}

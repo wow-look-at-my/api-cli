@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/wow-look-at-my/go-containers/set"
 )
 
 // validateChoices is the load-time check on one input's choices=.
@@ -19,12 +20,12 @@ func validateChoices(choices []string, typ, where string) error {
 	if typ == "bool" {
 		return fmt.Errorf("%s: a bool takes no choices=", where)
 	}
-	seen := map[string]bool{}
+	seen := set.New[string]()
 	for _, c := range choices {
-		if seen[c] {
+		if seen.Contains(c) {
 			return fmt.Errorf("%s: choice %q is listed twice", where, c)
 		}
-		seen[c] = true
+		seen.Add(c)
 		if typ == "int" {
 			if _, err := strconv.Atoi(c); err != nil {
 				return fmt.Errorf("%s: choice %q is not an integer", where, c)

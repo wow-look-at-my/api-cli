@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/wow-look-at-my/go-containers/set"
 	"slices"
 	"strings"
 )
@@ -133,16 +134,16 @@ func visibleEntries(entries []*browseEntry, filter string) []*browseEntry {
 		}
 		return out
 	}
-	keep := map[*browseEntry]bool{}
+	keep := set.New[*browseEntry]()
 	for _, e := range entries {
 		if e.matches(filter) {
 			for p := e; p != nil; p = p.parent {
-				keep[p] = true
+				keep.Add(p)
 			}
 		}
 	}
 	for _, e := range entries {
-		if keep[e] {
+		if keep.Contains(e) {
 			out = append(out, e)
 		}
 	}
@@ -285,15 +286,6 @@ func (e *browseEntry) inputs() map[string]string {
 	return out
 }
 
-// fieldNamed is the field that fills the named arg or flag, or nil.
-func (e *browseEntry) fieldNamed(name string) *browseField {
-	for i := range e.fields {
-		if e.fields[i].name() == name {
-			return &e.fields[i]
-		}
-	}
-	return nil
-}
 
 // argv is the command line the browser runs for e, without the program name.
 // An empty field is left out, so cobra applies the declared default.
