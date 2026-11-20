@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"testing"
 
@@ -101,15 +103,8 @@ func TestValidateTUIHints(t *testing.T) {
 	}
 }
 
-const choicesConfig = `<config name="x">
-	<command name="ls">
-		<arg name="kind" choices="file,dir"/>
-		<flag name="state" choices="open,closed" default="open"/>
-		<flag name="size" type="int" choices="10,20"/>
-		<flag name="tag" type="string-slice" choices="a,b"/>
-		<run>echo <value name="arg.kind"/> <value name="flag.state"/> <value name="flag.size"/> <value expr="{{ join &quot;+&quot; .flag.tag }}"/></run>
-	</command>
-</config>`
+//go:embed testdata/choices-config.xml
+var choicesConfig string
 
 func TestChoicesOnTheCommandLine(t *testing.T) {
 	cfg, err := loadTUIConfig(t, choicesConfig)
