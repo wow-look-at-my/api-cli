@@ -148,6 +148,7 @@ func newBrowseHarness(t *testing.T) *browseHarness {
 	m, err := newBrowseModel(loadBrowseConfig(t))
 	require.NoError(t, err)
 	h := &browseHarness{t: t, m: m}
+	m.host = h
 	m.exec = func(argv []string, _, _ int) browseOutput {
 		h.runs = append(h.runs, argv)
 		text := "ran " + strings.Join(argv, " ") + "\n\tdone"

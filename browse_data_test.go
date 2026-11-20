@@ -24,6 +24,7 @@ func newDataHarness(t *testing.T) *browseHarness {
 	m, err := newBrowseModel(cfg)
 	require.NoError(t, err)
 	h := &browseHarness{t: t, m: m}
+	m.host = h
 	m.exec = func(argv []string, w, ht int) browseOutput {
 		h.runs = append(h.runs, argv)
 		return browseExec(cfg, argv, w, ht)
