@@ -16,6 +16,7 @@ The screen has panes. The command tree is on the left. The form for the selected
 - **Envelopes open at the records.** A body like `{"total_count": 2, "items": [...]}` opens at `items`. The envelope is one step back.
 - **Step into anything.** Enter on a nested value opens it as its own table. Backspace steps back out.
 - **Links between commands.** A record links to every command whose required inputs it can fill. An arg called `owner` takes the record's `owner` field, or `owner.login` when `owner` is itself a record. Enter follows the first link, and `a` lists them all. A link runs its target on top of a history, and backspace returns to the record you came from, with its form as it was.
+- **A listing names its rows.** A command named for a plural, such as `tags` or `user repos`, lists things of that kind. Its row fills an arg named for one of them, `tag` or `repo`, with the row's identity.
 - **Three views.** `v` cycles the result between the data view, the text the command prints on a terminal, and the raw body with its JSON indented. A leaf with `<fields>` shows its own table in the text view. A leaf with `<tml>` opens in the text view, which draws its screen.
 - **A refreshing screen.** A command with `watch=` reruns on its interval while it is on screen, and keeps the selected row.
 - **Filters.** `/` in the tree narrows the commands. `/` in a result narrows the rows.
