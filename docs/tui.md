@@ -19,6 +19,7 @@ The screen has panes. The command tree is on the left. The form for the selected
 - **Three views.** `v` cycles the result between the data view, the text the command prints on a terminal, and the raw body with its JSON indented. A leaf with `<fields>` shows its own table in the text view. A leaf with `<tml>` opens in the text view, which draws its screen.
 - **A refreshing screen.** A command with `watch=` reruns on its interval while it is on screen, and keeps the selected row.
 - **Filters.** `/` in the tree narrows the commands. `/` in a result narrows the rows.
+- **Pages.** A command with an int flag named `page` pages with `]` and `[`. The result reruns in place on the next or the previous page.
 
 ## Hints for the rest
 
@@ -76,9 +77,9 @@ Ctrl+O in the field runs `repos list` and offers each record's `name`. The sourc
 
 | Where | Keys |
 | --- | --- |
-| Tree | Up and down pick. Enter runs the command, or fills in its first empty required input. Right moves into the form. Left shuts a group. `/` filters. `q` quits. |
+| Tree | Up and down pick. Enter opens the form at the first empty required input, and runs a command that takes no input. `r` runs the command as its form stands. Left shuts a group. `/` filters. `q` quits. |
 | Form | Type to edit. Tab moves on. Enter runs. Left and right cycle a choice. Ctrl+O lists suggestions. Esc returns to the tree. |
-| Result | Up and down move. Enter opens the row. `a` lists every action. `i` steps into the row. Backspace steps back. `/` filters rows. `r` reruns. |
+| Result | Up and down move. Enter opens the row. `a` lists every action. `i` steps into the row. Backspace steps back. `/` filters rows. `r` reruns. `]` and `[` turn the page. |
 | Anywhere | `v` cycles the view. Ctrl+R runs. PgUp and PgDn scroll. `?` shows the keys. Ctrl+C quits. |
 
 A click picks a row, and a second click on the selected row opens it. The wheel scrolls whatever is under the pointer.

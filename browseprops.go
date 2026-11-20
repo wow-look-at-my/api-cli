@@ -14,9 +14,9 @@ import (
 
 // browseHelp is the key reference the? popup shows.
 var browseHelp = []string{
-	"tree      ↑↓ pick · enter run · → form · ← close group · / filter · q quit",
+	"tree      ↑↓ pick · enter form · r run · ← close group · / filter · q quit",
 	"form      type · tab next · enter run · ←→ cycle a choice · ctrl+o suggestions",
-	"result    ↑↓ row · enter open · a actions · i inspect · ⌫ back · / filter · r rerun",
+	"result    ↑↓ row · enter open · a actions · i inspect · ⌫ back · / filter · [ ] page",
 	"anywhere  v view · ctrl+r run · pgup/pgdn scroll · esc back · ctrl+c quit",
 }
 
@@ -57,7 +57,7 @@ func (m *browseModel) hint() string {
 	case focused == "result" || focused == "output":
 		return "enter open · a actions · ⌫ back · v view · ? help"
 	case focused == "tree" || focused == "":
-		return "enter run · → form · / filter · ? help · q quit"
+		return "enter form · r run · / filter · ? help · q quit"
 	case f != nil && len(f.choices()) > 0:
 		return "←/→ cycle · enter lists choices · tab next · esc tree"
 	case f != nil && f.suggest() != nil:
@@ -93,6 +93,9 @@ func (m *browseModel) footer(links []browseLink) string {
 	}
 	if len(f.views()) > 1 {
 		parts = append(parts, "v view")
+	}
+	if pf := f.entry.pageField(); pf != nil {
+		parts = append(parts, fmt.Sprintf("[ ] page %d", f.page(pf)))
 	}
 	if f.entry.watch != "" {
 		parts = append(parts, "refreshes every "+f.entry.watch)

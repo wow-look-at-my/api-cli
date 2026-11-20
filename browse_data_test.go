@@ -252,6 +252,35 @@ func TestBrowseGithubSampleLinks(t *testing.T) {
 	assert.Equal(t, "repo pr", links[0].target.pathString(), "the declared link goes first")
 }
 
+func TestBrowsePages(t *testing.T) {
+	h := newBrowseHarness(t)
+	e := browseEntryAt(t, h.m.entries, "fail")
+	h.m.pick(e)
+	h.m.start(false)
+	h.press("]")
+	assert.Contains(t, h.m.status, "declares no int flag named page", "a command without a page flag says why it cannot page")
+
+	cfg, err := Load("samples/github/github.xml")
+	require.NoError(t, err)
+	m, err := newBrowseModel(cfg)
+	require.NoError(t, err)
+	h = &browseHarness{t: t, m: m}
+	m.host = h
+	m.exec = func(argv []string, _, _ int) browseOutput {
+		h.runs = append(h.runs, argv)
+		return browseOutput{raw: `[{"full_name":"o/r"}]`, text: "o/r"}
+	}
+	m.pick(m.byPath["user repos"])
+	m.cur.fields[0].value = "octocat"
+	m.start(false)
+	h.press("]")
+	assert.Equal(t, []string{"user", "repos", "--page=2", "octocat"}, h.runs[len(h.runs)-1])
+	assert.Contains(t, m.frame(), "page 2")
+	h.press("[", "[")
+	assert.Equal(t, []string{"user", "repos", "--page=1", "octocat"}, h.runs[len(h.runs)-1], "the page stops at the flag's default")
+	require.Len(t, m.frames, 1, "a page replaces the result in place")
+}
+
 func TestBrowseHelpPopup(t *testing.T) {
 	h := newDataHarness(t)
 	h.press("?")

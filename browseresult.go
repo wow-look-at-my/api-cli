@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -412,6 +413,52 @@ func (m *browseModel) follow(l browseLink) {
 		return
 	}
 	m.start(true)
+}
+
+// pageField is the input that pages a command's result: an int flag named page. A command without one does not page.
+func (e *browseEntry) pageField() *browseField {
+	for i := range e.fields {
+		f := &e.fields[i]
+		if f.flag != nil && f.flag.Type == "int" && f.flag.Name == "page" {
+			return f
+		}
+	}
+	return nil
+}
+
+// page is the page a frame shows: the value it ran with, or the flag's default.
+func (f *resultFrame) page(pf *browseField) int {
+	if n, err := strconv.Atoi(strings.TrimSpace(f.inputs[pf.id])); err == nil {
+		return n
+	}
+	if n, ok := pf.flag.Default.(int); ok {
+		return n
+	}
+	return 1
+}
+
+// turnPage reruns the command on screen one page on or back, in place.
+func (m *browseModel) turnPage(delta int) {
+	f := m.top()
+	if f == nil || m.running {
+		return
+	}
+	pf := f.entry.pageField()
+	if pf == nil {
+		m.setStatus(f.entry.pathString()+" declares no int flag named page", "dim")
+		return
+	}
+	// A list that starts at the first page says so with its default.
+	floor := 1
+	if d, ok := pf.flag.Default.(int); ok && d == 0 {
+		floor = 0
+	}
+	next := max(floor, f.page(pf)+delta)
+	f.entry.restore(f.inputs)
+	pf.value = strconv.Itoa(next)
+	m.cur = f.entry
+	m.reveal(f.entry)
+	m.start(false)
 }
 
 // browseLines splits output into the rows the output pane draws. A tab has no

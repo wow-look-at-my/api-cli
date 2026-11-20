@@ -124,8 +124,8 @@ func (m *browseModel) treeKey(msg tml.Key) bool {
 	return true
 }
 
-// enter opens a shut group. On a command, enter runs it when nothing required is empty and fills in the first empty input
-// otherwise. The right arrow moves into the form.
+// enter opens a shut group. A command that takes no input runs. Any other command opens its form at the first empty
+// required input. One key never runs a command whose inputs the user has not seen.
 func (m *browseModel) enter(run bool) {
 	e := m.cur
 	switch {
@@ -134,10 +134,10 @@ func (m *browseModel) enter(run bool) {
 	case e.group() && run && !e.runnable():
 		e.collapsed = true
 	case !e.runnable():
-	case run && len(e.missing()) > 0:
-		m.focus(e.missing()[0].id)
-	case run || len(e.fields) == 0:
+	case len(e.fields) == 0:
 		m.start(false)
+	case len(e.missing()) > 0:
+		m.focus(e.missing()[0].id)
 	default:
 		m.focus(e.fields[0].id)
 	}
@@ -231,6 +231,10 @@ func (m *browseModel) resultKey(msg tml.Key) bool {
 		m.back()
 	case "a", "o":
 		m.actions()
+	case "]":
+		m.turnPage(1)
+	case "[":
+		m.turnPage(-1)
 	case "r":
 		if f != nil {
 			m.cur = f.entry
