@@ -286,9 +286,10 @@ func (m *browseModel) fieldKey(focused string, msg tml.Key) bool {
 			m.pickChoice(field)
 		case "backspace", "delete":
 			field.value = ""
-		default:
+		case "tab", "shift+tab", "up", "down":
 			return false
 		}
+		// Any other key is swallowed: a choice field takes no typing.
 		return true
 	}
 	if k == "enter" {

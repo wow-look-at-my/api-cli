@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wow-look-at-my/tml"
+	"github.com/wow-look-at-my/tml/input"
 )
 
 //go:embed testdata/browse-data-config.xml
@@ -37,7 +38,8 @@ func listAcme(h *browseHarness) {
 	h.m.pick(browseEntryAt(h.t, h.m.entries, "repos list"))
 	h.press("right")
 	h.typeText("acme")
-	h.press("enter")
+	h.t.Logf("before enter: cur %q running %v field %v confirming %v menu %v help %v value %q", h.m.cur.pathString(), h.m.running, h.m.field(h.focused()) != nil, h.m.confirming, h.m.menu != nil, h.m.help, h.m.cur.fields[0].value)
+	h.t.Logf("key returns %v", h.m.key(input.ParseKey("enter")))
 	require.NotNil(h.t, h.m.top(), "status %q, focus %q, runs %v", h.m.status, h.focused(), h.runs)
 }
 
