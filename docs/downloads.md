@@ -50,7 +50,7 @@ jobs 7/20 JOB-7  attempt 4/30  status=pending
 Without the display (`--no-tui`, or stdout in a pipe), stderr gets one line per element when it finishes, such as `jobs 7/20 JOB-7: done`. A long poll also adds one line for every ten attempts that leave `until=` false. No line appears per try.
 
 - **`<download>` is the leaf's action.** It runs after the steps, and it stands in for the leaf's `<run>`. An inherited request therefore does not fire on the way.
-- **`when=`** is a Go-template predicate. A falsy render (empty, `false`, `0` or `no`) skips that declaration, so one leaf can carry a conditional set.
+- **`when=`** is a Go-template predicate. A falsy render skips that declaration, so one leaf can carry a conditional set.
 - **`over=`** repeats the declaration per record of a list. It promotes the record's keys (`<value name="name"/>`) and puts the record itself at `.item`. An empty list downloads nothing. A path that resolves to nothing is an error.
 - **`over=` also takes a template**, when the list it wants is not one the context already holds. The template renders and its output is read as JSON. It therefore ends in `toJson`. `collect` gathers one path out of every element of a fan-out result: `over="{{ toJson (collect &quot;result.parts&quot; .result.listings) }}"`.
 - **`<url>` can render several lines**, which is what a `<for>` loop produces. Each line becomes its own download.
@@ -132,7 +132,7 @@ A `<download>` reaches its URL as a `<request>` does. It goes over the built-in 
 ```
 
 - **Selection matches requests**: the `transport=` attribute, then the registry's `default="true"` entry, then the built-in client. A config whose endpoints all need the program therefore needs it for its files too, and says nothing extra. `transport="http"` opts one download back to the built-in client.
-- **The program gets the same `.request` context** -- `method`, `url`, `headers` and `header_lines` -- so one program serves requests and downloads alike. `method` is `GET`, and there is no body. A download adds `progress_fd`, the fd for [progress reports](#reporting-progress-from-a-transport).
+- `method` is `GET`, and there is no body. A download adds `progress_fd`, the fd for [progress reports](#reporting-progress-from-a-transport).
 - **Its stdout streams into the file** rather than into a buffered response body. That is the difference between the paths. It is also why a file larger than memory is fine. The `.part` sibling, the byte count and the digest check are the same code on both.
 - **A non-zero exit fails the download, and the queue retries it.** A program owns its own exit codes. curl says 22 for a 404 and 7 for a refused connection. This path therefore cannot tell an answer from a hiccup, unlike the built-in client, and it lets the try limit end the transfer. Its stderr is emitted above the slots.
 - The size is unknown at the start, because there is no `Content-Length`. That file's row drops the bar and the percentage. It reports the bytes and the rate. A file with no bytes yet reads `waiting mm:ss`, which is the time since its transfer started. A frame where no file reported a length drops both columns outright. The total is marked as a floor. The program can supply both numbers itself on the [progress fd](#reporting-progress-from-a-transport).
@@ -197,11 +197,10 @@ Write a report at most a few times a second. The display repaints every 100 ms, 
 <hash algo="sha256"><value name="digest"/></hash>
 ```
 
-- `algo=` is `sha256` (the default), `sha512`, `sha1`, or `md5`.
 - The body is a template like any other. The digest therefore usually comes from the same manifest record as the URL, or from a step that fetched a `.sha256` file.
 - **A mismatch is last.** The bytes arrived intact. A second fetch cannot change the digest. The run reports the expected value and the actual value, then exits non-zero.
 - A success names the algorithm that passed: `downloaded x.iso (6.0 MiB, sha256 ok)`. A check you cannot see happen is one you cannot trust.
 - **The digest must look like a digest.** A renamed manifest field renders as the template engine's placeholder. The plan step rejects that before it fetches anything, rather than leave the file unverified in silence. A `sha256sum` line (`<hex>  <name>`) is acceptable, in any capitalization.
 - **To make the check optional per record**, render the body empty for a record that carries no digest: `<hash><if test="sha256"><value name="sha256"/></if></hash>`.
 
-`<downloads>` sets the queue up one time for the config. It takes `concurrency` (default 4), `retries` (default 3, where `0` reports a failure immediately) and `dir` (default `.`). `--concurrency`, `--download-dir` and `--no-tui` override those values per invocation.
+`<downloads>` sets the queue up one time for the config. It takes `concurrency` (default 4), `retries` (default 3, where `0` reports a failure immediately) and `dir` (default `.`).

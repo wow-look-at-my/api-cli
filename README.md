@@ -77,7 +77,7 @@ Element content can mix plain text with three placeholder elements that compile 
 | `<value name="x" default="-"/>` | `{{ .x | default "-" }}` | Fallback for an empty value. |
 | `<value name="x" as="urlpath"/>` | `{{ urlpath .x }}` | Wrap with any template helper. |
 | `<value expr="{{ or .a .b }}"/>` | `{{ or .a .b }}` | Verbatim template escape hatch. |
-| `<if test="var.token">A<else/>B</if>` | `{{ if truthy .var.token }}A{{ else }}B{{ end }}` | `test=` is a context path. It is truthy unless it is empty, `false`, `0` or `no`. |
+| `<if test="var.token">A<else/>B</if>` | `{{ if truthy .var.token }}A{{ else }}B{{ end }}` | `test=` is a context path. |
 | `<if test="arg.tag" eq="latest">...</if>` | `{{ if eq (printf "%v" .arg.tag) "latest" }}...{{ end }}` | `eq=` compares to a literal. |
 | `<for each="items">...</for>` | `{{ range .items }}...{{ end }}` | Iterate; `.` rebinds to each element (`<value name="field"/>` reads the element). |
 
@@ -339,7 +339,7 @@ Name: {{.data.name}}
 </command>
 ```
 
-`input=` is `json` (the default), `lines` or `raw`. Formatting applies only when the author `when` predicate AND the user verdict agree. `--view=<name>` forces a view. An inline `<format>`, with `<view>` children and no `ref=`, overrides an inherited one. See [Global flags](#global-flags) for `--format` and `--no-format`.
+Formatting applies only when the author `when` predicate AND the user verdict agree. `--view=<name>` forces a view. An inline `<format>`, with `<view>` children and no `ref=`, overrides an inherited one. See [Global flags](#global-flags) for `--format` and `--no-format`.
 
 **An omitted `when=` means `{{.tty}}`.** A redirect, a pipe and the MCP server are not a terminal. Such a format prints the raw body, and everything the view added is gone. An agent that reads the output sees the unshaped response. Write `when="true"` for a view that must render everywhere, or use `<fields>`, which renders with no terminal and carries `--as` for the sink. `--format=always` forces the terminal answer for one call.
 
@@ -357,11 +357,10 @@ Name: {{.data.name}}
 
 ## Template helpers
 
-Every [sprig v3](https://masterminds.github.io/sprig/) helper is available: `toJson`, `upper`, `default`, `required`, `regexReplaceAll` and the rest. On top of sprig you get these.
+Every [sprig v3](https://masterminds.github.io/sprig/) helper is available. On top of sprig you get these.
 
 | Helper        | Purpose                                                                                   |
 |---------------|-------------------------------------------------------------------------------------------|
-| `truthy`      | The truthiness that `<if test=>` uses. nil, `false`, `0`, `no` and "" are falsy.           |
 | `querystring` | Render a map as `?k=v&k=v`, URL-encoded. It drops an empty value.                          |
 | `repeatkey`   | Repeated params for one key over a slice: `repeatkey "tag" .arg.tags`.                     |
 | `shellquote`  | POSIX single-quote a value for the shell form of a command.                               |
@@ -426,7 +425,7 @@ An attribute value is always raw, a template or a context path. A Go template ne
 |-------------------|-------|---------|-------|
 | `--config <path>` |       |         | Config file (XML). Falls back to `./api.xml`. |
 | `--version`       |       |         | Print the binary's version. Needs no config. |
-| `--mcp <transport>` |     |         | Run the config as an MCP server: `stdio`, `http://<addr>`, `sse://<addr>`. Each leaf becomes a tool named for its command path, with underscores (`users_get`). The HTTP and SSE servers also answer `GET /health`. The server behaves as `--format=always` does, with `.tty` true and width 80. A tool's `inputSchema` carries each arg's `pattern=`, and a call is checked against it. Over stdio, a client that closes stdin right after its last request still gets that request's answer. |
+| `--mcp <transport>` |     |         | Run the config as an MCP server. Each leaf becomes a tool named for its command path, with underscores (`users_get`). The HTTP and SSE servers also answer `GET /health`. The server behaves as `--format=always` does, with `.tty` true and width 80. A tool's `inputSchema` carries each arg's `pattern=`, and a call is checked against it. Over stdio, a client that closes stdin right after its last request still gets that request's answer. |
 | `--cors <level>`  |       | `strict`| CORS for the MCP HTTP/SSE server. See [CORS levels](#cors-levels). |
 | `--server <socket>` |     |         | Serve `--config` on a unix socket for `--client` callers. See [Client and server](#client-and-server). |
 | `--client <socket>` |     |         | As the first flag: run the rest of the command line on that server. Needs no config. |
@@ -445,7 +444,7 @@ An attribute value is always raw, a template or a context path. A Go template ne
 | `--download-dir <path>` | | `.`     | Base directory for `<download>` destinations. |
 | `--no-tui`        |       | false   | Report download progress as plain lines instead of drawing the display. |
 
-Env vars apply, at a lower precedence than the flags. Any value of `NO_FORMAT` turns formatting off. `API_CLI_FORMAT` takes `raw`, `auto` or `always`.
+Env vars apply, at a lower precedence than the flags. Any value of `NO_FORMAT` turns formatting off.
 
 ## CORS levels
 
@@ -499,7 +498,7 @@ source <(./api-cli completion bash)
 
 [`samples/github/github.xml`](./samples/github/github.xml) wraps the read-only part of the GitHub REST API in first-class requests.
 
-- **Subcommands**: `user get|repos|orgs`, `repo get|issues|issue|prs|pr|pr-diff|pr-comments|releases|release|commits|commit|branches|tags|contents|readme|languages|topics`, `org get|members|repos`, `search repos|code|issues|users`, `rate-limit`.
+- **Subcommands**.
 - **Token-aware**: picks up `$GITHUB_TOKEN` / `$GH_TOKEN` automatically (5000 vs 60 req/hr).
 - **Enterprise-ready**: set `$GITHUB_API_URL` for GitHub Enterprise Server.
 - **Noise stripping**: each response goes through an embedded `jq` `walk`. It drops `*url` links, `node_id`s, `reactions`, `permissions`, duplicate counts and more. That frequently cuts about 80% of the bytes. `GITHUB_RAW=1` opts out.

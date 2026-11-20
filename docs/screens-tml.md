@@ -48,4 +48,4 @@ A screen needs a terminal. Piped, the leaf falls through to whatever else it dec
 
 A one-shot frame lays out in a tall viewport rather than the terminal's, because it prints into a terminal that scrolls. A board of cards is therefore never cut off at the last row. The blank rows under the content are trimmed. Under a watch the screen IS the height. The program owns it.
 
-On its own the leaf draws one frame and exits. With `--watch` it becomes a terminal program on the alternate screen: `q` or `esc` quits, `ctrl+c` quits with 130, and `r` refreshes now. A tick is one whole run of the leaf, the same as a watch frame. Focus, clicking and scrolling inside the component are NOT wired yet. A screen reads today. It does not answer.
+On its own the leaf draws one frame and exits. With `--watch` it becomes a terminal program on the alternate screen. A tick is one whole run of the leaf, the same as a watch frame. Focus, clicking and scrolling inside the component are NOT wired yet. A screen reads today. It does not answer.

@@ -207,7 +207,8 @@ func (m *browseModel) schedule(f *resultFrame) {
 	if f.entry.watch == "" {
 		return
 	}
-	interval, err := parseWatchInterval("watch=", f.entry.watch)
+	// watch= passed validateWatch at load time, so the browser schedules it as written.
+	interval, err := parseWatchLength("watch=", f.entry.watch)
 	if err != nil || interval <= 0 {
 		return
 	}

@@ -226,8 +226,7 @@ func applyStreamStep(step *StreamStep, chunk []byte, index, offset int, data map
 }
 
 // streamCtx layers where a chunk sits in the run onto the leaf context. A
-// per-chunk step can name its position: `.stream.index`, `.stream.offset` and
-// `.stream.size`.
+// per-chunk step can name its position.
 func streamCtx(data map[string]any, index, offset, size int) map[string]any {
 	ctx := make(map[string]any, len(data)+1)
 	for k, v := range data {

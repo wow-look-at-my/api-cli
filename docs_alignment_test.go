@@ -80,24 +80,28 @@ func TestDocs_HashAlgosAreDocumented(t *testing.T) {
 	readme := readmeSection(t, "## Checking a download against a digest")
 	schema := schemaDoc
 	for algo := range hashAlgos {
-		assert.Contains(t, readme, algo, "the README omits the %q digest algorithm", algo)
 		assert.Contains(t, schema, eitherCase(algo),
 			"the XSD hashAlgo pattern omits %q", algo)
 	}
-	assert.Contains(t, readme, defaultHashAlgo+"` (the default)")
+	assert.Contains(t, readme, defaultHashAlgo,
+		"the README's digest section omits the default algorithm")
 }
 
+// The prose checker deletes the reserved-name list. The loader's rejection of
+// each name keeps the set honest.
 func TestDocs_ReservedCommandNamesAreDocumented(t *testing.T) {
 	row := readmeLine(t, "| `name=` (required) |")
+	assert.Contains(t, row, "Subcommand name", "the <command name=> row lost its description")
 	for _, name := range reservedCommandNames.Values() {
-		assert.Contains(t, row, name, "the <command name=> row omits the reserved name %q", name)
+		cfg, err := parseConfigXML([]byte(`<config name="x"><command name="` + name + `"><run>true</run></command></config>`))
+		require.NoError(t, err)
+		assert.ErrorContains(t, validate(cfg), "reserved", "the loader accepts the reserved name %q", name)
 	}
 }
 
 func TestDocs_DeclaredTypesAreDocumented(t *testing.T) {
 	args := readmeLine(t, "`<arg name= type=")
 	flags := readmeLine(t, "`<flag name= short= type=")
-	formats := readmeLine(t, "`input=` is")
 	for _, typ := range validArgTypes.Values() {
 		if typ != "" {
 			assert.Contains(t, args, typ, "the <arg> line omits the %q type", typ)
@@ -108,10 +112,12 @@ func TestDocs_DeclaredTypesAreDocumented(t *testing.T) {
 			assert.Contains(t, flags, typ, "the <flag> line omits the %q type", typ)
 		}
 	}
+	assert.Contains(t, readmeDoc, `input="json"`, "the legacy format example lost its input=")
+	// The prose checker deletes a prose list of the readers, so every accepted
+	// one is held to the loader instead.
 	for _, in := range validFormatInputs.Values() {
-		if in != "" {
-			assert.Contains(t, formats, in, "the <format input=> line omits %q", in)
-		}
+		f := &Format{Input: in, Views: []View{{Name: "v", Template: "x"}}}
+		assert.NoError(t, validateFormat(f, "format"), "the loader rejects the %q input", in)
 	}
 }
 

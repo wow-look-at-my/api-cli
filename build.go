@@ -247,7 +247,9 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 		return err
 	}
 	if err := checkChoices(node, data, func(name string) bool { return cliSupplied(c, node, args, name) }); err != nil {
-		return err
+		fmt.Fprintln(execStderr, "error:", err)
+		exitCode = 1
+		return nil
 	}
 
 	logVerbose("leaf %q: starting", node.Name)
