@@ -104,7 +104,7 @@
 						</Stack>
 						<Textbox id="rowfilter" if="{rowFiltering}" value="{rowFilter}" cursor="999" placeholder="filter rows" width="*"/>
 						<Stack height="*" width="*">
-							<Table id="result" if="{isTable}" columns="{columns}" rows="{rows}" selected="{rowSel}" collapse="{collapse}" border="false" wrap="false" spacing="2" width="*"/>
+							<Table id="result" if="{isTable}" columns="{columns}" rows="{rows}" selected="{rowSel}" collapse="{collapse}" border="false" wrap="false" spacing="3"/>
 							<List id="output" if="{isText}" items="{output}" selected="-1" cursor=" "/>
 							<Text style="dim" if="{empty}">{empty}</Text>
 						</Stack>

@@ -90,6 +90,8 @@ type browseModel struct {
 
 	// exec runs one command line and returns what it printed.
 	exec func(argv []string, width, height int) browseOutput
+	// now times a run. A test fixes it, so a screen holds no wall-clock time.
+	now func() time.Time
 }
 
 // pendingRun is a run on its way: what it runs, and whether its result goes on top of the history or replaces the top.
@@ -156,6 +158,7 @@ func newBrowseModel(cfg *Config) (*browseModel, error) {
 		width:   100,
 		height:  30,
 		exec:    func(argv []string, w, h int) browseOutput { return browseExec(cfg, argv, w, h) },
+		now:     time.Now,
 	}
 	for _, e := range entries {
 		m.byPath[e.pathString()] = e
@@ -385,11 +388,11 @@ func (m *browseModel) launch(run *pendingRun) {
 	m.remember(run.entry)
 	line := commandLine(m.name, run.argv)
 	m.setStatus("running "+line, "dim")
-	exec, width, height, id, argv := m.exec, m.outputWidth(), m.height, m.runID, run.argv
-	began := time.Now()
+	exec, width, height, id, argv, now := m.exec, m.outputWidth(), m.height, m.runID, run.argv, m.now
+	began := now()
 	m.host.Go(func() tml.Msg {
 		out := exec(argv, width, height)
-		return browseRunMsg{id: id, line: line, out: out, took: time.Since(began)}
+		return browseRunMsg{id: id, line: line, out: out, took: now().Sub(began)}
 	})
 }
 

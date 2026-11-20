@@ -236,7 +236,7 @@ func TestBrowseHelpPopup(t *testing.T) {
 func TestBrowseWatchSchedulesARefresh(t *testing.T) {
 	h := newBrowseHarness(t)
 	e := browseEntryAt(t, h.m.entries, "fail")
-	e.watch = "1ms"
+	e.watch = watchMinInterval.String()
 	h.m.pick(e)
 	h.deferred = true
 	h.m.start(false)
