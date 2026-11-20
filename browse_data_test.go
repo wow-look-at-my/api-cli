@@ -38,6 +38,7 @@ func listAcme(h *browseHarness) {
 	h.press("right")
 	h.typeText("acme")
 	h.press("enter")
+	require.NotNil(h.t, h.m.top(), "status %q, focus %q, runs %v", h.m.status, h.focused(), h.runs)
 }
 
 func TestBrowseTreeHonoursHints(t *testing.T) {

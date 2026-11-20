@@ -286,7 +286,6 @@ func (e *browseEntry) inputs() map[string]string {
 	return out
 }
 
-
 // argv is the command line the browser runs for e, without the program name.
 // An empty field is left out, so cobra applies the declared default.
 func (e *browseEntry) argv() ([]string, error) {
