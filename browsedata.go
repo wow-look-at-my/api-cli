@@ -122,11 +122,18 @@ func tableCell(f fields.Field, rec any, ctx map[string]any) string {
 func summary(v any) string {
 	switch x := v.(type) {
 	case map[string]any:
-		return fmt.Sprintf("{%d keys}", len(x))
+		return "{" + plural(len(x), "key") + "}"
 	case []any:
-		return fmt.Sprintf("[%d items]", len(x))
+		return "[" + plural(len(x), "item") + "]"
 	}
 	return oneLineCell(fields.DisplayValue(v))
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 // oneLineCell keeps the first line of s. The table separator becomes a broken bar, so a cell cannot split its row.

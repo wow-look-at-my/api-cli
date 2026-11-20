@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,6 +17,7 @@ const browseGolden = "testdata/browse-screens.golden"
 // A missing golden is written from this run, and the test then fails, so a broken screen never blesses itself.
 func TestBrowseScreens(t *testing.T) {
 	h := newDataHarness(t)
+	h.m.now = func() time.Time { return time.Time{} }
 	h.m.update(h, tml.Resize{Width: 100, Height: 30})
 	var screens []string
 	shot := func(name string) {

@@ -14,10 +14,10 @@ import (
 
 // browseHelp is the key reference the? popup shows.
 var browseHelp = []string{
-	"tree      up/down pick · enter run or fill in · right form · left close group · / filter · q quit",
-	"form      type to edit · tab next · enter run · ←/→ cycle a choice · ctrl+o suggestions · esc tree",
-	"result    up/down row · enter open · a all actions · i inspect · ⌫ back · / filter rows · r rerun",
-	"anywhere  v next view (data, text, raw) · ctrl+r run · pgup/pgdown scroll · ? this help · ctrl+c quit",
+	"tree      ↑↓ pick · enter run · → form · ← close group · / filter · q quit",
+	"form      type · tab next · enter run · ←→ cycle a choice · ctrl+o suggestions",
+	"result    ↑↓ row · enter open · a actions · i inspect · ⌫ back · / filter · r rerun",
+	"anywhere  v view · ctrl+r run · pgup/pgdn scroll · esc back · ctrl+c quit",
 }
 
 // treeRows is how many tree rows fit in the top half of the screen.
