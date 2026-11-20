@@ -124,9 +124,11 @@ func TestChoicesOnTheCommandLine(t *testing.T) {
 		{"ls", "--size=0"},
 		{"ls", "--tag=a", "--tag=c"},
 	} {
-		code, _, stderr := execCmdFull(t, cfg, argv...)
+		code, _ := execCmd(t, cfg, argv...)
 		assert.NotEqual(t, 0, code, "%v", argv)
-		assert.Contains(t, stderr, "is not one of", "%v", argv)
+		// browseExec keeps what cobra prints, which is where the reason lands.
+		out := browseExec(cfg, argv, 80, 24)
+		assert.Contains(t, out.text, "is not one of", "%v", argv)
 	}
 }
 
