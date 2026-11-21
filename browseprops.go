@@ -18,7 +18,7 @@ var browseHelp = []string{
 	"tree      ↑↓ pick · enter form · r run · ← close group · / filter · q quit",
 	"form      type · tab next · enter run · ←→ cycle a choice · ctrl+o suggestions",
 	"result    ↑↓ row · enter open · a actions · i inspect · ⌫ back · / filter · [ ] page",
-	"rows      space mark · * mark all · s sort · enter on marked rows runs the link for each",
+	"rows      space mark · * mark all · s sort · y copy · enter on marked rows runs the link for each",
 	"anywhere  v view · ctrl+r run · ctrl+x cancel · pgup/pgdn scroll · esc back · ctrl+c quit",
 }
 

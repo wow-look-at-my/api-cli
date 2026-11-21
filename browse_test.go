@@ -115,14 +115,17 @@ func TestBrowseExec(t *testing.T) {
 type browseHarness struct {
 	t    *testing.T
 	m    *browseModel
-	runs [][]string
-	quit bool
+	runs   [][]string
+	quit   bool
+	copied []string
 	// deferred queues work instead of running it, for a test that steps through it.
 	deferred bool
 	queue    []func() tml.Msg
 }
 
 func (h *browseHarness) Quit() { h.quit = true }
+
+func (h *browseHarness) Copy(text string) { h.copied = append(h.copied, text) }
 
 func (h *browseHarness) Go(work func() tml.Msg) {
 	if h.deferred {

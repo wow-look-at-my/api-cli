@@ -55,6 +55,7 @@ type browseTickMsg struct{ id int }
 type browseHost interface {
 	Quit()
 	Go(work func() tml.Msg)
+	Copy(text string)
 }
 
 type browseModel struct {

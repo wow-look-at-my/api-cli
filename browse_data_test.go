@@ -194,6 +194,27 @@ func TestBrowseRunsALinkForEachMarkedRow(t *testing.T) {
 	assert.Empty(t, h.m.top().level().marked, "esc clears the marks")
 }
 
+func TestBrowseCopiesAValue(t *testing.T) {
+	h := newDataHarness(t)
+	listAcme(h)
+	h.press("y")
+	require.NotNil(t, h.m.menu)
+	assert.Equal(t, "NAME: api", h.m.menu.items[0])
+	h.press("enter")
+	assert.Equal(t, []string{"api"}, h.copied)
+	assert.Contains(t, h.m.status, "copied NAME: api")
+
+	h.press("y")
+	h.typeText("json")
+	h.press("enter")
+	assert.Contains(t, h.copied[1], `"name": "api"`, "the row copies as indented JSON")
+
+	h.press("y")
+	h.typeText("command")
+	h.press("enter")
+	assert.Equal(t, "shop repos list acme", h.copied[2])
+}
+
 func TestBrowseRowFilter(t *testing.T) {
 	h := newDataHarness(t)
 	listAcme(h)

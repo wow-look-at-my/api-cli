@@ -234,6 +234,8 @@ func (m *browseModel) resultKey(msg tml.Key) bool {
 		m.back()
 	case "a", "o":
 		m.actions()
+	case "y":
+		m.copyMenu()
 	case "space", " ":
 		m.toggleMark()
 	case "*":
