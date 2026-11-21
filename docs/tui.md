@@ -20,6 +20,7 @@ The screen has panes. The command tree is on the left. The form for the selected
 - **Three views.** `v` cycles the result between the data view, the text the command prints on a terminal, and the raw body with its JSON indented. A leaf with `<fields>` shows its own table in the text view. A leaf with `<tml>` opens in the text view, which draws its screen.
 - **A refreshing screen.** A command with `watch=` reruns on its interval while it is on screen, and keeps the selected row.
 - **Filters.** `/` in the tree narrows the commands. `/` in a result narrows the rows.
+- **A session that picks up where it stopped.** The browser saves the shared values, each command's form and the picked command to a file under the user cache directory, one file per config. An input whose name looks like a secret is never saved. A saved file that does not parse is reported on the status line. The session starts empty.
 - **Pages.** A command with an int flag named `page` pages with `]` and `[`. The result reruns in place on the next or the previous page.
 
 ## Hints for the rest
@@ -73,6 +74,8 @@ This hint is more than a TUI hint. The command line rejects any other value, she
 ```
 
 Ctrl+O in the field runs `repos list` and offers each record's `name`. The source takes its own inputs from the form and the shared values, so its `owner` comes from the owner you already typed. Without `suggest-field=`, the browser takes the field named like the input, then a `name` or an `id`. A suggestion is advice. The field still takes any value.
+
+The same hint drives shell completion. A tab on `repo get` runs the source and offers its values, each with the record's title. The source takes its inputs from the words already typed, then from the values the browser saved. A source that asks for confirmation never runs from a tab. Neither does one that still lacks a required input. A hidden command can be a source.
 
 ## Keys
 
