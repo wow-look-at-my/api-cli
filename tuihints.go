@@ -64,6 +64,10 @@ func buildTUI(n *xnode) (*TUIHints, error) {
 			if w.Name() != "with" {
 				return nil, fmt.Errorf("<link to=%q>: unexpected child element <%s>", link.To, w.Name())
 			}
+			w, err := liftTemplates(w, "expr")
+			if err != nil {
+				return nil, err
+			}
 			if err := checkAttrs(w, "name", "field", "expr"); err != nil {
 				return nil, err
 			}

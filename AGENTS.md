@@ -30,7 +30,7 @@ Do not add a new third-party dependency without a clear cause.
 |---------------------------------|-------------------------------------------------------------|
 | `main.go`                       | Entrypoint, root cobra command, persistent flags, config loading. `preparseGlobalFlags` extracts `--config` / `--mcp` / `--cors` before the cobra tree is built. Config discovery: `./api.xml`. |
 | `config.go`                     | Schema structs; `Load` (bytes → `parseConfigXML` → `validate`); `validate`/`validateCommand`/`validateRequest`. |
-| `dsl.go`                        | The api-dsl boundary: `xnode` = `apidsl.Node`, plus `parseDOM`/`checkAttrs`/`compileContent`/`compileTextElem`/`textOf`/`isPlaceholder`/`envMap`/`lookupPath`/`mergeVars`/`isTruthy`/`templateTruthy`. An element's name is the method `Name()`, never a field. |
+| `dsl.go`                        | The api-dsl boundary: `xnode` = `apidsl.Node`, plus `liftTemplates` (a builder's first call: it folds each template attribute's element form back into the attribute), and `parseDOM`/`checkAttrs`/`compileContent`/`compileTextElem`/`textOf`/`isPlaceholder`/`envMap`/`lookupPath`/`mergeVars`/`isTruthy`/`templateTruthy`. An element's name is the method `Name()`, never a field. |
 | `xmlsource.go`                  | `parseConfigXML` + config builders. `<entry>` is converted to a `json.RawMessage`. |
 | `xmlrequest.go`                 | The `<request>` half of the source. |
 | `runnable.go`                   | A parent that also runs: `Command.executes`, `validateRunnable` (a pattern may not match a subcommand name), and the cobra arg validators (`matchArgPatterns`, `chainArgs`). |
