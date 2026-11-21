@@ -234,6 +234,7 @@ func (m *browseModel) finishBatch(msg browseBatchMsg) {
 		}
 	}
 	f.levels = []*dataLevel{lvl}
+	f.batch = true
 	m.frames = append(m.frames, f)
 	m.rowFilter, m.rowFiltering = "", false
 	summary := fmt.Sprintf("ran %s for %s · %d failed · %s", run.entry.pathString(), plural(len(msg.items), "row"), failed, roundTook(msg.took))

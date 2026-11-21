@@ -44,6 +44,8 @@ type resultFrame struct {
 	levels []*dataLevel
 	view   int
 	offset int
+	// batch marks the summary of a batch. Its top level opens a row's own result rather than follow a link.
+	batch bool
 }
 
 func (m *browseModel) top() *resultFrame {
@@ -382,7 +384,7 @@ func (m *browseModel) activate() {
 		return
 	}
 	l := f.level()
-	if l.kind == levelObject && m.drill() {
+	if (l.kind == levelObject || (f.batch && len(f.levels) == 1)) && m.drill() {
 		return
 	}
 	if links := m.links(); len(links) > 0 {
