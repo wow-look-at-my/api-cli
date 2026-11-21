@@ -47,7 +47,7 @@ func TestBrowseShowsARunInProgress(t *testing.T) {
 }
 
 func TestLiveCopyOfARun(t *testing.T) {
-	t.Serial("runs a command in process, which swaps the package's I/O")
+	t.Serial("browseExecLive points execStdout at its own buffer for the length of the run")
 	cfg, err := parseConfigXML([]byte(`<config name="x"><command name="two"><run>echo one; echo two</run></command></config>`))
 	require.NoError(t, err)
 	require.NoError(t, validate(cfg))
@@ -57,7 +57,7 @@ func TestLiveCopyOfARun(t *testing.T) {
 }
 
 func TestCancelKillsARunningCommand(t *testing.T) {
-	t.Serial("runs a command in process, which swaps the package's I/O")
+	t.Serial("browseExecCtx sets runCtx, which every command in the process reads")
 	cfg, err := parseConfigXML([]byte(`<config name="x"><command name="slow"><run>echo start; sleep 5; echo end</run></command></config>`))
 	require.NoError(t, err)
 	require.NoError(t, validate(cfg))

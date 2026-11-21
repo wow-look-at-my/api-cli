@@ -318,7 +318,9 @@ func browseExecLive(ctx context.Context, live io.Writer, cfg *Config, argv []str
 	exitCode = 0
 	bodyTap = func(s string) { body = &s }
 	runCtx = ctx
-	defer func() { execStdin, ttyOverride, exitCode, bodyTap, runCtx = prevIn, prevTTY, prevCode, prevTap, prevCtx }()
+	defer func() {
+		execStdin, ttyOverride, exitCode, bodyTap, runCtx = prevIn, prevTTY, prevCode, prevTap, prevCtx
+	}()
 
 	root := newRoot(cfg)
 	root.SetArgs(append([]string{"--yes", "--watch=off", "--no-tui"}, argv...))
