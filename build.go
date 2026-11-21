@@ -196,7 +196,7 @@ func runLeaf(c *cobra.Command, node Command, args []string, vars map[string]any,
 		// A component draws its own screen, so it repeats as a terminal program
 		// rather than as a repainted block of captured output.
 		if node.TML.Defined() {
-			return runTMLProgram(every, frame)
+			return runTMLProgram(every, frame, node.TML)
 		}
 		title := strings.TrimSpace(c.CommandPath() + " " + strings.Join(args, " "))
 		return runWatch(title, every, frame)
