@@ -151,6 +151,10 @@ func buildDownloads(n *xnode) (*Downloads, error) {
 }
 
 func buildDownload(n *xnode) (Download, error) {
+	n, err := liftTemplates(n, "over", "when", "group", "order")
+	if err != nil {
+		return Download{}, err
+	}
 	if err := checkAttrs(n, "over", "when", "transport", "group", "order"); err != nil {
 		return Download{}, err
 	}

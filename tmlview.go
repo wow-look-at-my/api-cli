@@ -117,6 +117,10 @@ func repeats(n *xnode) bool {
 }
 
 func buildTMLField(n *xnode) (TMLField, error) {
+	n, err := liftTemplates(n, "expr", "last", "truncate")
+	if err != nil {
+		return TMLField{}, err
+	}
 	if err := checkAttrs(n, "name", "expr", "lines", "last", "truncate"); err != nil {
 		return TMLField{}, err
 	}

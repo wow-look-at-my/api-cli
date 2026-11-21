@@ -34,6 +34,10 @@ type Join struct {
 // buildJoin parses a <join> child. Its attributes are templates over the same
 // record the parts are, so a single declaration names a single output per group.
 func buildJoin(n *xnode) (*Join, error) {
+	n, err := liftTemplates(n, "to")
+	if err != nil {
+		return nil, err
+	}
 	if err := checkAttrs(n, "to", "cleanup", "contiguous"); err != nil {
 		return nil, err
 	}

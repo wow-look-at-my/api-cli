@@ -165,6 +165,10 @@ func buildRun(n *xnode) (*Cmd, *Request, error) {
 }
 
 func buildFields(n *xnode) (FieldsBlock, error) {
+	n, err := liftTemplates(n, "footer", "when")
+	if err != nil {
+		return FieldsBlock{}, err
+	}
 	f, err := buildFieldsBody(n)
 	if err != nil {
 		return FieldsBlock{}, err
@@ -191,6 +195,10 @@ func buildFieldsBody(n *xnode) (*Fields, error) {
 }
 
 func buildField(n *xnode) (Field, error) {
+	n, err := liftTemplates(n, "expr")
+	if err != nil {
+		return Field{}, err
+	}
 	if err := checkAttrs(n, "name", "default", "truncate", "firstline", "priority", "show_in", "expr"); err != nil {
 		return Field{}, err
 	}
@@ -256,10 +264,18 @@ func buildFormats(n *xnode) (map[string]*Format, error) {
 }
 
 func buildFormat(n *xnode) (*Format, error) {
+	n, err := liftTemplates(n, "when")
+	if err != nil {
+		return nil, err
+	}
 	f := &Format{Input: n.Attr("input"), When: n.Attr("when")}
 	for _, child := range n.Children() {
 		if child.Name() != "view" {
 			return nil, fmt.Errorf("<format>: unexpected child element <%s>", child.Name())
+		}
+		child, err := liftTemplates(child, "when")
+		if err != nil {
+			return nil, err
 		}
 		if err := checkAttrs(child, "name", "when", "default"); err != nil {
 			return nil, err
@@ -447,6 +463,10 @@ func buildPreconditions(n *xnode) ([]string, error) {
 }
 
 func buildArg(n *xnode) (Arg, error) {
+	n, err := liftTemplates(n, "pattern")
+	if err != nil {
+		return Arg{}, err
+	}
 	if err := checkAttrs(n, "name", "type", "required", "variadic", "pattern", "description", "choices", "suggest", "suggest-field"); err != nil {
 		return Arg{}, err
 	}
@@ -463,6 +483,10 @@ func buildArg(n *xnode) (Arg, error) {
 }
 
 func buildFlag(n *xnode) (Flag, error) {
+	n, err := liftTemplates(n, "default")
+	if err != nil {
+		return Flag{}, err
+	}
 	if err := checkAttrs(n, "name", "short", "type", "default", "required", "conflicts", "description", "choices", "suggest", "suggest-field"); err != nil {
 		return Flag{}, err
 	}
@@ -509,6 +533,10 @@ func buildFlag(n *xnode) (Flag, error) {
 }
 
 func buildStep(n *xnode) (Step, error) {
+	n, err := liftTemplates(n, "when", "over", "until")
+	if err != nil {
+		return Step{}, err
+	}
 	if err := checkAttrs(n, "name", "when", "over", "until", "interval", "attempts", "retries", "on-error"); err != nil {
 		return Step{}, err
 	}

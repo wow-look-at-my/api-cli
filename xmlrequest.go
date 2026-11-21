@@ -92,6 +92,10 @@ func buildRequest(n *xnode) (*Request, error) {
 			}
 			req.Body = s
 		case "response":
+			child, err := liftTemplates(child, "jq")
+			if err != nil {
+				return nil, err
+			}
 			if err := checkAttrs(child, "jq"); err != nil {
 				return nil, err
 			}
