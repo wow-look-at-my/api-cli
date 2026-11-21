@@ -113,8 +113,8 @@ func TestBrowseExec(t *testing.T) {
 
 // browseHarness is the program for the model: it sends keys, and runs each command in place.
 type browseHarness struct {
-	t    *testing.T
-	m    *browseModel
+	t      *testing.T
+	m      *browseModel
 	runs   [][]string
 	quit   bool
 	copied []string

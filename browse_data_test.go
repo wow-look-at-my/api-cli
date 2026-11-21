@@ -43,6 +43,19 @@ func listAcme(h *browseHarness) {
 	require.NotNil(h.t, h.m.top(), "status %q, focus %q, runs %v", h.m.status, h.focused(), h.runs)
 }
 
+func TestBrowseMarksCommandsThatChangeThings(t *testing.T) {
+	cfg, err := parseConfigXML([]byte(`<config name="x"><run><request><url>https://h.invalid/</url></request></run><command name="get"/><command name="del"><run><request method="DELETE"><url>https://h.invalid/x</url></request></run></command><command name="sh"><run>echo</run></command><command name="ask" confirm="Sure?"><run>echo</run></command></config>`))
+	require.NoError(t, err)
+	entries := flattenBrowse(cfg)
+	marks := map[string]bool{}
+	for _, e := range entries {
+		marks[e.pathString()] = strings.HasSuffix(e.label(), " !")
+	}
+	assert.Equal(t, map[string]bool{"get": false, "del": true, "sh": false, "ask": true}, marks)
+	assert.Equal(t, "GET", entries[0].method, "a request without a method is a GET")
+	assert.Empty(t, entries[2].method, "a shell command has no method")
+}
+
 func TestBrowseTreeHonoursHints(t *testing.T) {
 	h := newDataHarness(t)
 	assert.NotContains(t, entryPaths(h.m.visible()), "internal", "a hidden command stays out of the tree")

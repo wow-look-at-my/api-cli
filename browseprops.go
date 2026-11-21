@@ -199,6 +199,13 @@ func (m *browseModel) Props() tml.Props {
 	if !e.runnable() && description == "" {
 		description = "A group. Pick one of its commands on the left."
 	}
+	if e.runnable() && e.changes() {
+		what := "Asks for confirmation"
+		if e.method != "" && e.method != "GET" && e.method != "HEAD" {
+			what = "Sends a " + e.method + " request"
+		}
+		description = strings.TrimSpace(what + ". " + description)
+	}
 	p := tml.Props{
 		"title":        sema.StringValue(m.name),
 		"hint":         sema.StringValue(m.hint()),
