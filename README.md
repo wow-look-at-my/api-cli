@@ -85,6 +85,17 @@ Element content can mix plain text with three placeholder elements that compile 
 <path><if test="arg.username">/users/<value name="arg.username" as="urlpath"/><else/>/user</if></path>
 ```
 
+Every attribute that holds a template can be a child element of the same name instead. A long template then spreads over indented lines. Each line of plain text loses its surrounding whitespace, and the lines join with nothing between them. A CDATA section is kept as written. Setting both forms on one element is an error.
+
+```xml
+<step name="page">
+	<until>
+		{{ or .result.page.done
+		.result.page.empty }}
+	</until>
+</step>
+```
+
 ## Requests
 
 [docs/requests.md](docs/requests.md) holds this section.

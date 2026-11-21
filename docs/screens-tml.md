@@ -48,4 +48,18 @@ A screen needs a terminal. Piped, the leaf falls through to whatever else it dec
 
 A one-shot frame lays out in a tall viewport rather than the terminal's, because it prints into a terminal that scrolls. A board of cards is therefore never cut off at the last row. The blank rows under the content are trimmed. Under a watch the screen IS the height. The program owns it.
 
-On its own the leaf draws one frame and exits. With `--watch` it becomes a terminal program on the alternate screen. A tick is one whole run of the leaf, the same as a watch frame. Focus, clicking and scrolling inside the component are NOT wired yet. A screen reads today. It does not answer.
+On its own the leaf draws one frame and exits. With `--watch` it becomes a terminal program on the alternate screen. A tick is one whole run of the leaf, the same as a watch frame. The program draws the component itself, so its controls take focus with tab, and the pointer hovers and clicks. A run that fails shows its error in place of the component until a run succeeds again.
+
+State that the user drives, such as how far. A log scrolled or which row a list picked, comes from multiple prop sources that api-cli keeps between runs:
+
+```xml
+<tml src="ui/jobs.tml">
+	<prop name="jobs" over="data.jobs"><field name="name">name</field></prop>
+	<prop name="picked" select="jobs"/>
+	<prop name="offset" scroll="log"/>
+</tml>
+```
+
+`select="jobs"` is the row picked in the element with id `jobs`. The arrows move it while that element has focus, and a click picks a row. `scroll="log"` is how far the element with id `log` scrolled: the wheel moves it, and so do the page keys. Bind each prop to the element's `selected` or `offset`. Both start at 0, and both hold 0 in a one-shot frame. An element with `action="refresh"` runs the leaf again when it is activated.
+
+The pointer is on only when the screen declares such a prop, so a screen without one still lets the terminal select text.

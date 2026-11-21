@@ -4,13 +4,16 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/term"
@@ -52,6 +55,7 @@ type browseTickMsg struct{ id int }
 type browseHost interface {
 	Quit()
 	Go(work func() tml.Msg)
+	Copy(text string)
 }
 
 type browseModel struct {
@@ -83,6 +87,8 @@ type browseModel struct {
 
 	// memory holds the last value typed for each input name, which prefills the same name in every other command.
 	memory map[string]string
+	// statePath is the file the session saves to, or empty for a session that saves nothing.
+	statePath string
 
 	host          browseHost
 	width, height int
@@ -92,6 +98,93 @@ type browseModel struct {
 	exec func(argv []string, width, height int) browseOutput
 	// now times a run. A test fixes it, so a screen holds no wall-clock time.
 	now func() time.Time
+
+	// ctx bounds the run in progress, and cancel stops it. The program's goroutine sets both before the work starts.
+	ctx       context.Context
+	cancel    context.CancelFunc
+	cancelled bool
+
+	// live is what the run in progress has printed so far.
+	live      *liveBuffer
+	liveEvery time.Duration
+}
+
+// liveRefresh is how often the result pane shows more of a run in progress.
+const liveRefresh = 250 * time.Millisecond
+
+// browseLiveMsg asks for a repaint of a run in progress.
+type browseLiveMsg struct{ id int }
+
+// liveBuffer is a buffer that the run's goroutine writes and the program's goroutine reads.
+type liveBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *liveBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *liveBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// liveTick repaints a run in progress and asks for the next repaint, until the run ends.
+func (m *browseModel) liveTick(msg browseLiveMsg) bool {
+	if msg.id != m.runID || !m.running {
+		return false
+	}
+	every := m.liveEvery
+	m.host.Go(func() tml.Msg {
+		time.Sleep(every)
+		return browseLiveMsg{id: msg.id}
+	})
+	return true
+}
+
+// begin opens the context for a new run, and a fresh buffer for what it prints on its way.
+func (m *browseModel) begin() {
+	m.ctx, m.cancel = context.WithCancel(context.Background())
+	m.cancelled = false
+	m.live = &liveBuffer{}
+	if m.liveEvery > 0 {
+		id := m.runID + 1
+		every := m.liveEvery
+		m.host.Go(func() tml.Msg {
+			time.Sleep(every)
+			return browseLiveMsg{id: id}
+		})
+	}
+}
+
+// runContext is the context of the run in progress.
+func (m *browseModel) runContext() context.Context {
+	if m.ctx == nil {
+		return context.Background()
+	}
+	return m.ctx
+}
+
+// end releases the context of a finished run.
+func (m *browseModel) end() {
+	if m.cancel != nil {
+		m.cancel()
+	}
+	m.cancel = nil
+}
+
+// stop cancels the run in progress. Its result still arrives, with whatever it printed before it stopped.
+func (m *browseModel) stop() {
+	if !m.running || m.cancel == nil {
+		return
+	}
+	m.cancelled = true
+	m.cancel()
+	m.setStatus("cancelling…", "dim")
 }
 
 // pendingRun is a run on its way: what it runs, and whether its result goes on top of the history or replaces the top.
@@ -101,6 +194,9 @@ type pendingRun struct {
 	push  bool
 	// keep is the frame whose selection a refresh carries over.
 	keep *resultFrame
+	// batch is set for a run of one link over several marked rows, with the question its confirmation asks.
+	batch  []batchItem
+	prompt string
 }
 
 // tuiCommand is the built-in `tui` subcommand.
@@ -124,11 +220,17 @@ func runBrowse(cfg *Config) error {
 	if err != nil {
 		return err
 	}
+	if path, perr := statePath(cfg); perr == nil {
+		m.attachState(path)
+	} else {
+		m.setStatus("state is not saved: "+perr.Error(), "bad")
+	}
 	program, err := tml.NewProgram(m.view, m)
 	if err != nil {
 		return err
 	}
 	err = program.Run()
+	m.save()
 	if errors.Is(err, tml.ErrInterrupted) {
 		m.code, err = interruptExitCode, nil
 	}
@@ -145,7 +247,8 @@ func newBrowseModel(cfg *Config) (*browseModel, error) {
 		return nil, fmt.Errorf("browse display: %w", err)
 	}
 	entries := flattenBrowse(cfg)
-	if len(entries) == 0 {
+	shown := visibleEntries(entries, "")
+	if len(shown) == 0 {
 		return nil, fmt.Errorf("the config declares no commands to browse")
 	}
 	m := &browseModel{
@@ -153,13 +256,16 @@ func newBrowseModel(cfg *Config) (*browseModel, error) {
 		name:    cfg.Name,
 		entries: entries,
 		byPath:  map[string]*browseEntry{},
-		cur:     entries[0],
+		cur:     shown[0],
 		memory:  map[string]string{},
 		width:   100,
 		height:  30,
-		exec:    func(argv []string, w, h int) browseOutput { return browseExec(cfg, argv, w, h) },
 		now:     time.Now,
 	}
+	m.exec = func(argv []string, w, h int) browseOutput {
+		return browseExecLive(m.runContext(), m.live, cfg, argv, w, h)
+	}
+	m.liveEvery = liveRefresh
 	for _, e := range entries {
 		m.byPath[e.pathString()] = e
 	}
@@ -186,30 +292,47 @@ func (m *browseModel) focus(id string) {
 	m.view.UI().Focus(id)
 }
 
-// browseExec runs argv in this process, exactly as the command line would,
-// and captures everything it prints. The browser is the confirmation, so the
-// run gets --yes. Stdin is empty, because the terminal belongs to the browser.
-// raw is the body before any formatting, which the data view reads.
+// browseExec is browseExecCtx with no way to cancel.
 func browseExec(cfg *Config, argv []string, width, height int) browseOutput {
-	var buf bytes.Buffer
+	return browseExecCtx(context.Background(), cfg, argv, width, height)
+}
+
+// browseExecCtx is browseExecLive with no live copy.
+func browseExecCtx(ctx context.Context, cfg *Config, argv []string, width, height int) browseOutput {
+	return browseExecLive(ctx, nil, cfg, argv, width, height)
+}
+
+// browseExecLive runs argv in this process, exactly as the command line would, and captures everything it prints.
+// The browser is the confirmation, so the run gets --yes. Stdin is empty, because the terminal belongs to the browser.
+// raw is the body before any formatting, which the data view reads. A cancel of ctx stops the commands and requests.
+// A copy of the output goes to live while the run goes on, and a nil live copies nothing.
+func browseExecLive(ctx context.Context, live io.Writer, cfg *Config, argv []string, width, height int) browseOutput {
+	var captured bytes.Buffer
+	var buf io.Writer = &captured
+	if live != nil {
+		buf = io.MultiWriter(&captured, live)
+	}
 	var body *string
-	prevIn, prevTTY, prevCode, prevTap := execStdin, ttyOverride, exitCode, bodyTap
+	prevIn, prevTTY, prevCode, prevTap, prevCtx := execStdin, ttyOverride, exitCode, bodyTap, runCtx
 	execStdin = strings.NewReader("")
 	ttyOverride = &termSize{width: width, height: height}
 	exitCode = 0
 	bodyTap = func(s string) { body = &s }
-	defer func() { execStdin, ttyOverride, exitCode, bodyTap = prevIn, prevTTY, prevCode, prevTap }()
+	runCtx = ctx
+	defer func() {
+		execStdin, ttyOverride, exitCode, bodyTap, runCtx = prevIn, prevTTY, prevCode, prevTap, prevCtx
+	}()
 
 	root := newRoot(cfg)
 	root.SetArgs(append([]string{"--yes", "--watch=off", "--no-tui"}, argv...))
-	root.SetOut(&buf)
-	root.SetErr(&buf)
-	err := captureInto(&buf, root.Execute)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	err := captureInto(buf, root.Execute)
 	code := exitCode
 	if err != nil && code == 0 {
 		code = 1
 	}
-	out := browseOutput{text: buf.String(), raw: buf.String(), code: code}
+	out := browseOutput{text: captured.String(), raw: captured.String(), code: code}
 	if body != nil {
 		out.raw = *body
 	}
@@ -230,6 +353,11 @@ func (m *browseModel) update(host browseHost, msg tml.Msg) bool {
 	case browseTickMsg:
 		m.tick(msg)
 		return true
+	case browseBatchMsg:
+		m.finishBatch(msg)
+		return true
+	case browseLiveMsg:
+		return m.liveTick(msg)
 	case browseSuggestMsg:
 		m.suggested(msg)
 		return true
@@ -280,6 +408,10 @@ func (m *browseModel) act(action string) {
 		}
 	case "confirm":
 		m.confirming = false
+		if m.pending != nil && len(m.pending.batch) > 0 {
+			m.launchBatch(m.pending)
+			return
+		}
 		m.launch(m.pending)
 	case "cancel":
 		m.confirming = false
@@ -383,9 +515,11 @@ func (m *browseModel) launch(run *pendingRun) {
 		return
 	}
 	m.running = true
+	m.begin()
 	m.runID++
 	m.launched = run
 	m.remember(run.entry)
+	m.save()
 	line := commandLine(m.name, run.argv)
 	m.setStatus("running "+line, "dim")
 	exec, width, height, id, argv, now := m.exec, m.outputWidth(), m.height, m.runID, run.argv, m.now

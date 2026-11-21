@@ -77,7 +77,7 @@ func TestTMLProps_ScalarsAndRecords(t *testing.T) {
 	}
 	ctx := map[string]any{"var": map[string]any{"title": "Fleet"}, "data": parsed}
 
-	props, err := tmlProps(view, parsed, ctx)
+	props, err := tmlProps(view, parsed, ctx, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "Fleet", props["title"].String())
 	assert.Equal(t, "2", props["count"].String())
@@ -94,12 +94,12 @@ func TestTMLProps_ScalarsAndRecords(t *testing.T) {
 
 func TestTMLProps_MissingPathFailsLoud(t *testing.T) {
 	view := &TML{Src: "s.tml", Props: []TMLProp{{Name: "count", From: "nope"}}}
-	_, err := tmlProps(view, map[string]any{"total": 1}, map[string]any{})
+	_, err := tmlProps(view, map[string]any{"total": 1}, map[string]any{}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not in the response or the context")
 
 	list := &TML{Src: "s.tml", Props: []TMLProp{{Name: "rows", Over: "total", Fields: []TMLField{{Name: "name"}}}}}
-	_, err = tmlProps(list, map[string]any{"total": 1}, map[string]any{})
+	_, err = tmlProps(list, map[string]any{"total": 1}, map[string]any{}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "needs a list")
 }

@@ -27,14 +27,21 @@ type tmlModel struct {
 	code          int
 	// cancel stops the tick that waits.
 	cancel func()
+
+	// live draws the author's component, and frameView shows the text of a run that gave it nothing to draw.
+	live      *tmlLive
+	frameView *tml.View
+	program   *tml.Program
 }
 
-// runTMLProgram paints body's output every interval until the user quits.
-func runTMLProgram(every time.Duration, body func() error) error {
-	return runTMLWith(every, body, tml.ProgramOptions{NoMouse: true})
+// runTMLProgram runs the leaf every interval and draws its screen, until the
+// user quits.
+func runTMLProgram(every time.Duration, body func() error, decl *TML) error {
+	return runTMLWith(every, body, decl, tml.ProgramOptions{NoMouse: !decl.interactive()})
 }
 
-func runTMLWith(every time.Duration, body func() error, opts tml.ProgramOptions) error {
+// runTMLWith is runTMLProgram with the program's options. A nil decl shows each run's printed frame as text.
+func runTMLWith(every time.Duration, body func() error, decl *TML, opts tml.ProgramOptions) error {
 	sub, err := fs.Sub(frameUI, "ui/frame")
 	if err != nil {
 		return err
@@ -43,7 +50,13 @@ func runTMLWith(every time.Duration, body func() error, opts tml.ProgramOptions)
 	if err != nil {
 		return err
 	}
-	m := &tmlModel{every: every, body: body}
+	m := &tmlModel{every: every, body: body, frameView: view}
+	if decl != nil {
+		if m.live, err = newTMLLive(decl); err != nil {
+			return err
+		}
+	}
+	// The program opens on the frame. The component takes over once a run gives it its props.
 	program, err := tml.NewProgram(view, m, opts)
 	if err != nil {
 		return err
@@ -64,11 +77,17 @@ func runTMLWith(every time.Duration, body func() error, opts tml.ProgramOptions)
 	return nil
 }
 
-// Props is the last frame that the leaf printed.
-func (m *tmlModel) Props() tml.Props { return tml.Props{"frame": sema.StringValue(m.frame)} }
+// Props answers for the view on screen: the component's props, or the last frame the leaf printed.
+func (m *tmlModel) Props() tml.Props {
+	if m.live != nil && m.program != nil && m.program.View() == m.live.view {
+		return m.live.props
+	}
+	return tml.Props{"frame": sema.StringValue(m.frame)}
+}
 
 // Update takes one message from the program. A resize runs the leaf again at the new size.
 func (m *tmlModel) Update(p *tml.Program, msg tml.Msg) bool {
+	m.program = p
 	switch msg := msg.(type) {
 	case tml.Resize:
 		m.width, m.height = msg.Width, msg.Height
@@ -84,14 +103,45 @@ func (m *tmlModel) Update(p *tml.Program, msg tml.Msg) bool {
 		case "r":
 			m.refresh(p)
 		default:
+			if m.live != nil && m.live.key(msg.String(), m.height) {
+				m.redraw(p)
+				return true
+			}
 			return false
 		}
 		return true
+	case tml.Event:
+		if m.live == nil {
+			return false
+		}
+		changed, refresh := m.live.event(msg)
+		switch {
+		case refresh:
+			m.refresh(p)
+		case changed:
+			m.redraw(p)
+		}
+		return changed || refresh
 	case tml.RepaintMsg, tmlTickMsg:
 		m.refresh(p)
 		return true
 	}
 	return false
+}
+
+// redraw draws the component again from the last good run, after a change of state.
+func (m *tmlModel) redraw(p *tml.Program) {
+	if err := m.live.redraw(); err != nil {
+		m.fail(p, failure("", err))
+	}
+}
+
+// fail shows text in place of the component until a run gives it something to draw.
+func (m *tmlModel) fail(p *tml.Program, text string) {
+	m.frame = text
+	if p.View() != m.frameView {
+		p.SetView(m.frameView)
+	}
 }
 
 // refresh runs the leaf into a buffer, keeps the result as the frame, and sets
@@ -105,14 +155,36 @@ func (m *tmlModel) refresh(p *tml.Program) {
 	}
 	prev := ttyOverride
 	ttyOverride = &termSize{width: width, height: height}
-	err := captureInto(&buf, m.body)
-	ttyOverride = prev
-	if err != nil {
-		buf.WriteString("\nerror: " + err.Error() + "\n")
+	tapped := false
+	if m.live != nil {
+		tmlTap = func(parsed any, ctx map[string]any) {
+			m.live.parsed, m.live.ctx, tapped = parsed, ctx, true
+		}
 	}
-	m.frame = buf.String()
+	err := captureInto(&buf, m.body)
+	tmlTap = nil
+	ttyOverride = prev
 	if m.cancel != nil {
 		m.cancel()
 	}
 	m.cancel = p.After(m.every, tmlTickMsg{})
+
+	if m.live == nil {
+		if err != nil {
+			buf.WriteString("\nerror: " + err.Error() + "\n")
+		}
+		m.frame = buf.String()
+		return
+	}
+	if err != nil || !tapped {
+		m.fail(p, failure(buf.String(), err))
+		return
+	}
+	if rerr := m.live.redraw(); rerr != nil {
+		m.fail(p, failure("", rerr))
+		return
+	}
+	if p.View() != m.live.view {
+		p.SetView(m.live.view)
+	}
 }

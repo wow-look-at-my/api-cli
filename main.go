@@ -143,6 +143,7 @@ func newRoot(cfg *Config) *cobra.Command {
 			root.AddCommand(buildCommand(c, cfg.Vars, cfg.Preconditions, cfg.Command, cfg.Request, cfg.Cwd, cfg.Stdin, "", "", nil, cfg.Formats))
 		}
 		root.AddCommand(tuiCommand(cfg))
+		installSuggestCompletion(root, cfg)
 	} else {
 		// Cobra's default help template only renders the flags/usage block for
 		// Runnable commands (or commands with subcommands).

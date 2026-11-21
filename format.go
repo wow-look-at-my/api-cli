@@ -388,6 +388,9 @@ func runTMLFormatted(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map
 
 	parsed := parseInput(out, "json")
 	ctx := formatContext(parsed, data, true, width)
+	if tmlTap != nil {
+		tmlTap(parsed, ctx)
+	}
 	frame, err := renderTMLFrame(view, configDir, parsed, ctx, width, height)
 	if err != nil {
 		fmt.Fprintln(execStderr, "error:", err)

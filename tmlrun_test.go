@@ -37,12 +37,18 @@ func (b *lockedBuffer) String() string {
 // startTMLProgram runs the watch program on a pipe for keys and a buffer for the screen.
 func startTMLProgram(t *testing.T, body func() error) (*io.PipeWriter, *lockedBuffer, <-chan error) {
 	t.Helper()
+	return startTMLWith(t, body, nil)
+}
+
+// startTMLWith is startTMLProgram for a live screen: decl names the component the program draws.
+func startTMLWith(t *testing.T, body func() error, decl *TML) (*io.PipeWriter, *lockedBuffer, <-chan error) {
+	t.Helper()
 	reader, writer := io.Pipe()
 	t.Cleanup(func() { _ = writer.Close() })
 	out := &lockedBuffer{}
 	done := make(chan error, 1)
 	opts := tml.ProgramOptions{Input: reader, Output: out, Width: 40, Height: 10, NoMouse: true}
-	go func() { done <- runTMLWith(10*time.Millisecond, body, opts) }()
+	go func() { done <- runTMLWith(10*time.Millisecond, body, decl, opts) }()
 	return writer, out, done
 }
 

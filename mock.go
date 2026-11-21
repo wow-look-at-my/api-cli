@@ -69,6 +69,10 @@ const defaultRecordText = `{"directory":{{ .mock.cwd | toJson }},` +
 // buildMock reads the <mock> element. The regular expressions compile here, so
 // a bad pattern is a load error rather than a surprise at run time.
 func buildMock(n *xnode) (*Mock, error) {
+	n, err := liftTemplates(n, "exit")
+	if err != nil {
+		return nil, err
+	}
 	if err := checkAttrs(n, "exit"); err != nil {
 		return nil, err
 	}
@@ -113,6 +117,10 @@ func buildMock(n *xnode) (*Mock, error) {
 }
 
 func buildMockInput(n *xnode) (MockInput, error) {
+	n, err := liftTemplates(n, "default")
+	if err != nil {
+		return MockInput{}, err
+	}
 	if err := checkAttrs(n, "name", "match", "variadic", "required", "default"); err != nil {
 		return MockInput{}, err
 	}
@@ -141,6 +149,10 @@ func buildMockInput(n *xnode) (MockInput, error) {
 }
 
 func buildMockOutput(n *xnode) (MockOutput, error) {
+	n, err := liftTemplates(n, "path", "when", "over", "from", "mode")
+	if err != nil {
+		return MockOutput{}, err
+	}
 	if err := checkAttrs(n, "path", "when", "over", "from", "append", "mode"); err != nil {
 		return MockOutput{}, err
 	}
@@ -170,6 +182,10 @@ func buildMockOutput(n *xnode) (MockOutput, error) {
 }
 
 func buildMockRecord(n *xnode) (MockRecord, error) {
+	n, err := liftTemplates(n, "path", "when")
+	if err != nil {
+		return MockRecord{}, err
+	}
 	if err := checkAttrs(n, "path", "when"); err != nil {
 		return MockRecord{}, err
 	}

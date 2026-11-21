@@ -112,17 +112,39 @@ func (m *browseModel) actions() {
 	if canDrill {
 		items = append(items, "inspect this row")
 	}
+	var rec map[string]any
+	var urls []string
+	if f != nil && f.view == viewData && len(m.markedRows(f.level())) == 0 {
+		rec = f.level().record()
+		urls = recordURLs(rec)
+	}
+	for _, k := range urls {
+		items = append(items, "open "+k+" in the browser")
+	}
 	if len(items) == 0 {
 		m.setStatus("nothing to open from here", "dim")
 		return
 	}
-	m.openMenu("Open", items, func(i int) {
+	title := "Open"
+	if canDrill && len(m.markedRows(f.level())) > 0 {
+		title = fmt.Sprintf("Run for %s", plural(len(m.markedRows(f.level())), "marked row"))
+	}
+	m.openMenu(title, items, func(i int) {
 		if i < len(links) {
+			if len(m.markedRows(f.level())) > 0 {
+				m.followMarked(links[i])
+				return
+			}
 			m.follow(links[i])
 			return
 		}
-		m.drill()
-		m.focusResult()
+		if canDrill && i == len(links) {
+			m.drill()
+			m.focusResult()
+			return
+		}
+		k := urls[i-len(items)+len(urls)]
+		m.open(k, rec[k].(string))
 	})
 }
 
@@ -157,6 +179,7 @@ func (m *browseModel) suggest(f *browseField) {
 		return
 	}
 	m.running = true
+	m.begin()
 	m.setStatus("listing "+f.label+" from "+s.From, "dim")
 	exec, w, h, id := m.exec, m.outputWidth(), m.height, f.id
 	m.host.Go(func() tml.Msg {
@@ -167,6 +190,7 @@ func (m *browseModel) suggest(f *browseField) {
 // suggested opens the menu of values a suggestion source listed.
 func (m *browseModel) suggested(msg browseSuggestMsg) {
 	m.running = false
+	m.end()
 	f := m.field(msg.field)
 	if f == nil {
 		return

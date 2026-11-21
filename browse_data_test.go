@@ -3,6 +3,7 @@ package main
 import _ "embed"
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -25,6 +26,7 @@ func newDataHarness(t *testing.T) *browseHarness {
 	require.NoError(t, err)
 	h := &browseHarness{t: t, m: m}
 	m.host = h
+	m.liveEvery = 0
 	m.exec = func(argv []string, w, ht int) browseOutput {
 		h.runs = append(h.runs, argv)
 		return browseExec(cfg, argv, w, ht)
@@ -42,9 +44,23 @@ func listAcme(h *browseHarness) {
 	require.NotNil(h.t, h.m.top(), "status %q, focus %q, runs %v", h.m.status, h.focused(), h.runs)
 }
 
+func TestBrowseMarksCommandsThatChangeThings(t *testing.T) {
+	cfg, err := parseConfigXML([]byte(`<config name="x"><run><request><url>https://h.invalid/</url></request></run><command name="get"/><command name="del"><run><request method="DELETE"><url>https://h.invalid/x</url></request></run></command><command name="sh"><run>echo</run></command><command name="ask" confirm="Sure?"><run>echo</run></command></config>`))
+	require.NoError(t, err)
+	entries := flattenBrowse(cfg)
+	marks := map[string]bool{}
+	for _, e := range entries {
+		marks[e.pathString()] = strings.HasSuffix(e.label(), " !")
+	}
+	assert.Equal(t, map[string]bool{"get": false, "del": true, "sh": false, "ask": true}, marks)
+	assert.Equal(t, "GET", entries[0].method, "a request without a method is a GET")
+	assert.Empty(t, entries[2].method, "a shell command has no method")
+}
+
 func TestBrowseTreeHonoursHints(t *testing.T) {
 	h := newDataHarness(t)
-	assert.NotContains(t, entryPaths(h.m.entries), "internal", "a hidden command stays out of the tree")
+	assert.NotContains(t, entryPaths(h.m.visible()), "internal", "a hidden command stays out of the tree")
+	assert.Contains(t, entryPaths(h.m.entries), "internal", "a hidden command can still be a link target or a suggestion source")
 	ping := browseEntryAt(t, h.m.entries, "ping")
 	assert.Equal(t, "Ping the server", ping.label())
 }
@@ -128,7 +144,7 @@ func TestBrowseActionsMenu(t *testing.T) {
 
 	h.press("a")
 	require.NotNil(t, h.m.menu)
-	assert.Equal(t, []string{"Open repo", "issues", "inspect this row"}, h.m.menu.items)
+	assert.Equal(t, []string{"Open repo", "issues", "inspect this row", "open html_url in the browser"}, h.m.menu.items)
 	h.typeText("iss")
 	assert.Equal(t, []int{1}, h.m.menu.shown())
 	h.press("enter")
@@ -139,6 +155,106 @@ func TestBrowseActionsMenu(t *testing.T) {
 	assert.Equal(t, [][]string{{"1", "broken for acme"}}, l.cells)
 	assert.Equal(t, viewData, h.m.top().view)
 	assert.Contains(t, h.m.top().views(), viewText, "<fields> prints differently from the body, so text is a view of its own")
+}
+
+func TestBrowseSortsRows(t *testing.T) {
+	h := newDataHarness(t)
+	listAcme(h)
+	l := h.m.top().level()
+	h.press("s")
+	require.NotNil(t, h.m.menu)
+	assert.Equal(t, []string{"(result order)", "NAME", "STARS", "OWNER.LOGIN"}, h.m.menu.items)
+	h.typeText("stars")
+	h.press("enter")
+	assert.Equal(t, []int{0, 1}, h.m.visibleRows(l), "3 before 9")
+	h.press("s")
+	h.typeText("stars")
+	h.press("enter")
+	assert.Equal(t, []int{1, 0}, h.m.visibleRows(l), "the same column again flips the order")
+	assert.Equal(t, "STARS ▼", l.header()[1])
+	assert.Equal(t, -1, compareCells("9", "10"), "numbers compare as numbers")
+	assert.Equal(t, -1, compareCells("Apple", "banana"), "text compares without case")
+}
+
+func TestBrowseRunsALinkForEachMarkedRow(t *testing.T) {
+	h := newDataHarness(t)
+	listAcme(h)
+	l := h.m.top().level()
+	h.press("space")
+	assert.True(t, l.marked[0])
+	assert.Equal(t, 1, l.sel, "space moves on, so presses mark a run of rows")
+	h.press("*")
+	assert.Len(t, l.marked, 2, "* marks every row")
+	assert.Contains(t, h.m.frame(), "2 marked: enter runs Open repo for each")
+
+	runs := len(h.runs)
+	h.press("enter")
+	require.True(t, h.m.confirming, "a batch always asks first")
+	assert.Contains(t, h.m.frame(), "Run repos view for 2 rows?")
+	h.m.act("confirm")
+	assert.Equal(t, [][]string{{"repos", "view", "acme", "api"}, {"repos", "view", "acme", "web"}}, h.runs[runs:])
+
+	f := h.m.top()
+	assert.Equal(t, "repos view × 2", f.line)
+	assert.Equal(t, []string{"ROW", "EXIT", "OUTPUT"}, f.level().columns)
+	assert.Equal(t, "api", f.level().cells[0][0])
+	assert.Equal(t, "0", f.level().cells[0][1])
+	assert.Contains(t, h.m.status, "0 failed")
+	h.press("enter")
+	assert.Equal(t, "api", recordTitle(f.level().value, nil), "enter on a batch row opens what that run returned")
+
+	h.press("backspace", "backspace")
+	h.press("esc")
+	assert.Empty(t, h.m.top().level().marked, "esc clears the marks")
+}
+
+func TestBrowseCopiesAValue(t *testing.T) {
+	h := newDataHarness(t)
+	listAcme(h)
+	h.press("y")
+	require.NotNil(t, h.m.menu)
+	assert.Equal(t, "NAME: api", h.m.menu.items[0])
+	h.press("enter")
+	assert.Equal(t, []string{"api"}, h.copied)
+	assert.Contains(t, h.m.status, "copied NAME: api")
+
+	h.press("y")
+	h.typeText("json")
+	h.press("enter")
+	assert.Contains(t, h.copied[1], `"name": "api"`, "the row copies as indented JSON")
+
+	h.press("y")
+	h.typeText("command")
+	h.press("enter")
+	assert.Equal(t, "shop repos list acme", h.copied[2])
+}
+
+func TestBrowseOpensARecordPage(t *testing.T) {
+	t.Serial("replaces the package openURL hook so no real browser starts during the test")
+	var opened []string
+	prev := openURL
+	openURL = func(url string) error { opened = append(opened, url); return nil }
+	t.Cleanup(func() { openURL = prev })
+
+	h := newDataHarness(t)
+	listAcme(h)
+	h.press("down")
+	h.press("a")
+	require.NotNil(t, h.m.menu)
+	h.typeText("browser")
+	h.press("enter")
+	assert.Equal(t, []string{"https://x/web"}, opened, "the selected row's page opens")
+	assert.Contains(t, h.m.status, "opened https://x/web")
+
+	openURL = func(string) error { return errors.New("no browser") }
+	h.press("a")
+	h.typeText("browser")
+	h.press("enter")
+	assert.Contains(t, h.m.status, "could not open html_url: no browser")
+
+	assert.Equal(t, []string{"html_url", "api", "more"}, recordURLs(map[string]any{
+		"z": "http://z", "api": "https://a", "html_url": "https://h", "n": 3, "path": "/x", "more": "https://m",
+	}), "the page field leads, and at most three show")
 }
 
 func TestBrowseRowFilter(t *testing.T) {
@@ -283,6 +399,7 @@ func TestBrowsePages(t *testing.T) {
 	require.NoError(t, err)
 	h = &browseHarness{t: t, m: m}
 	m.host = h
+	m.liveEvery = 0
 	m.exec = func(argv []string, _, _ int) browseOutput {
 		h.runs = append(h.runs, argv)
 		return browseOutput{raw: `[{"full_name":"o/r"}]`, text: "o/r"}
