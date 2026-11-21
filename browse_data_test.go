@@ -3,6 +3,7 @@ package main
 import _ "embed"
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -143,7 +144,7 @@ func TestBrowseActionsMenu(t *testing.T) {
 
 	h.press("a")
 	require.NotNil(t, h.m.menu)
-	assert.Equal(t, []string{"Open repo", "issues", "inspect this row"}, h.m.menu.items)
+	assert.Equal(t, []string{"Open repo", "issues", "inspect this row", "open html_url in the browser"}, h.m.menu.items)
 	h.typeText("iss")
 	assert.Equal(t, []int{1}, h.m.menu.shown())
 	h.press("enter")
@@ -226,6 +227,34 @@ func TestBrowseCopiesAValue(t *testing.T) {
 	h.typeText("command")
 	h.press("enter")
 	assert.Equal(t, "shop repos list acme", h.copied[2])
+}
+
+func TestBrowseOpensARecordPage(t *testing.T) {
+	t.Serial("replaces the package openURL hook so no real browser starts during the test")
+	var opened []string
+	prev := openURL
+	openURL = func(url string) error { opened = append(opened, url); return nil }
+	t.Cleanup(func() { openURL = prev })
+
+	h := newDataHarness(t)
+	listAcme(h)
+	h.press("down")
+	h.press("a")
+	require.NotNil(t, h.m.menu)
+	h.typeText("browser")
+	h.press("enter")
+	assert.Equal(t, []string{"https://x/web"}, opened, "the selected row's page opens")
+	assert.Contains(t, h.m.status, "opened https://x/web")
+
+	openURL = func(string) error { return errors.New("no browser") }
+	h.press("a")
+	h.typeText("browser")
+	h.press("enter")
+	assert.Contains(t, h.m.status, "could not open html_url: no browser")
+
+	assert.Equal(t, []string{"html_url", "api", "more"}, recordURLs(map[string]any{
+		"z": "http://z", "api": "https://a", "html_url": "https://h", "n": 3, "path": "/x", "more": "https://m",
+	}), "the page field leads, and at most three show")
 }
 
 func TestBrowseRowFilter(t *testing.T) {

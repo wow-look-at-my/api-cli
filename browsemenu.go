@@ -112,6 +112,15 @@ func (m *browseModel) actions() {
 	if canDrill {
 		items = append(items, "inspect this row")
 	}
+	var rec map[string]any
+	var urls []string
+	if f != nil && f.view == viewData && len(m.markedRows(f.level())) == 0 {
+		rec = f.level().record()
+		urls = recordURLs(rec)
+	}
+	for _, k := range urls {
+		items = append(items, "open "+k+" in the browser")
+	}
 	if len(items) == 0 {
 		m.setStatus("nothing to open from here", "dim")
 		return
@@ -129,8 +138,13 @@ func (m *browseModel) actions() {
 			m.follow(links[i])
 			return
 		}
-		m.drill()
-		m.focusResult()
+		if canDrill && i == len(links) {
+			m.drill()
+			m.focusResult()
+			return
+		}
+		k := urls[i-len(items)+len(urls)]
+		m.open(k, rec[k].(string))
 	})
 }
 
