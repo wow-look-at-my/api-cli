@@ -74,14 +74,26 @@ func (l *tmlLive) firstScroll() string {
 	return ""
 }
 
-// rows is the length of the longest list the screen draws. A selection stops at its end.
-func (l *tmlLive) rows() int {
+// rows is how many rows the list with this id holds, where a selection stops. The prop named like the id is that
+// list. Without one, the longest list prop stands in for it.
+func (l *tmlLive) rows(id string) int {
 	most := 0
 	for _, p := range l.decl.Props {
-		if p.Over == "" {
+		path := p.Over
+		if path == "" {
+			path = p.From
+		}
+		if path == "" {
 			continue
 		}
-		if list, ok := tmlLookupList(p.Over, l.parsed, l.ctx); ok {
+		list, ok := tmlLookupList(path, l.parsed, l.ctx)
+		if !ok {
+			continue
+		}
+		if p.Name == id {
+			return len(list)
+		}
+		if p.Over != "" {
 			most = max(most, len(list))
 		}
 	}
@@ -115,7 +127,7 @@ func (l *tmlLive) event(e tml.Event) (changed, refresh bool) {
 			return true, false
 		}
 		if l.bound("select", e.ID) {
-			l.move("select:"+e.ID, e.Delta, l.rows())
+			l.move("select:"+e.ID, e.Delta, l.rows(e.ID))
 			return true, false
 		}
 	case tml.Activated:
@@ -144,10 +156,10 @@ func (l *tmlLive) key(k string, height int) bool {
 	if l.bound("select", focused) {
 		switch k {
 		case "up", "k":
-			l.move("select:"+focused, -1, l.rows())
+			l.move("select:"+focused, -1, l.rows(focused))
 			return true
 		case "down", "j":
-			l.move("select:"+focused, 1, l.rows())
+			l.move("select:"+focused, 1, l.rows(focused))
 			return true
 		}
 	}

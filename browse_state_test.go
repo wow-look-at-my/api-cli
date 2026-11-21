@@ -45,7 +45,7 @@ func TestBrowseStateThatDoesNotParse(t *testing.T) {
 }
 
 func TestStatePathSeparatesConfigs(t *testing.T) {
-	t.Serial("sets XDG_CACHE_HOME")
+	t.Serial("sets XDG_CACHE_HOME, which os.UserCacheDir reads for every test in the process")
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	a, err := statePath(&Config{Name: "gh", Dir: "/one"})
 	require.NoError(t, err)
@@ -68,7 +68,7 @@ func complete(t *testing.T, cfg *Config, words ...string) string {
 }
 
 func TestSuggestCompletion(t *testing.T) {
-	t.Serial("sets XDG_CACHE_HOME and runs commands in process")
+	t.Serial("a tab runs each suggest source in process, through the package's swapped I/O")
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	cfg, err := parseConfigXML([]byte(browseDataConfig))
 	require.NoError(t, err)
