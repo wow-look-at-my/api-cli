@@ -85,7 +85,7 @@ The same hint drives shell completion. A tab on `repo get` runs the source and o
 | --- | --- |
 | Tree | Up and down pick. Enter opens the form at the first empty required input, and runs a command that takes no input. `r` runs the command as its form stands. Left shuts a group. `/` filters. `q` quits. |
 | Form | Type to edit. Tab moves on. Enter runs. Left and right cycle a choice. Ctrl+O lists suggestions. Esc returns to the tree. |
-| Result | Up and down move. Enter opens the row. `a` lists every action. `i` steps into the row. Backspace steps back. `/` filters rows. `r` reruns. `]` and `[` turn the page. `s` sorts. Space marks a row, `*` marks them all, and esc clears the marks. |
+| Result | Up and down move. Enter opens the row. `a` lists every action. `i` steps into the row. Backspace steps back. `/` filters rows. `r` reruns. `]` and `[` turn the page. `s` sorts. Space marks a row, `*` marks them all, and esc clears the marks. `y` copies a cell, the row as JSON, the command line or the whole result. |
 | Anywhere | `v` cycles the view. Ctrl+R runs. Ctrl+X cancels a run. PgUp and PgDn scroll. `?` shows the keys. Ctrl+C quits. |
 
 A click picks a row, and a second click on the selected row opens it. The wheel scrolls whatever is under the pointer.
