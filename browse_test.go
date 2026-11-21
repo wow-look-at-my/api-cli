@@ -40,7 +40,7 @@ func TestFlattenBrowse(t *testing.T) {
 	for _, e := range entries {
 		labels = append(labels, e.label())
 	}
-	assert.Equal(t, []string{"repos ▾", "  list", "files", "raw", "fail"}, labels)
+	assert.Equal(t, []string{"repos ▾", "  list !", "files", "raw", "fail"}, labels, "list inherits confirm=, so it is marked")
 
 	list := browseEntryAt(t, entries, "repos list")
 	assert.Equal(t, "Really?", list.confirm, "confirm= is inherited")

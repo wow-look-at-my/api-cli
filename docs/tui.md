@@ -10,6 +10,7 @@ The screen has panes. The command tree is on the left. The form for the selected
 
 ## What you get for free
 
+- **Commands that change things are marked.** A command that asks for confirmation. It sends a POST, PUT, PATCH or DELETE request, carries a `!` in the tree, and its form says what it sends.
 - **A form per command.** Each arg and flag is a field. A bool flag is a checkbox, and a flag with `choices=` is a picker.
 - **Shared values.** A value typed into one command fills the arg of the same name in every other command. Type an owner one time, and every command that takes an owner has it.
 - **A table of the result.** A JSON body becomes a table you can move through. A list of records gets columns: the identity keys first, then the short scalars. A key that holds a URL is left out. A nested record that names itself, such as `owner.login`, gets a column of its own.
