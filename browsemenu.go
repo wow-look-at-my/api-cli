@@ -116,8 +116,16 @@ func (m *browseModel) actions() {
 		m.setStatus("nothing to open from here", "dim")
 		return
 	}
-	m.openMenu("Open", items, func(i int) {
+	title := "Open"
+	if canDrill && len(m.markedRows(f.level())) > 0 {
+		title = fmt.Sprintf("Run for %s", plural(len(m.markedRows(f.level())), "marked row"))
+	}
+	m.openMenu(title, items, func(i int) {
 		if i < len(links) {
+			if len(m.markedRows(f.level())) > 0 {
+				m.followMarked(links[i])
+				return
+			}
 			m.follow(links[i])
 			return
 		}

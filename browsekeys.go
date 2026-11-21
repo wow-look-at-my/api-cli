@@ -231,6 +231,12 @@ func (m *browseModel) resultKey(msg tml.Key) bool {
 		m.back()
 	case "a", "o":
 		m.actions()
+	case "space", " ":
+		m.toggleMark()
+	case "*":
+		m.markAll()
+	case "s":
+		m.sortMenu()
 	case "]":
 		m.turnPage(1)
 	case "[":
@@ -247,6 +253,10 @@ func (m *browseModel) resultKey(msg tml.Key) bool {
 			m.focus("rowfilter")
 		}
 	case "esc":
+		if f != nil && f.view == viewData && len(f.level().marked) > 0 {
+			clear(f.level().marked)
+			return true
+		}
 		if m.rowFilter != "" {
 			m.rowFilter = ""
 			return true

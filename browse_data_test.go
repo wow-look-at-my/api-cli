@@ -142,6 +142,57 @@ func TestBrowseActionsMenu(t *testing.T) {
 	assert.Contains(t, h.m.top().views(), viewText, "<fields> prints differently from the body, so text is a view of its own")
 }
 
+func TestBrowseSortsRows(t *testing.T) {
+	h := newDataHarness(t)
+	listAcme(h)
+	l := h.m.top().level()
+	h.press("s")
+	require.NotNil(t, h.m.menu)
+	assert.Equal(t, []string{"(result order)", "NAME", "STARS", "OWNER.LOGIN"}, h.m.menu.items)
+	h.typeText("stars")
+	h.press("enter")
+	assert.Equal(t, []int{0, 1}, h.m.visibleRows(l), "3 before 9")
+	h.press("s")
+	h.typeText("stars")
+	h.press("enter")
+	assert.Equal(t, []int{1, 0}, h.m.visibleRows(l), "the same column again flips the order")
+	assert.Equal(t, "STARS ▼", l.header()[1])
+	assert.Equal(t, -1, compareCells("9", "10"), "numbers compare as numbers")
+	assert.Equal(t, -1, compareCells("Apple", "banana"), "text compares without case")
+}
+
+func TestBrowseRunsALinkForEachMarkedRow(t *testing.T) {
+	h := newDataHarness(t)
+	listAcme(h)
+	l := h.m.top().level()
+	h.press("space")
+	assert.True(t, l.marked[0])
+	assert.Equal(t, 1, l.sel, "space moves on, so presses mark a run of rows")
+	h.press("*")
+	assert.Len(t, l.marked, 2, "* marks every row")
+	assert.Contains(t, h.m.frame(), "2 marked: enter runs Open repo for each")
+
+	runs := len(h.runs)
+	h.press("enter")
+	require.True(t, h.m.confirming, "a batch always asks first")
+	assert.Contains(t, h.m.frame(), "Run repos view for 2 rows?")
+	h.m.act("confirm")
+	assert.Equal(t, [][]string{{"repos", "view", "acme", "api"}, {"repos", "view", "acme", "web"}}, h.runs[runs:])
+
+	f := h.m.top()
+	assert.Equal(t, "repos view × 2", f.line)
+	assert.Equal(t, []string{"ROW", "EXIT", "OUTPUT"}, f.level().columns)
+	assert.Equal(t, "api", f.level().cells[0][0])
+	assert.Equal(t, "0", f.level().cells[0][1])
+	assert.Contains(t, h.m.status, "0 failed")
+	h.press("enter")
+	assert.Equal(t, "api", recordTitle(f.level().value, nil), "enter on a batch row opens what that run returned")
+
+	h.press("backspace", "backspace")
+	h.press("esc")
+	assert.Empty(t, h.m.top().level().marked, "esc clears the marks")
+}
+
 func TestBrowseRowFilter(t *testing.T) {
 	h := newDataHarness(t)
 	listAcme(h)

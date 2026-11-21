@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -12,11 +13,12 @@ import (
 	"github.com/wow-look-at-my/tml/sema"
 )
 
-// browseHelp is the key reference the? popup shows.
+// browseHelp is the key reference that the help popup shows.
 var browseHelp = []string{
 	"tree      ↑↓ pick · enter form · r run · ← close group · / filter · q quit",
 	"form      type · tab next · enter run · ←→ cycle a choice · ctrl+o suggestions",
 	"result    ↑↓ row · enter open · a actions · i inspect · ⌫ back · / filter · [ ] page",
+	"rows      space mark · * mark all · s sort · enter on marked rows runs the link for each",
 	"anywhere  v view · ctrl+r run · pgup/pgdn scroll · esc back · ctrl+c quit",
 }
 
@@ -86,6 +88,11 @@ func (m *browseModel) footer(links []browseLink) string {
 		}
 		if len(links) > 0 {
 			parts = append(parts, fmt.Sprintf("a %d actions", len(links)))
+		}
+		if n := len(m.markedRows(l)); n > 0 && len(links) > 0 {
+			parts = append([]string{fmt.Sprintf("%d marked: enter runs %s for each", n, links[0].label)}, parts[1:]...)
+		} else if l.kind == levelTable {
+			parts = append(parts, "space mark · s sort")
 		}
 	}
 	if len(f.levels) > 1 && f.view == viewData || len(m.frames) > 1 {
@@ -221,6 +228,9 @@ func (m *browseModel) confirmText() string {
 	if m.pending == nil {
 		return ""
 	}
+	if m.pending.prompt != "" {
+		return m.pending.prompt
+	}
 	prompt := strings.TrimSpace(m.pending.entry.confirm)
 	if prompt == "" || strings.Contains(prompt, "{{") {
 		prompt = m.pending.entry.pathString() + " asks for confirmation before it runs."
@@ -273,11 +283,21 @@ func (m *browseModel) paneProps(p tml.Props) {
 	}
 	start, n := m.rowWindow(l)
 	shown := make([]string, 0, n)
+	anyMarked := len(l.marked) > 0
 	for _, r := range rows[start:min(start+n, len(rows))] {
-		shown = append(shown, strings.Join(l.cells[r], "|"))
+		cells := slices.Clone(l.cells[r])
+		// A marked row carries a dot. Every row then gets the same gutter, so the first column stays aligned.
+		if anyMarked && len(cells) > 0 {
+			mark := "  "
+			if l.marked[r] {
+				mark = "● "
+			}
+			cells[0] = mark + cells[0]
+		}
+		shown = append(shown, strings.Join(cells, "|"))
 	}
 	p["isTable"] = sema.BoolValue(true)
-	p["columns"] = sema.ListValue(l.columns)
+	p["columns"] = sema.ListValue(l.header())
 	p["rows"] = sema.ListValue(shown)
 	p["collapse"] = sema.ListValue(l.collapse)
 	p["rowSel"] = sema.StringValue(strconv.Itoa(indexOf(rows, l.sel) - start))

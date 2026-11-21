@@ -34,6 +34,11 @@ type dataLevel struct {
 	keys []string
 	// collapse is the order columns give way in when the table is too wide.
 	collapse []string
+
+	sortCol  int
+	sortDesc bool
+	// marked holds the rows the user picked for a batch.
+	marked map[int]bool
 }
 
 // identityKeys name a record. The inferred columns start with them, and a breadcrumb names a record by the first one it holds.
@@ -47,7 +52,7 @@ const sampleSize = 100
 
 // newLevel shapes value for display. spec is the declared columns, or nil to infer them.
 func newLevel(label string, value any, spec []fields.Field, ctx map[string]any) *dataLevel {
-	l := &dataLevel{label: label, value: value}
+	l := &dataLevel{label: label, value: value, sortCol: -1, marked: map[int]bool{}}
 	switch v := value.(type) {
 	case []any:
 		if slices.ContainsFunc(v, func(e any) bool { _, ok := e.(map[string]any); return ok }) {

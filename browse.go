@@ -103,6 +103,9 @@ type pendingRun struct {
 	push  bool
 	// keep is the frame whose selection a refresh carries over.
 	keep *resultFrame
+	// batch is set for a run of one link over several marked rows, with the question its confirmation asks.
+	batch  []batchItem
+	prompt string
 }
 
 // tuiCommand is the built-in `tui` subcommand.
@@ -239,6 +242,9 @@ func (m *browseModel) update(host browseHost, msg tml.Msg) bool {
 	case browseTickMsg:
 		m.tick(msg)
 		return true
+	case browseBatchMsg:
+		m.finishBatch(msg)
+		return true
 	case browseSuggestMsg:
 		m.suggested(msg)
 		return true
@@ -289,6 +295,10 @@ func (m *browseModel) act(action string) {
 		}
 	case "confirm":
 		m.confirming = false
+		if m.pending != nil && len(m.pending.batch) > 0 {
+			m.launchBatch(m.pending)
+			return
+		}
 		m.launch(m.pending)
 	case "cancel":
 		m.confirming = false

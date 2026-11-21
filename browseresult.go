@@ -242,7 +242,7 @@ func (e *browseEntry) argvWith(inputs map[string]string) ([]string, error) {
 }
 
 // visibleRows is the rows of the current level that pass the row filter.
-func (m *browseModel) visibleRows(l *dataLevel) []int { return l.filtered(m.rowFilter) }
+func (m *browseModel) visibleRows(l *dataLevel) []int { return l.sorted(l.filtered(m.rowFilter)) }
 
 // moveRow moves the selection within the filtered rows.
 func (m *browseModel) moveRow(delta int) {
@@ -386,6 +386,10 @@ func (m *browseModel) activate() {
 		return
 	}
 	if links := m.links(); len(links) > 0 {
+		if len(m.markedRows(l)) > 0 {
+			m.followMarked(links[0])
+			return
+		}
 		m.follow(links[0])
 		return
 	}
