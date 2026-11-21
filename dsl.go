@@ -19,4 +19,5 @@ var (
 	mergeVars       = apidsl.MergeVars
 	isTruthy        = apidsl.IsTruthy
 	templateTruthy  = apidsl.Truthy
+	liftTemplates   = apidsl.LiftTemplates
 )
