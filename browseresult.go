@@ -58,6 +58,7 @@ func (m *browseModel) top() *resultFrame {
 // finish turns a run's output into a frame and shows it.
 func (m *browseModel) finish(msg browseRunMsg) {
 	m.running = false
+	m.end()
 	run := m.launched
 	m.launched = nil
 	if run == nil || msg.id != m.runID {
@@ -80,15 +81,21 @@ func (m *browseModel) finish(msg browseRunMsg) {
 	if l := f.level(); f.isJSON && l != nil && l.kind == levelTable {
 		summary = fmt.Sprintf("exit %d · %s · %d rows · %s", msg.out.code, roundTook(msg.took), len(l.cells), msg.line)
 	}
-	if msg.out.code == 0 {
+	switch {
+	case m.cancelled:
+		m.setStatus("cancelled · "+summary, "bad")
+	case msg.out.code == 0:
 		m.setStatus(summary, "ok")
-	} else {
+	default:
 		m.setStatus(summary, "bad")
 	}
 	if focused, _ := m.view.UI().Focused(); run.push || focused == "tree" || focused == "run" {
 		m.focusResult()
 	}
-	m.schedule(f)
+	// A cancelled watch stays stopped.
+	if !m.cancelled {
+		m.schedule(f)
+	}
 }
 
 func roundTook(d time.Duration) string {

@@ -165,6 +165,7 @@ func (m *browseModel) suggest(f *browseField) {
 		return
 	}
 	m.running = true
+	m.begin()
 	m.setStatus("listing "+f.label+" from "+s.From, "dim")
 	exec, w, h, id := m.exec, m.outputWidth(), m.height, f.id
 	m.host.Go(func() tml.Msg {
@@ -175,6 +176,7 @@ func (m *browseModel) suggest(f *browseField) {
 // suggested opens the menu of values a suggestion source listed.
 func (m *browseModel) suggested(msg browseSuggestMsg) {
 	m.running = false
+	m.end()
 	f := m.field(msg.field)
 	if f == nil {
 		return

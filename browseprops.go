@@ -19,7 +19,7 @@ var browseHelp = []string{
 	"form      type · tab next · enter run · ←→ cycle a choice · ctrl+o suggestions",
 	"result    ↑↓ row · enter open · a actions · i inspect · ⌫ back · / filter · [ ] page",
 	"rows      space mark · * mark all · s sort · enter on marked rows runs the link for each",
-	"anywhere  v view · ctrl+r run · pgup/pgdn scroll · esc back · ctrl+c quit",
+	"anywhere  v view · ctrl+r run · ctrl+x cancel · pgup/pgdn scroll · esc back · ctrl+c quit",
 }
 
 // treeRows is how many tree rows fit in the top half of the screen.
@@ -48,6 +48,8 @@ func (m *browseModel) hint() string {
 	focused, _ := m.view.UI().Focused()
 	f := m.field(focused)
 	switch {
+	case m.running && m.menu == nil && !m.confirming:
+		return "running · ctrl+x cancels"
 	case m.menu != nil:
 		return "type to narrow · up/down · enter picks · esc closes"
 	case m.confirming:

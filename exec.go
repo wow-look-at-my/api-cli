@@ -4,12 +4,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // execStdin / execStdout / execStderr are the I/O channels used when running
@@ -259,8 +261,14 @@ func buildExecCmd(c *Cmd, data any) (*exec.Cmd, error) {
 	if err != nil {
 		return nil, err
 	}
-	return exec.Command(argv[0], argv[1:]...), nil
+	cmd := exec.CommandContext(runCtx, argv[0], argv[1:]...)
+	// A child the shell started can keep the output pipe open after a cancel kills the shell. The wait gives up on it.
+	cmd.WaitDelay = time.Second
+	return cmd, nil
 }
+
+// runCtx bounds every command and request a run makes. The tui subcommand cancels it to stop a run.
+var runCtx = context.Background()
 
 // resolveArgv renders a command into the exact argv that will run it: the shell
 // form becomes ["/bin/sh", "-c", <rendered>], the argv form its rendered

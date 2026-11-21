@@ -37,6 +37,9 @@ func (m *browseModel) key(msg tml.Key) bool {
 	case "ctrl+r":
 		m.start(false)
 		return true
+	case "ctrl+x":
+		m.stop()
+		return true
 	case "pgup":
 		m.moveRow(-m.paneRows())
 		return true

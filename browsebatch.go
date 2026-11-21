@@ -188,14 +188,20 @@ type browseBatchMsg struct {
 // launchBatch runs a batch off the program's goroutine, one command after another.
 func (m *browseModel) launchBatch(run *pendingRun) {
 	m.running = true
+	m.begin()
 	m.runID++
 	m.launched = run
 	m.setStatus(fmt.Sprintf("running %s for %s", run.entry.pathString(), plural(len(run.batch), "row")), "dim")
-	exec, width, height, id, items, now := m.exec, m.outputWidth(), m.height, m.runID, run.batch, m.now
+	exec, width, height, id, items, now, ctx := m.exec, m.outputWidth(), m.height, m.runID, run.batch, m.now, m.runContext()
 	began := now()
 	m.host.Go(func() tml.Msg {
 		outs := make([]browseOutput, len(items))
 		for i, it := range items {
+			// A cancel stops the batch before its next run, and the rows it never reached say so.
+			if ctx.Err() != nil {
+				outs[i] = browseOutput{code: -1, text: "not run: cancelled"}
+				continue
+			}
 			outs[i] = exec(it.argv, width, height)
 		}
 		return browseBatchMsg{id: id, items: items, outs: outs, took: now().Sub(began)}
@@ -206,6 +212,7 @@ func (m *browseModel) launchBatch(run *pendingRun) {
 // A run's own result is under the row, so enter on the row opens it.
 func (m *browseModel) finishBatch(msg browseBatchMsg) {
 	m.running = false
+	m.end()
 	run := m.launched
 	m.launched = nil
 	if run == nil || msg.id != m.runID {

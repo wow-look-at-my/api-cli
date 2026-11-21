@@ -94,6 +94,43 @@ type browseModel struct {
 	exec func(argv []string, width, height int) browseOutput
 	// now times a run. A test fixes it, so a screen holds no wall-clock time.
 	now func() time.Time
+
+	// ctx bounds the run in progress, and cancel stops it. The program's goroutine sets both before the work starts.
+	ctx       context.Context
+	cancel    context.CancelFunc
+	cancelled bool
+}
+
+// begin opens the context for a new run.
+func (m *browseModel) begin() {
+	m.ctx, m.cancel = context.WithCancel(context.Background())
+	m.cancelled = false
+}
+
+// runContext is the context of the run in progress.
+func (m *browseModel) runContext() context.Context {
+	if m.ctx == nil {
+		return context.Background()
+	}
+	return m.ctx
+}
+
+// end releases the context of a finished run.
+func (m *browseModel) end() {
+	if m.cancel != nil {
+		m.cancel()
+	}
+	m.cancel = nil
+}
+
+// stop cancels the run in progress. Its result still arrives, with whatever it printed before it stopped.
+func (m *browseModel) stop() {
+	if !m.running || m.cancel == nil {
+		return
+	}
+	m.cancelled = true
+	m.cancel()
+	m.setStatus("cancelling…", "dim")
 }
 
 // pendingRun is a run on its way: what it runs, and whether its result goes on top of the history or replaces the top.
@@ -169,9 +206,9 @@ func newBrowseModel(cfg *Config) (*browseModel, error) {
 		memory:  map[string]string{},
 		width:   100,
 		height:  30,
-		exec:    func(argv []string, w, h int) browseOutput { return browseExec(cfg, argv, w, h) },
 		now:     time.Now,
 	}
+	m.exec = func(argv []string, w, h int) browseOutput { return browseExecCtx(m.runContext(), cfg, argv, w, h) }
 	for _, e := range entries {
 		m.byPath[e.pathString()] = e
 	}
@@ -198,19 +235,24 @@ func (m *browseModel) focus(id string) {
 	m.view.UI().Focus(id)
 }
 
-// browseExec runs argv in this process, exactly as the command line would,
-// and captures everything it prints. The browser is the confirmation, so the
-// run gets --yes. Stdin is empty, because the terminal belongs to the browser.
-// raw is the body before any formatting, which the data view reads.
+// browseExec is browseExecCtx with no way to cancel.
 func browseExec(cfg *Config, argv []string, width, height int) browseOutput {
+	return browseExecCtx(context.Background(), cfg, argv, width, height)
+}
+
+// browseExecCtx runs argv in this process, exactly as the command line would, and captures everything it prints.
+// The browser is the confirmation, so the run gets --yes. Stdin is empty, because the terminal belongs to the browser.
+// raw is the body before any formatting, which the data view reads. A cancel of ctx stops the commands and requests.
+func browseExecCtx(ctx context.Context, cfg *Config, argv []string, width, height int) browseOutput {
 	var buf bytes.Buffer
 	var body *string
-	prevIn, prevTTY, prevCode, prevTap := execStdin, ttyOverride, exitCode, bodyTap
+	prevIn, prevTTY, prevCode, prevTap, prevCtx := execStdin, ttyOverride, exitCode, bodyTap, runCtx
 	execStdin = strings.NewReader("")
 	ttyOverride = &termSize{width: width, height: height}
 	exitCode = 0
 	bodyTap = func(s string) { body = &s }
-	defer func() { execStdin, ttyOverride, exitCode, bodyTap = prevIn, prevTTY, prevCode, prevTap }()
+	runCtx = ctx
+	defer func() { execStdin, ttyOverride, exitCode, bodyTap, runCtx = prevIn, prevTTY, prevCode, prevTap, prevCtx }()
 
 	root := newRoot(cfg)
 	root.SetArgs(append([]string{"--yes", "--watch=off", "--no-tui"}, argv...))
@@ -402,6 +444,7 @@ func (m *browseModel) launch(run *pendingRun) {
 		return
 	}
 	m.running = true
+	m.begin()
 	m.runID++
 	m.launched = run
 	m.remember(run.entry)

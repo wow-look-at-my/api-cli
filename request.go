@@ -56,7 +56,7 @@ func doHTTPStream(p *preparedRequest, errOut io.Writer) (io.ReadCloser, int) {
 	if p.Body != "" {
 		body = strings.NewReader(p.Body)
 	}
-	httpReq, err := http.NewRequest(p.Method, p.URL, body)
+	httpReq, err := http.NewRequestWithContext(runCtx, p.Method, p.URL, body)
 	if err != nil {
 		fmt.Fprintln(errOut, "error: build request:", err)
 		return nil, 1
@@ -219,7 +219,7 @@ func doHTTP(p *preparedRequest) ([]byte, *callFailure) {
 	if p.Body != "" {
 		body = strings.NewReader(p.Body)
 	}
-	httpReq, err := http.NewRequest(p.Method, p.URL, body)
+	httpReq, err := http.NewRequestWithContext(runCtx, p.Method, p.URL, body)
 	if err != nil {
 		return nil, failed("build request: %v", err)
 	}
