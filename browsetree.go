@@ -21,6 +21,35 @@ type browseEntry struct {
 	// parent is the entry of the enclosing group, nil at the top level.
 	parent    *browseEntry
 	collapsed bool
+	// hidden is true under a <tui hidden="true">.
+	hidden bool
+	// method is the HTTP method of the entry's request when it is a literal one, upper case.
+	method string
+}
+
+// changes reports whether running the entry is known to change something: it asks for confirmation, or its request
+// uses a method that writes.
+func (e *browseEntry) changes() bool {
+	switch e.method {
+	case "POST", "PUT", "PATCH", "DELETE":
+		return true
+	}
+	return e.confirm != ""
+}
+
+// literalMethod is a request's method when no template picks it. GET is the default.
+func literalMethod(r *Request) string {
+	if !r.Defined() {
+		return ""
+	}
+	m := strings.ToUpper(strings.TrimSpace(r.Method))
+	if strings.Contains(m, "{{") {
+		return ""
+	}
+	if m == "" {
+		return "GET"
+	}
+	return m
 }
 
 // browseField is one input of a runnable entry: a positional arg, a flag, or
@@ -39,14 +68,19 @@ type browseField struct {
 
 // flattenBrowse lists every node of the config in document order, depth first.
 // The confirm prompt and watch= are inherited on the rule buildCommand applies.
-// A node a <tui hidden="true"> covers is left out, with its subtree.
+// A node a <tui hidden="true"> covers is marked hidden, with its subtree.
 func flattenBrowse(cfg *Config) []*browseEntry {
 	var out []*browseEntry
-	var walk func(nodes []Command, parent *browseEntry, confirm, watch string)
-	walk = func(nodes []Command, parent *browseEntry, confirm, watch string) {
+	var walk func(nodes []Command, parent *browseEntry, confirm, watch string, req *Request)
+	walk = func(nodes []Command, parent *browseEntry, confirm, watch string, req *Request) {
 		for _, n := range nodes {
-			if n.TUI != nil && n.TUI.Hidden {
-				continue
+			// A run of one kind replaces an inherited run of the other kind, as buildCommand has it.
+			effReq := req
+			switch {
+			case n.Request.Defined():
+				effReq = n.Request
+			case n.Command.Defined():
+				effReq = nil
 			}
 			var path []string
 			depth := 0
@@ -66,14 +100,18 @@ func flattenBrowse(cfg *Config) []*browseEntry {
 			if n.TUI != nil {
 				e.hints = *n.TUI
 			}
+			e.hidden = e.hints.Hidden || (parent != nil && parent.hidden)
+			if n.executes() {
+				e.method = literalMethod(effReq)
+			}
 			if n.executes() {
 				e.fields = browseFields(n)
 			}
 			out = append(out, e)
-			walk(n.Commands, e, effConfirm, effWatch)
+			walk(n.Commands, e, effConfirm, effWatch, effReq)
 		}
 	}
-	walk(cfg.Commands, nil, "", "")
+	walk(cfg.Commands, nil, "", "", cfg.Request)
 	return out
 }
 
@@ -96,6 +134,9 @@ func (e *browseEntry) label() string {
 		mark = " ▸"
 	case e.group():
 		mark = " ▾"
+	case e.changes():
+		// A command that changes something says so before anyone runs it.
+		mark = " !"
 	}
 	return strings.Repeat("  ", e.depth) + e.name() + mark
 }
@@ -128,7 +169,7 @@ func visibleEntries(entries []*browseEntry, filter string) []*browseEntry {
 	var out []*browseEntry
 	if strings.TrimSpace(filter) == "" {
 		for _, e := range entries {
-			if !e.hiddenBy() {
+			if !e.hidden && !e.hiddenBy() {
 				out = append(out, e)
 			}
 		}
@@ -136,7 +177,7 @@ func visibleEntries(entries []*browseEntry, filter string) []*browseEntry {
 	}
 	keep := set.New[*browseEntry]()
 	for _, e := range entries {
-		if e.matches(filter) {
+		if !e.hidden && e.matches(filter) {
 			for p := e; p != nil; p = p.parent {
 				keep.Add(p)
 			}

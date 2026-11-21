@@ -1,0 +1,120 @@
+<?xml version="1.1" encoding="UTF-8"?>
+<!--
+	Every template attribute in its element form. Plain text loses each line's
+	surrounding whitespace, and the lines join with nothing between them. A
+	CDATA section is kept as written.
+-->
+<config name="template-elements">
+	<vars>
+		<var name="api">https://example.invalid</var>
+		<var name="label">
+			<value>
+				<expr>
+					{{ .env.USER
+					| default "nobody" }}
+				</expr>
+			</value>
+		</var>
+	</vars>
+
+	<run>
+		<request>
+			<url><value name="var.api"/>/items</url>
+			<response>
+				<jq>
+					[.[]
+					| select(.active)]
+				</jq>
+			</response>
+		</request>
+	</run>
+
+	<command name="items" description="List items.">
+		<arg name="kind" type="string">
+			<pattern>^[a-z]+$</pattern>
+		</arg>
+		<flag name="owner" type="string">
+			<default>{{ .env.USER }}</default>
+		</flag>
+		<steps>
+			<step name="page">
+				<when>{{ .arg.kind }}</when>
+				<until>
+					{{
+					or .result.page.done .result.page.empty
+					}}
+				</until>
+			</step>
+			<step name="detail">
+				<over>result.page.items</over>
+			</step>
+		</steps>
+		<fields>
+			<when>{{ not .flag.raw }}</when>
+			<footer>{{ len .data }}<![CDATA[ items]]></footer>
+			<field name="id">id</field>
+			<field name="title">
+				<expr>
+					{{ .title
+					| upper }}
+				</expr>
+			</field>
+		</fields>
+	</command>
+
+	<command name="report" description="One rendering of the items.">
+		<confirm>Render the report?</confirm>
+		<format>
+			<when>{{ .tty }}</when>
+			<view name="short">
+				<when>{{ lt (len .data) 10 }}</when>
+				<for each="data"><value name="id"/>
+				</for>
+			</view>
+		</format>
+	</command>
+
+	<command name="board" description="The items on one screen.">
+		<tml src="ui/board.tml">
+			<prop name="rows" over="data">
+				<field name="id">id</field>
+				<field name="log">
+					<expr>{{ .log }}</expr>
+					<last>{{ .flag.lines }}</last>
+					<truncate>80</truncate>
+				</field>
+			</prop>
+		</tml>
+	</command>
+
+	<command name="fetch" description="Download every part and join them.">
+		<download>
+			<over>{{ toJson .data.parts }}</over>
+			<when>{{ .item.url }}</when>
+			<group>{{ .item.stream }}</group>
+			<order>{{ .index }}</order>
+			<url><value name="item.url"/></url>
+			<to>parts/<value name="item.index"/>.ts</to>
+			<join>
+				<to>out/{{ .stream }}.ts</to>
+			</join>
+		</download>
+	</command>
+
+	<command name="cc" passthrough="true" description="A stand-in compiler.">
+		<mock>
+			<exit>{{ if .mock.src }}0{{ else }}1{{ end }}</exit>
+			<input name="src" match="\.c$">
+				<default>main.c</default>
+			</input>
+			<output>
+				<path>{{ stem .mock.src }}.o</path>
+				<when>{{ .mock.src }}</when>
+				<mode>0644</mode>
+			</output>
+			<record>
+				<path>build/commands.jsonl</path>
+			</record>
+		</mock>
+	</command>
+</config>

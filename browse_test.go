@@ -40,7 +40,7 @@ func TestFlattenBrowse(t *testing.T) {
 	for _, e := range entries {
 		labels = append(labels, e.label())
 	}
-	assert.Equal(t, []string{"repos ▾", "  list", "files", "raw", "fail"}, labels)
+	assert.Equal(t, []string{"repos ▾", "  list !", "files", "raw", "fail"}, labels, "list inherits confirm=, so it is marked")
 
 	list := browseEntryAt(t, entries, "repos list")
 	assert.Equal(t, "Really?", list.confirm, "confirm= is inherited")
@@ -113,16 +113,19 @@ func TestBrowseExec(t *testing.T) {
 
 // browseHarness is the program for the model: it sends keys, and runs each command in place.
 type browseHarness struct {
-	t    *testing.T
-	m    *browseModel
-	runs [][]string
-	quit bool
+	t      *testing.T
+	m      *browseModel
+	runs   [][]string
+	quit   bool
+	copied []string
 	// deferred queues work instead of running it, for a test that steps through it.
 	deferred bool
 	queue    []func() tml.Msg
 }
 
 func (h *browseHarness) Quit() { h.quit = true }
+
+func (h *browseHarness) Copy(text string) { h.copied = append(h.copied, text) }
 
 func (h *browseHarness) Go(work func() tml.Msg) {
 	if h.deferred {
@@ -149,6 +152,7 @@ func newBrowseHarness(t *testing.T) *browseHarness {
 	require.NoError(t, err)
 	h := &browseHarness{t: t, m: m}
 	m.host = h
+	m.liveEvery = 0
 	m.exec = func(argv []string, _, _ int) browseOutput {
 		h.runs = append(h.runs, argv)
 		text := "ran " + strings.Join(argv, " ") + "\n\tdone"

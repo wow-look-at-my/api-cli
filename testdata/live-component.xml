@@ -1,0 +1,21 @@
+<?xml version="1.1" encoding="UTF-8"?>
+<Component xmlns="urn:tml:v1" name="Live">
+	<Property name="jobs" type="string[]" default=""/>
+	<Property name="picked" type="int" default="0"/>
+	<Property name="offset" type="int" default="0"/>
+	<Property name="lines" type="string[]" default=""/>
+
+	<Template>
+		<Stack orientation="vertical">
+			<List id="jobs" items="{jobs}" selected="{picked}"/>
+			<Button id="again" action="refresh" label="Refresh"/>
+			<Scrollbox id="log" offset="{offset}" height="3">
+				<Stack>
+					<For each="{lines}" as="line">
+						<Text>{line}</Text>
+					</For>
+				</Stack>
+			</Scrollbox>
+		</Stack>
+	</Template>
+</Component>

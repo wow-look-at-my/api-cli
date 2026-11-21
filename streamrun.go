@@ -7,6 +7,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // streamSource is the leaf's run, opened as a byte stream rather than
@@ -51,7 +52,8 @@ func openStreamSource(cmdTmpl *Cmd, request *Request, cwd, stdin string, data ma
 	if err != nil {
 		return nil, fmt.Errorf("render command: %w", err)
 	}
-	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd := exec.CommandContext(runCtx, argv[0], argv[1:]...)
+	cmd.WaitDelay = time.Second
 	cmd.Dir = cwd
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
@@ -209,7 +211,8 @@ func applyStreamStep(step *StreamStep, chunk []byte, index, offset int, data map
 	if err != nil {
 		return nil, fmt.Errorf("stream step: %w", err)
 	}
-	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd := exec.CommandContext(runCtx, argv[0], argv[1:]...)
+	cmd.WaitDelay = time.Second
 	cmd.Dir = cwd
 	cmd.Stdin = strings.NewReader(stdin)
 	cmd.Stderr = execStderr

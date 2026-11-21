@@ -10,6 +10,7 @@ The screen has panes. The command tree is on the left. The form for the selected
 
 ## What you get for free
 
+- **Commands that change things are marked.** A command that asks for confirmation. It sends a POST, PUT, PATCH or DELETE request, carries a `!` in the tree, and its form says what it sends.
 - **A form per command.** Each arg and flag is a field. A bool flag is a checkbox, and a flag with `choices=` is a picker.
 - **Shared values.** A value typed into one command fills the arg of the same name in every other command. Type an owner one time, and every command that takes an owner has it.
 - **A table of the result.** A JSON body becomes a table you can move through. A list of records gets columns: the identity keys first, then the short scalars. A key that holds a URL is left out. A nested record that names itself, such as `owner.login`, gets a column of its own.
@@ -20,6 +21,10 @@ The screen has panes. The command tree is on the left. The form for the selected
 - **Three views.** `v` cycles the result between the data view, the text the command prints on a terminal, and the raw body with its JSON indented. A leaf with `<fields>` shows its own table in the text view. A leaf with `<tml>` opens in the text view, which draws its screen.
 - **A refreshing screen.** A command with `watch=` reruns on its interval while it is on screen, and keeps the selected row.
 - **Filters.** `/` in the tree narrows the commands. `/` in a result narrows the rows.
+- **A session that picks up where it stopped.** The browser saves the shared values, each command's form and the picked command to a file under the user cache directory, one file per config. An input whose name looks like a secret is never saved. A saved file that does not parse is reported on the status line. The session starts empty.
+- **Sort and mark.** `s` sorts the rows by a column you pick, numbers as numbers. A second pick of the same column flips the order. Space marks a row, and `*` marks every row the filter shows. With rows marked, enter or `a` runs a link once per marked row, after one confirmation, and shows a table of the runs. Enter on a row of that table opens what that run returned.
+- **A run you can watch and stop.** While a command runs, the result pane shows what it printed so far, so a stream or a download shows progress. Ctrl+X cancels the run: its requests stop, and its processes are killed.
+- **A record's web page.** The `a` menu lists each field of the row that holds a web address, such as `html_url`. A pick opens that page in the browser. `$BROWSER` names the program, and without it the platform's own opener runs.
 - **Pages.** A command with an int flag named `page` pages with `]` and `[`. The result reruns in place on the next or the previous page.
 
 ## Hints for the rest
@@ -74,14 +79,16 @@ This hint is more than a TUI hint. The command line rejects any other value, she
 
 Ctrl+O in the field runs `repos list` and offers each record's `name`. The source takes its own inputs from the form and the shared values, so its `owner` comes from the owner you already typed. Without `suggest-field=`, the browser takes the field named like the input, then a `name` or an `id`. A suggestion is advice. The field still takes any value.
 
+The same hint drives shell completion. A tab on `repo get` runs the source and offers its values, each with the record's title. The source takes its inputs from the words already typed, then from the values the browser saved. A source that asks for confirmation never runs from a tab. Neither does one that still lacks a required input. A hidden command can be a source.
+
 ## Keys
 
 | Where | Keys |
 | --- | --- |
 | Tree | Up and down pick. Enter opens the form at the first empty required input, and runs a command that takes no input. `r` runs the command as its form stands. Left shuts a group. `/` filters. `q` quits. |
 | Form | Type to edit. Tab moves on. Enter runs. Left and right cycle a choice. Ctrl+O lists suggestions. Esc returns to the tree. |
-| Result | Up and down move. Enter opens the row. `a` lists every action. `i` steps into the row. Backspace steps back. `/` filters rows. `r` reruns. `]` and `[` turn the page. |
-| Anywhere | `v` cycles the view. Ctrl+R runs. PgUp and PgDn scroll. `?` shows the keys. Ctrl+C quits. |
+| Result | Up and down move. Enter opens the row. `a` lists every action, a web page included. `i` steps into the row. Backspace steps back. `/` filters rows. `r` reruns. `]` and `[` turn the page. `s` sorts. Space marks a row, `*` marks them all, and esc clears the marks. `y` copies a cell, the row as JSON, the command line or the whole result. |
+| Anywhere | `v` cycles the view. Ctrl+R runs. Ctrl+X cancels a run. PgUp and PgDn scroll. `?` shows the keys. Ctrl+C quits. |
 
 A click picks a row, and a second click on the selected row opens it. The wheel scrolls whatever is under the pointer.
 

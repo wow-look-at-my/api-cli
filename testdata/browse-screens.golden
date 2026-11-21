@@ -59,7 +59,7 @@ shop                                               enter open · a actions · �
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
-│ enter open Open repo · a 2 actions · ⌫ back · v view                                             │
+│ enter open Open repo · a 2 actions · space mark · s sort · ⌫ back · v view                       │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 === actions menu
@@ -74,13 +74,13 @@ shop                                             type to narrow · up/down · en
 │   tag                            │ │ ╭─────╮  shop repos list acme                               │
 │   Ping the server                │ │ │ Run │                                                     │
 │                                  │ │ ╰─────╯                                                     │
-└──────────────────────────────────┘ └─────────────────────────────────────────────────────────────┘
-                                       ╭ Open ──────────────╮
-┌ repos list › items ──────────────────│ type to narrow     │──────────────────────────────────────┐
-│ exit 0 · 0s · 2 rows · shop repos lis│ > Open repo        │                           [data] raw │
-│ NAME   STARS   OWNER.LOGIN           │   issues           │                                      │
-│ ──────────────────────────           │   inspect this row │                                      │
-│ api    3       acme                  ╰────────────────────╯                                      │
+└────────────────────────────────╭ Open ──────────────────────────╮────────────────────────────────┘
+                                 │ type to narrow                 │
+┌ repos list › items ────────────│ > Open repo                    │────────────────────────────────┐
+│ exit 0 · 0s · 2 rows · shop rep│   issues                       │                     [data] raw │
+│ NAME   STARS   OWNER.LOGIN     │   inspect this row             │                                │
+│ ──────────────────────────     │   open html_url in the browser │                                │
+│ api    3       acme            ╰────────────────────────────────╯                                │
 │ web    9       acme                                                                              │
 │                                                                                                  │
 │                                                                                                  │
@@ -91,7 +91,7 @@ shop                                             type to narrow · up/down · en
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
-│ enter open Open repo · a 2 actions · ⌫ back · v view                                             │
+│ enter open Open repo · a 2 actions · space mark · s sort · ⌫ back · v view                       │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 === link to repos view
@@ -137,15 +137,15 @@ shop                                               enter open · a actions · �
 │   tags                           │ │                                                             │
 │   tag                            │ │ ╭─────╮  shop repos list acme                               │
 │   Ping the server                │ │ │ Run │                                                     │
-│                                  │ │ ╰─────╯                                                     │
-└─────╭ Keys ────────────────────────────────────────────────────────────────────────────────╮─────┘
-      │ tree      ↑↓ pick · enter form · r run · ← close group · / filter · q quit           │
-┌ repo│ form      type · tab next · enter run · ←→ cycle a choice · ctrl+o suggestions       │─────┐
-│ back│ result    ↑↓ row · enter open · a actions · i inspect · ⌫ back · / filter · [ ] page │ raw │
-│ NAME│ anywhere  v view · ctrl+r run · pgup/pgdn scroll · esc back · ctrl+c quit            │     │
-│ ────│ any key closes this                                                                  │     │
-│ api ╰──────────────────────────────────────────────────────────────────────────────────────╯     │
-│ web    9       acme                                                                              │
+╭ Keys ────────────────────────────────────────────────────────────────────────────────────────────╮
+│ tree      ↑↓ pick · enter form · r run · ← close group · / filter · q quit                       │
+│ form      type · tab next · enter run · ←→ cycle a choice · ctrl+o suggestions                   │
+│ result    ↑↓ row · enter open · a actions · i inspect · ⌫ back · / filter · [ ] page             │
+│ rows      space mark · * mark all · s sort · y copy · enter on marked rows runs the link for     │
+│ each                                                                                             │
+│ anywhere  v view · ctrl+r run · ctrl+x cancel · pgup/pgdn scroll · esc back · ctrl+c quit        │
+│ any key closes this                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
@@ -155,5 +155,5 @@ shop                                               enter open · a actions · �
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
-│ enter open Open repo · a 2 actions · ⌫ back · v view                                             │
+│ enter open Open repo · a 2 actions · space mark · s sort · ⌫ back · v view                       │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘

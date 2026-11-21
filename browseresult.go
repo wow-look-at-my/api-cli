@@ -44,6 +44,8 @@ type resultFrame struct {
 	levels []*dataLevel
 	view   int
 	offset int
+	// batch marks the summary of a batch. Its top level opens a row's own result rather than follow a link.
+	batch bool
 }
 
 func (m *browseModel) top() *resultFrame {
@@ -56,6 +58,7 @@ func (m *browseModel) top() *resultFrame {
 // finish turns a run's output into a frame and shows it.
 func (m *browseModel) finish(msg browseRunMsg) {
 	m.running = false
+	m.end()
 	run := m.launched
 	m.launched = nil
 	if run == nil || msg.id != m.runID {
@@ -78,15 +81,21 @@ func (m *browseModel) finish(msg browseRunMsg) {
 	if l := f.level(); f.isJSON && l != nil && l.kind == levelTable {
 		summary = fmt.Sprintf("exit %d · %s · %d rows · %s", msg.out.code, roundTook(msg.took), len(l.cells), msg.line)
 	}
-	if msg.out.code == 0 {
+	switch {
+	case m.cancelled:
+		m.setStatus("cancelled · "+summary, "bad")
+	case msg.out.code == 0:
 		m.setStatus(summary, "ok")
-	} else {
+	default:
 		m.setStatus(summary, "bad")
 	}
 	if focused, _ := m.view.UI().Focused(); run.push || focused == "tree" || focused == "run" {
 		m.focusResult()
 	}
-	m.schedule(f)
+	// A cancelled watch stays stopped.
+	if !m.cancelled {
+		m.schedule(f)
+	}
 }
 
 func roundTook(d time.Duration) string {
@@ -242,7 +251,7 @@ func (e *browseEntry) argvWith(inputs map[string]string) ([]string, error) {
 }
 
 // visibleRows is the rows of the current level that pass the row filter.
-func (m *browseModel) visibleRows(l *dataLevel) []int { return l.filtered(m.rowFilter) }
+func (m *browseModel) visibleRows(l *dataLevel) []int { return l.sorted(l.filtered(m.rowFilter)) }
 
 // moveRow moves the selection within the filtered rows.
 func (m *browseModel) moveRow(delta int) {
@@ -382,10 +391,14 @@ func (m *browseModel) activate() {
 		return
 	}
 	l := f.level()
-	if l.kind == levelObject && m.drill() {
+	if (l.kind == levelObject || (f.batch && len(f.levels) == 1)) && m.drill() {
 		return
 	}
 	if links := m.links(); len(links) > 0 {
+		if len(m.markedRows(l)) > 0 {
+			m.followMarked(links[0])
+			return
+		}
 		m.follow(links[0])
 		return
 	}

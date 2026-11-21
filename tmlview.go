@@ -29,6 +29,9 @@ type TMLProp struct {
 	From   string     `json:"from,omitempty"`
 	Over   string     `json:"over,omitempty"`
 	Fields []TMLField `json:"fields,omitempty"`
+	// Scroll and Select name an element whose scroll offset or picked row the live screen keeps.
+	Scroll string `json:"scroll,omitempty"`
+	Select string `json:"select,omitempty"`
 }
 
 // TMLField maps a single part of a list element to a single property
@@ -75,13 +78,15 @@ func buildTML(n *xnode) (*TML, error) {
 }
 
 func buildTMLProp(n *xnode) (TMLProp, error) {
-	if err := checkAttrs(n, "name", "from", "over"); err != nil {
+	if err := checkAttrs(n, "name", "from", "over", "scroll", "select"); err != nil {
 		return TMLProp{}, err
 	}
 	p := TMLProp{
-		Name: strings.TrimSpace(n.Attr("name")),
-		From: strings.TrimSpace(n.Attr("from")),
-		Over: strings.TrimSpace(n.Attr("over")),
+		Name:   strings.TrimSpace(n.Attr("name")),
+		From:   strings.TrimSpace(n.Attr("from")),
+		Over:   strings.TrimSpace(n.Attr("over")),
+		Scroll: strings.TrimSpace(n.Attr("scroll")),
+		Select: strings.TrimSpace(n.Attr("select")),
 	}
 	// A prop holds EITHER fields or text.
 	if repeats(n) {
@@ -117,6 +122,10 @@ func repeats(n *xnode) bool {
 }
 
 func buildTMLField(n *xnode) (TMLField, error) {
+	n, err := liftTemplates(n, "expr", "last", "truncate")
+	if err != nil {
+		return TMLField{}, err
+	}
 	if err := checkAttrs(n, "name", "expr", "lines", "last", "truncate"); err != nil {
 		return TMLField{}, err
 	}
@@ -143,13 +152,13 @@ func validateTML(t *TML, where string) error {
 			return fmt.Errorf("%s: <prop> %d has no \"name\"", where, i)
 		}
 		sources := 0
-		for _, set := range []bool{p.Text != "", p.From != "", p.Over != ""} {
+		for _, set := range []bool{p.Text != "", p.From != "", p.Over != "", p.Scroll != "", p.Select != ""} {
 			if set {
 				sources++
 			}
 		}
 		if sources != 1 {
-			return fmt.Errorf("%s: prop %q takes exactly one of text, \"from\" or \"over\"", where, p.Name)
+			return fmt.Errorf("%s: prop %q takes exactly one of text, \"from\", \"over\", \"scroll\" or \"select\"", where, p.Name)
 		}
 		if p.Over != "" && len(p.Fields) == 0 {
 			return fmt.Errorf("%s: prop %q reads a list and needs at least one <field>", where, p.Name)
@@ -201,11 +210,14 @@ func loadTMLView(path string, dark bool) (*tml.View, error) {
 	return view, nil
 }
 
-// tmlProps turns the response and the leaf context into the component's
-// arguments.
-func tmlProps(t *TML, parsed any, ctx map[string]any) (tml.Props, error) {
+// tmlProps turns the response and the leaf context into the component's arguments.
+func tmlProps(t *TML, parsed any, ctx map[string]any, state map[string]int) (tml.Props, error) {
 	props := make(tml.Props, len(t.Props))
 	for _, p := range t.Props {
+		if value, ok := tmlStateValue(p, state); ok {
+			props[p.Name] = value
+			continue
+		}
 		value, err := tmlPropValue(p, parsed, ctx)
 		if err != nil {
 			return nil, fmt.Errorf("prop %q: %w", p.Name, err)
@@ -409,7 +421,7 @@ func renderTMLFrame(t *TML, dir string, parsed any, ctx map[string]any, width, h
 	if err != nil {
 		return "", err
 	}
-	props, err := tmlProps(t, parsed, ctx)
+	props, err := tmlProps(t, parsed, ctx, nil)
 	if err != nil {
 		return "", err
 	}
