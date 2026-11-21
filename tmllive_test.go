@@ -84,6 +84,7 @@ func TestTMLLiveOneShotFrameHoldsZero(t *testing.T) {
 }
 
 func TestTMLLiveProgramDrawsTheComponent(t *testing.T) {
+	t.Serial("the watch program sets exitCode, and the screen's src resolves against configDir")
 	decl := liveDecl(t)
 	prev := exitCode
 	t.Cleanup(func() { exitCode = prev })
