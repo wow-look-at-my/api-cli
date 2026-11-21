@@ -29,7 +29,7 @@ Templates build the whole `<request>`, and the Go HTTP client performs it. There
 | You write | It means |
 |-----------|----------|
 | `jq=".[] \| .name"` | The jq program itself. |
-| `jq=".[0:{{ .flag.limit }}]"` | A template. It renders against this invocation's context (`.arg`, `.flag`, `.var`, `.entry`, `.env`), so the program depends on the flags this run was given. |
+| `jq=".[0:{{ .flag.limit }}]"` | A template. It renders against this invocation's context, so the program depends on the flags this run was given. |
 | `jq="var.filter"` | A bare dotted name is a context path. It must name a string, and that string is the program. A path that names nothing, or names anything but a string, fails the run. |
 
 The path form keeps a long program out of the attribute. The var it names renders against this run's flags too, so both of these answer to `--limit`.
@@ -43,7 +43,7 @@ The path form keeps a long program out of the attribute. The var it names render
 <response jq=".[0:{{ .flag.limit }}]"/>
 ```
 
-One property keeps the forms apart. A jq program almost always opens with `.`, `$`, `[`, `{`, a digit or an operator, and a context path starts with none of those. A bare builtin is the exception: `jq="length"` reads as a path and fails, so write `jq=". | length"`.
+One property keeps the forms apart. A jq program almost always opens, a digit or an operator, and a context path starts with none of those. A bare builtin is the exception: `jq="length"` reads as a path and fails, so write `jq=". | length"`.
 
 The shaped body is what the leaf prints, `--format=raw` included. jq runs before every presentation layer, and never as part of one.
 

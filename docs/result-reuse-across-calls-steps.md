@@ -27,7 +27,7 @@ Mix the two freely. A `<step><run>` can be a shell command while the leaf makes 
 - Steps run in declaration order. Each `entry` renders against the current context, and that context includes `.result.*` from the prior steps.
 - Step output parses as JSON, with `UseNumber`. Output that is not JSON stays a string. A request step stores what the leaf prints, and that includes the `<response jq=>` shaping.
 - A non-zero step aborts the run with that exit code, after its `retries=`. See [Retrying a step](#retrying-a-step-retries-and-on-error).
-- A `when` attribute is a Go-template predicate. It skips the step on a falsy render (empty, `false`, `0` or `no`), and `.result.<name>` then stays unset.
+- A `when` attribute is a Go-template predicate. It skips the step on a falsy render, and `.result.<name>` then stays unset.
 - More than one command in a run prints `N executions` to stderr. Suppress that line with `--quiet` or `-q`.
 - A step's `when` is evaluated **before** the step renders anything. A step that must not run therefore cannot fail on a value it never had.
 - `<preconditions>` run before the first step, so `.result` is empty there. A precondition that reads it is a load error, not a surprise at run time. Put the check in a `<step when=>` instead.

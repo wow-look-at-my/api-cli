@@ -87,4 +87,4 @@ A leaf that declares a `<mock>` **and** its own `<run>` is a thin wrapper. The r
 
 An **inherited** `<run>` is not the leaf's own. It stays where it is, exactly as it does for a `<download>`. A mock leaf under a parent that declares a run does not fire that run on the way past.
 
-**Constraints:** `<mock>` sits on a leaf only. It cannot share a leaf with a `<request>` or a `<download>`, because each one is the leaf's whole action. A mock that declares no `<output>`, `<record>`, `<stdout>` or `<stderr>` stands in for nothing. That load fails. `exit=` is a template for the exit code, which is how a mock stands in for a tool that fails.
+**Constraints:** `<mock>` sits on a leaf only. It cannot share a leaf with a `<request>` or a `<download>`, because each one is the leaf's whole action. That load fails. `exit=` is a template for the exit code, which is how a mock stands in for a tool that fails.

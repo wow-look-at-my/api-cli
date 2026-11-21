@@ -1,0 +1,159 @@
+=== start
+shop                                                 enter form · r run · / filter · ? help · q quit
+
+┌ Commands ────────────────────────┐ ┌ repos ──────────────────────────────────────────────────────┐
+│ > repos ▾                        │ │ Repositories.                                               │
+│     list                         │ │                                                             │
+│     view                         │ │                                                             │
+│   issues                         │ │                                                             │
+│   tags                           │ │                                                             │
+│   tag                            │ │                                                             │
+│   Ping the server                │ │                                                             │
+└──────────────────────────────────┘ └─────────────────────────────────────────────────────────────┘
+
+┌ Result ──────────────────────────────────────────────────────────────────────────────────────────┐
+│ Nothing run yet. Pick a command and press enter.                                                 │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+=== repos list acme
+shop                                               enter open · a actions · ⌫ back · v view · ? help
+
+┌ Commands ────────────────────────┐ ┌ repos list ─────────────────────────────────────────────────┐
+│   repos ▾                        │ │ List repositories.                                          │
+│ >   list                         │ │                                                             │
+│     view                         │ │ owner *              acme                                   │
+│   issues                         │ │ --state              (default open) ← open | closed | all → │
+│   tags                           │ │                                                             │
+│   tag                            │ │ ╭─────╮  shop repos list acme                               │
+│   Ping the server                │ │ │ Run │                                                     │
+│                                  │ │ ╰─────╯                                                     │
+└──────────────────────────────────┘ └─────────────────────────────────────────────────────────────┘
+
+┌ repos list › items ──────────────────────────────────────────────────────────────────────────────┐
+│ exit 0 · 0s · 2 rows · shop repos list acme                                           [data] raw │
+│ NAME   STARS   OWNER.LOGIN                                                                       │
+│ ──────────────────────────                                                                       │
+│ api    3       acme                                                                              │
+│ web    9       acme                                                                              │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│ enter open Open repo · a 2 actions · ⌫ back · v view                                             │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+=== actions menu
+shop                                             type to narrow · up/down · enter picks · esc closes
+
+┌ Commands ────────────────────────┐ ┌ repos list ─────────────────────────────────────────────────┐
+│   repos ▾                        │ │ List repositories.                                          │
+│ >   list                         │ │                                                             │
+│     view                         │ │ owner *              acme                                   │
+│   issues                         │ │ --state              (default open) ← open | closed | all → │
+│   tags                           │ │                                                             │
+│   tag                            │ │ ╭─────╮  shop repos list acme                               │
+│   Ping the server                │ │ │ Run │                                                     │
+│                                  │ │ ╰─────╯                                                     │
+└──────────────────────────────────┘ └─────────────────────────────────────────────────────────────┘
+                                       ╭ Open ──────────────╮
+┌ repos list › items ──────────────────│ type to narrow     │──────────────────────────────────────┐
+│ exit 0 · 0s · 2 rows · shop repos lis│ > Open repo        │                           [data] raw │
+│ NAME   STARS   OWNER.LOGIN           │   issues           │                                      │
+│ ──────────────────────────           │   inspect this row │                                      │
+│ api    3       acme                  ╰────────────────────╯                                      │
+│ web    9       acme                                                                              │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│ enter open Open repo · a 2 actions · ⌫ back · v view                                             │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+=== link to repos view
+shop                                               enter open · a actions · ⌫ back · v view · ? help
+
+┌ Commands ────────────────────────┐ ┌ repos view ─────────────────────────────────────────────────┐
+│   repos ▾                        │ │ One repository.                                             │
+│     list                         │ │                                                             │
+│ >   view                         │ │ owner *              acme                                   │
+│   issues                         │ │ repo *               api                                    │
+│   tags                           │ │                                                             │
+│   tag                            │ │ ╭─────╮  shop repos view acme api                           │
+│   Ping the server                │ │ │ Run │                                                     │
+│                                  │ │ ╰─────╯                                                     │
+└──────────────────────────────────┘ └─────────────────────────────────────────────────────────────┘
+
+┌ list ‹ repos view ───────────────────────────────────────────────────────────────────────────────┐
+│ exit 0 · 0s · shop repos view acme api                                                [data] raw │
+│ KEY      VALUE                                                                                   │
+│ ──────────────────                                                                               │
+│ name     api                                                                                     │
+│ readme   one …                                                                                   │
+│ owner    {1 key}                                                                                 │
+│ topics   [2 items]                                                                               │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│ enter open repos list · a 2 actions · ⌫ back · v view                                            │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+=== help
+shop                                               enter open · a actions · ⌫ back · v view · ? help
+
+┌ Commands ────────────────────────┐ ┌ repos list ─────────────────────────────────────────────────┐
+│   repos ▾                        │ │ List repositories.                                          │
+│ >   list                         │ │                                                             │
+│     view                         │ │ owner *              acme                                   │
+│   issues                         │ │ --state              (default open) ← open | closed | all → │
+│   tags                           │ │                                                             │
+│   tag                            │ │ ╭─────╮  shop repos list acme                               │
+│   Ping the server                │ │ │ Run │                                                     │
+│                                  │ │ ╰─────╯                                                     │
+└─────╭ Keys ────────────────────────────────────────────────────────────────────────────────╮─────┘
+      │ tree      ↑↓ pick · enter form · r run · ← close group · / filter · q quit           │
+┌ repo│ form      type · tab next · enter run · ←→ cycle a choice · ctrl+o suggestions       │─────┐
+│ back│ result    ↑↓ row · enter open · a actions · i inspect · ⌫ back · / filter · [ ] page │ raw │
+│ NAME│ anywhere  v view · ctrl+r run · pgup/pgdn scroll · esc back · ctrl+c quit            │     │
+│ ────│ any key closes this                                                                  │     │
+│ api ╰──────────────────────────────────────────────────────────────────────────────────────╯     │
+│ web    9       acme                                                                              │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│ enter open Open repo · a 2 actions · ⌫ back · v view                                             │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘

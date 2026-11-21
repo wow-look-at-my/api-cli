@@ -72,6 +72,7 @@ type Command struct {
 	Mock          *Mock           `json:"mock,omitempty"`
 	Downloads     []Download      `json:"downloads,omitempty"`
 	Stream        *Stream         `json:"stream,omitempty"`
+	TUI           *TUIHints       `json:"tui,omitempty"`
 	Commands      []Command       `json:"commands,omitempty"`
 }
 
@@ -174,6 +175,10 @@ type Arg struct {
 	Variadic    bool   `json:"variadic,omitempty"`
 	Pattern     string `json:"pattern,omitempty"`
 	Description string `json:"description,omitempty"`
+	// Choices is the closed set of values the arg takes.
+	Choices []string `json:"choices,omitempty"`
+	// Suggest names a command whose result lists likely values, for the tui subcommand.
+	Suggest *Suggest `json:"suggest,omitempty"`
 }
 
 // Flag is a named flag. Type is string|bool|int|string-slice (default string).
@@ -190,6 +195,8 @@ type Flag struct {
 	Required    bool     `json:"required,omitempty"`
 	Conflicts   []string `json:"conflicts,omitempty"`
 	Description string   `json:"description,omitempty"`
+	Choices     []string `json:"choices,omitempty"`
+	Suggest     *Suggest `json:"suggest,omitempty"`
 }
 
 // Cmd is the executable form of a command.
@@ -384,7 +391,7 @@ func validate(cfg *Config) error {
 			return err
 		}
 	}
-	return nil
+	return validateTUIRefs(cfg)
 }
 
 // validateTransports checks the transport registry: every entry needs a

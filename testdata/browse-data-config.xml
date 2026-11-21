@@ -1,0 +1,42 @@
+<config name="shop">
+	<command name="repos" description="Repositories.">
+		<command name="list" description="List repositories.">
+			<arg name="owner" required="true"/>
+			<flag name="state" choices="open,closed,all" default="open"/>
+			<tui autorun="true">
+				<link to="repos view" label="Open repo">
+					<with name="repo" field="name"/>
+				</link>
+			</tui>
+			<run>printf '%s' '{"total":2,"items":[{"name":"api","owner":{"login":"acme"},"stars":3,"html_url":"https://x/api"},{"name":"web","owner":{"login":"acme"},"stars":9,"html_url":"https://x/web"}]}'</run>
+		</command>
+		<command name="view" description="One repository.">
+			<arg name="owner" required="true"/>
+			<arg name="repo" required="true" suggest="repos list" suggest-field="name"/>
+			<run>printf '{"name":"%s","owner":{"login":"%s"},"topics":["a","b"],"readme":"one\\ntwo"}' <value name="arg.repo"/> <value name="arg.owner"/></run>
+		</command>
+	</command>
+	<command name="issues" description="Issues.">
+		<arg name="owner" required="true"/>
+		<fields over="items">
+			<field name="number">number</field>
+			<field name="title">title</field>
+		</fields>
+		<run>printf '{"items":[{"number":1,"title":"broken for <value name="arg.owner"/>","body":"long text"}]}'</run>
+	</command>
+	<command name="tags" description="Tags.">
+		<run>printf '%s' '[{"name":"v1","sha":"abc"},{"name":"v2","sha":"def"}]'</run>
+	</command>
+	<command name="tag" description="One tag.">
+		<arg name="tag" required="true"/>
+		<run>printf '{"name":"%s","sha":"abc"}' <value name="arg.tag"/></run>
+	</command>
+	<command name="internal">
+		<tui hidden="true"/>
+		<run>echo secret</run>
+	</command>
+	<command name="ping">
+		<tui label="Ping the server"/>
+		<run>echo pong</run>
+	</command>
+</config>

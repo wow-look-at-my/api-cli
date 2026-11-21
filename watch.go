@@ -21,9 +21,11 @@ import (
 // watchMinInterval is the floor on a watch interval.
 const watchMinInterval = 100 * time.Millisecond
 
-// parseWatchInterval reads an interval: a Go duration, or a plain number of
+// parseWatchLength reads an interval: a Go duration, or a plain number of
 // seconds. An empty value is no interval. what names the source in an error.
-func parseWatchInterval(what, s string) (time.Duration, error) {
+// It leaves the floor to parseWatchInterval, for a caller whose value already
+// passed validateWatch at load time.
+func parseWatchLength(what, s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, nil
@@ -35,6 +37,16 @@ func parseWatchInterval(what, s string) (time.Duration, error) {
 			return 0, fmt.Errorf("%s %q: want a duration (2s, 500ms) or a number of seconds", what, s)
 		}
 		d = time.Duration(secs * float64(time.Second))
+	}
+	return d, nil
+}
+
+// parseWatchInterval reads an interval and holds it to the floor, so no watch
+// repaints faster than watchMinInterval.
+func parseWatchInterval(what, s string) (time.Duration, error) {
+	d, err := parseWatchLength(what, s)
+	if err != nil || d == 0 {
+		return d, err
 	}
 	if d < watchMinInterval {
 		return 0, fmt.Errorf("%s %q: interval must be at least %s", what, s, watchMinInterval)

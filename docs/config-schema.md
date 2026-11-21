@@ -23,7 +23,7 @@ One example is the rule that a leaf needs a run, its own or an ancestor's. api-c
 
 | Attribute / child | Notes |
 |-------------------|-------|
-| `name=` (required) | Subcommand name. No whitespace or slashes, and not `help`, `completion`, `__complete`, `docs`, or `tui`. |
+| `name=` (required) | Subcommand name. |
 | `description=` | Shown in help. |
 | `passthrough="true"` | Leaf-only. See [Passthrough mode](#passthrough-mode). |
 | `runnable="true"` | A node with subcommands runs in its own right. Every `<arg>` then needs a `pattern=`. See [A parent that also runs](#a-parent-that-also-runs). |
@@ -38,12 +38,14 @@ One example is the rule that a leaf needs a run, its own or an ancestor's. api-c
 | `<fields when=>` / `<format>` | The automatic output shape, or a legacy format. Leaf-only, and never both. `<fields>` repeats: every block whose `when=` holds renders. |
 | `<download over= when= transport= group= order=>` | Leaf-only, repeatable. Hands URLs to the download queue. A `<join>` child concatenates a group, and its optional `<run>` makes the output from `.join.input` into `.join.output`. See [Downloads](#downloads). |
 | `<stream mode= chunk=>` | Leaf-only. Cuts the leaf's own run into chunks and emits each as it is whole. An optional `<run>` child transforms one chunk at a time. See [Streaming](#streaming-stream). |
-| `<mock exit=>` | Leaf-only. Stands in for a program. `<input>`, `<output>`, `<record>`, `<stdout>`, `<stderr>`. See [Mock executables](#mock-executables). |
+| `<mock exit=>` | Leaf-only. Stands in for a program. See [Mock executables](#mock-executables). |
 | `<command>` | Nested subcommands. A node with children prints help, unless it declares `runnable="true"`. |
 
 ## `<arg>` and `<flag>`
 
 `<arg name= type="string|int" required= variadic= pattern= description=/>`. A `variadic` arg comes last, and it collects the rest into a typed slice. Pair it with `spread`. A required arg cannot follow an optional one, because cobra counts positions and nothing can fill the gap. `pattern=` is a Go regular expression every supplied value must match, and a [runnable parent](#a-parent-that-also-runs) requires one on each arg. It is also a template. It can name a `<var>` or the built-in `{{ segmentPattern }}`. An MCP tool call is checked against it too, and the tool's `inputSchema` states it.
+
+`choices="a,b,c"` on an arg or a flag is the closed set of values it takes. The command line rejects any other value, shell completion offers the set, and the MCP `inputSchema` publishes it as an `enum`. A bool takes none, and a flag's default must be one of them. `suggest="repos list"` and `suggest-field="name"` name a command that lists likely values, for the `tui` subcommand. See [docs/tui.md](tui.md).
 
 **Every declared arg is present.** An omitted optional arg holds the zero value of its type. That is `""` for a string, `0` for an int, and an empty slice for a variadic. A string reaches `urlpath .arg.id`, and every other helper that takes a string, with no guard around it. The same holds on the MCP side for a tool argument the caller leaves out.
 

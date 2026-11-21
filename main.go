@@ -192,8 +192,6 @@ func isHelpInvocation(argv []string) bool {
 	return false
 }
 
-// preparseGlobalFlags pulls --config, --mcp, and --cors out of argv with a
-// throwaway cobra.Command.
 func preparseGlobalFlags(argv []string) (configPath, mcpTransport, corsValue string, envVars []string) {
 	configPath, mcpTransport, corsValue, envVars, _ = preparseGlobals(argv)
 	return
