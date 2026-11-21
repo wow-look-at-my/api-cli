@@ -245,6 +245,13 @@ func buildToolInputSchema(node Command) map[string]any {
 				prop["pattern"] = a.Pattern
 			}
 		}
+		if len(a.Choices) > 0 {
+			target := prop
+			if a.Variadic {
+				target = prop["items"].(map[string]any)
+			}
+			target["enum"] = choicesEnum(a.Choices, a.Type)
+		}
 		if a.Description != "" {
 			prop["description"] = a.Description
 		}
@@ -268,6 +275,13 @@ func buildToolInputSchema(node Command) map[string]any {
 			}
 		default: // "" or "string"
 			prop = map[string]any{"type": "string"}
+		}
+		if len(f.Choices) > 0 {
+			target := prop
+			if f.Type == "string-slice" {
+				target = prop["items"].(map[string]any)
+			}
+			target["enum"] = choicesEnum(f.Choices, f.Type)
 		}
 		if f.Description != "" {
 			prop["description"] = f.Description

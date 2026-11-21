@@ -405,6 +405,15 @@ func addCommandChild(c *Command, child *xnode) error {
 			return fmt.Errorf("<command %q>: <stream> is declared once; give one leaf one boundary", c.Name)
 		}
 		c.Stream = s
+	case "tui":
+		if c.TUI != nil {
+			return fmt.Errorf("<command %q>: <tui> is declared once", c.Name)
+		}
+		h, err := buildTUI(child)
+		if err != nil {
+			return err
+		}
+		c.TUI = h
 	case "command":
 		sub, err := buildCommandNode(child)
 		if err != nil {
@@ -438,7 +447,7 @@ func buildPreconditions(n *xnode) ([]string, error) {
 }
 
 func buildArg(n *xnode) (Arg, error) {
-	if err := checkAttrs(n, "name", "type", "required", "variadic", "pattern", "description"); err != nil {
+	if err := checkAttrs(n, "name", "type", "required", "variadic", "pattern", "description", "choices", "suggest", "suggest-field"); err != nil {
 		return Arg{}, err
 	}
 	return Arg{
@@ -448,11 +457,13 @@ func buildArg(n *xnode) (Arg, error) {
 		Variadic:    n.Attr("variadic") == "true",
 		Pattern:     strings.TrimSpace(n.Attr("pattern")),
 		Description: n.Attr("description"),
+		Choices:     splitList(n.Attr("choices")),
+		Suggest:     buildSuggest(n),
 	}, nil
 }
 
 func buildFlag(n *xnode) (Flag, error) {
-	if err := checkAttrs(n, "name", "short", "type", "default", "required", "conflicts", "description"); err != nil {
+	if err := checkAttrs(n, "name", "short", "type", "default", "required", "conflicts", "description", "choices", "suggest", "suggest-field"); err != nil {
 		return Flag{}, err
 	}
 	fl := Flag{
@@ -461,6 +472,8 @@ func buildFlag(n *xnode) (Flag, error) {
 		Type:        n.Attr("type"),
 		Required:    n.Attr("required") == "true",
 		Description: n.Attr("description"),
+		Choices:     splitList(n.Attr("choices")),
+		Suggest:     buildSuggest(n),
 	}
 	if c := strings.TrimSpace(n.Attr("conflicts")); c != "" {
 		for _, p := range strings.Split(c, ",") {

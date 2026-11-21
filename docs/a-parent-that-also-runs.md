@@ -17,12 +17,12 @@ A node with `<command>` children prints help and nothing else. `runnable="true"`
 Cobra reads the first positional as a subcommand name, so the two stay apart only when no argument value can spell one. `pattern=` is how a config states that, and the loader enforces it.
 
 - **Every `<arg>` on a runnable node needs a `pattern=`.** It is a Go regular expression, and anchoring it with `^` and `$` is what makes it narrow.
-- **A pattern that matches one of the node's own subcommand names is a load error.** It may not match a name cobra owns either: `help`, `completion`, `__complete` or `docs`.
+- **A pattern that matches one of the node's own subcommand names is a load error.** It may not match a name cobra owns either.
 - **A value that matches nothing is neither.** The error names both halves: the pattern the value missed, and the subcommands it is not.
 - **`--` ends the subcommand lookup.** That is how a value that starts with a dash reaches the parent: `tool thing -- -5`.
 - **`runnable="true"` and `passthrough="true"` cannot both hold.** Passthrough takes every argument, which leaves nothing to name a subcommand.
 
-A runnable parent is a full node. `<arg>`, `<flag>`, `<steps>`, `<entry>`, `<fields>`, `<download>` and `<run>` all work as they do on a leaf. Its `<run>` still inherits to the children, as an ancestor's always did. It also becomes an MCP tool of its own, named for its path, next to the tools its children become.
+A runnable parent is a full node. Its `<run>` still inherits to the children, as an ancestor's always did. It also becomes an MCP tool of its own, named for its path, next to the tools its children become.
 
 `pattern=` works on a leaf too, where it is plain validation with no dispatch to disambiguate. `<arg name="sha" pattern="^[0-9a-f]{7,40}$"/>` rejects a bad value before the request goes out.
 

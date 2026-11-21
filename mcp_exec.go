@@ -25,6 +25,9 @@ func mcpExecLeaf(leaf *mcpLeaf, arguments map[string]any) (string, bool) {
 	if err != nil {
 		return "error: " + err.Error(), true
 	}
+	if err := checkChoices(leaf.node, data, func(name string) bool { _, ok := arguments[name]; return ok }); err != nil {
+		return "error: " + err.Error(), true
+	}
 
 	for i, p := range leaf.node.Preconditions {
 		msg, perr := renderString(p, data)

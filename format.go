@@ -290,14 +290,29 @@ func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin strin
 func captureRun(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any) (out string, overflowed bool, code int) {
 	if request.Defined() {
 		o, c := runRequest(request, data, execStderr)
+		tapBody(o)
 		return o, false, c
 	}
-	return captureExecCapped(cmdTmpl, cwd, stdin, data, defaultFormatCap)
+	out, overflowed, code = captureExecCapped(cmdTmpl, cwd, stdin, data, defaultFormatCap)
+	if !overflowed {
+		tapBody(out)
+	}
+	return out, overflowed, code
+}
+
+// bodyTap receives a leaf's body before any formatting. The tui subcommand sets it, to show the data and the formatted text side by side.
+var bodyTap func(string)
+
+func tapBody(s string) {
+	if bodyTap != nil {
+		bodyTap(s)
+	}
 }
 
 // streamRequest performs a request and writes its output straight to stdout.
 func streamRequest(request *Request, data map[string]any) int {
 	out, code := runRequest(request, data, execStderr)
+	tapBody(out)
 	if code != 0 {
 		return code
 	}

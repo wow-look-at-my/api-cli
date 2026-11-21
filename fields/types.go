@@ -48,6 +48,14 @@ func Lookup(data any, path string) (value any, found bool) { return lookupData(d
 // LookupValue is Lookup without the found flag: a miss is a nil value.
 func LookupValue(data any, path string) any { return lookupValue(data, path) }
 
+// Cell is one field's display string for one record, with default=, firstline= and truncate= applied. r evaluates Expr.
+func Cell(r Renderer, fld Field, obj any, ctx map[string]any) (string, error) {
+	return cellValue(r, fld, record{obj: obj}, ctx)
+}
+
+// DisplayValue prints a decoded JSON value: a scalar bare, anything else as compact JSON.
+func DisplayValue(v any) string { return displayValue(v) }
+
 // DisplayWidth is the printed column width of s.
 func DisplayWidth(s string) int { return displayWidth(s) }
 
