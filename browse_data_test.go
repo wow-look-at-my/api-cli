@@ -44,7 +44,8 @@ func listAcme(h *browseHarness) {
 
 func TestBrowseTreeHonoursHints(t *testing.T) {
 	h := newDataHarness(t)
-	assert.NotContains(t, entryPaths(h.m.entries), "internal", "a hidden command stays out of the tree")
+	assert.NotContains(t, entryPaths(h.m.visible()), "internal", "a hidden command stays out of the tree")
+	assert.Contains(t, entryPaths(h.m.entries), "internal", "a hidden command can still be a link target or a suggestion source")
 	ping := browseEntryAt(t, h.m.entries, "ping")
 	assert.Equal(t, "Ping the server", ping.label())
 }

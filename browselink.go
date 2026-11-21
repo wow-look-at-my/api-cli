@@ -52,7 +52,7 @@ func (m *browseModel) linksFor(src *browseEntry, rec map[string]any, carried map
 
 	var inferred []browseLink
 	for _, target := range m.entries {
-		if target == src || declared.Contains(target) || !target.runnable() || len(target.fields) == 0 {
+		if target == src || target.hidden || declared.Contains(target) || !target.runnable() || len(target.fields) == 0 {
 			continue
 		}
 		link := browseLink{target: target, values: map[string]string{}}

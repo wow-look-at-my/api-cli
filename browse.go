@@ -83,6 +83,8 @@ type browseModel struct {
 
 	// memory holds the last value typed for each input name, which prefills the same name in every other command.
 	memory map[string]string
+	// statePath is the file the session saves to, or empty for a session that saves nothing.
+	statePath string
 
 	host          browseHost
 	width, height int
@@ -124,11 +126,17 @@ func runBrowse(cfg *Config) error {
 	if err != nil {
 		return err
 	}
+	if path, perr := statePath(cfg); perr == nil {
+		m.attachState(path)
+	} else {
+		m.setStatus("state is not saved: "+perr.Error(), "bad")
+	}
 	program, err := tml.NewProgram(m.view, m)
 	if err != nil {
 		return err
 	}
 	err = program.Run()
+	m.save()
 	if errors.Is(err, tml.ErrInterrupted) {
 		m.code, err = interruptExitCode, nil
 	}
@@ -145,7 +153,8 @@ func newBrowseModel(cfg *Config) (*browseModel, error) {
 		return nil, fmt.Errorf("browse display: %w", err)
 	}
 	entries := flattenBrowse(cfg)
-	if len(entries) == 0 {
+	shown := visibleEntries(entries, "")
+	if len(shown) == 0 {
 		return nil, fmt.Errorf("the config declares no commands to browse")
 	}
 	m := &browseModel{
@@ -153,7 +162,7 @@ func newBrowseModel(cfg *Config) (*browseModel, error) {
 		name:    cfg.Name,
 		entries: entries,
 		byPath:  map[string]*browseEntry{},
-		cur:     entries[0],
+		cur:     shown[0],
 		memory:  map[string]string{},
 		width:   100,
 		height:  30,
@@ -386,6 +395,7 @@ func (m *browseModel) launch(run *pendingRun) {
 	m.runID++
 	m.launched = run
 	m.remember(run.entry)
+	m.save()
 	line := commandLine(m.name, run.argv)
 	m.setStatus("running "+line, "dim")
 	exec, width, height, id, argv, now := m.exec, m.outputWidth(), m.height, m.runID, run.argv, m.now

@@ -18,6 +18,7 @@
 	</command>
 	<command name="issues" description="Issues.">
 		<arg name="owner" required="true"/>
+		<flag name="api-token" description="Never saved."/>
 		<fields over="items">
 			<field name="number">number</field>
 			<field name="title">title</field>
@@ -37,6 +38,7 @@
 	</command>
 	<command name="ping">
 		<tui label="Ping the server"/>
+		<flag name="repo" suggest="repos list" suggest-field="name"/>
 		<run>echo pong</run>
 	</command>
 </config>

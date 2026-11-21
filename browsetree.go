@@ -21,6 +21,8 @@ type browseEntry struct {
 	// parent is the entry of the enclosing group, nil at the top level.
 	parent    *browseEntry
 	collapsed bool
+	// hidden is true under a <tui hidden="true">.
+	hidden bool
 }
 
 // browseField is one input of a runnable entry: a positional arg, a flag, or
@@ -39,15 +41,12 @@ type browseField struct {
 
 // flattenBrowse lists every node of the config in document order, depth first.
 // The confirm prompt and watch= are inherited on the rule buildCommand applies.
-// A node a <tui hidden="true"> covers is left out, with its subtree.
+// A node a <tui hidden="true"> covers is marked hidden, with its subtree.
 func flattenBrowse(cfg *Config) []*browseEntry {
 	var out []*browseEntry
 	var walk func(nodes []Command, parent *browseEntry, confirm, watch string)
 	walk = func(nodes []Command, parent *browseEntry, confirm, watch string) {
 		for _, n := range nodes {
-			if n.TUI != nil && n.TUI.Hidden {
-				continue
-			}
 			var path []string
 			depth := 0
 			if parent != nil {
@@ -66,6 +65,7 @@ func flattenBrowse(cfg *Config) []*browseEntry {
 			if n.TUI != nil {
 				e.hints = *n.TUI
 			}
+			e.hidden = e.hints.Hidden || (parent != nil && parent.hidden)
 			if n.executes() {
 				e.fields = browseFields(n)
 			}
@@ -128,7 +128,7 @@ func visibleEntries(entries []*browseEntry, filter string) []*browseEntry {
 	var out []*browseEntry
 	if strings.TrimSpace(filter) == "" {
 		for _, e := range entries {
-			if !e.hiddenBy() {
+			if !e.hidden && !e.hiddenBy() {
 				out = append(out, e)
 			}
 		}
@@ -136,7 +136,7 @@ func visibleEntries(entries []*browseEntry, filter string) []*browseEntry {
 	}
 	keep := set.New[*browseEntry]()
 	for _, e := range entries {
-		if e.matches(filter) {
+		if !e.hidden && e.matches(filter) {
 			for p := e; p != nil; p = p.parent {
 				keep.Add(p)
 			}
