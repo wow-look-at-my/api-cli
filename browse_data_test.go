@@ -25,6 +25,7 @@ func newDataHarness(t *testing.T) *browseHarness {
 	require.NoError(t, err)
 	h := &browseHarness{t: t, m: m}
 	m.host = h
+	m.liveEvery = 0
 	m.exec = func(argv []string, w, ht int) browseOutput {
 		h.runs = append(h.runs, argv)
 		return browseExec(cfg, argv, w, ht)
@@ -335,6 +336,7 @@ func TestBrowsePages(t *testing.T) {
 	require.NoError(t, err)
 	h = &browseHarness{t: t, m: m}
 	m.host = h
+	m.liveEvery = 0
 	m.exec = func(argv []string, _, _ int) browseOutput {
 		h.runs = append(h.runs, argv)
 		return browseOutput{raw: `[{"full_name":"o/r"}]`, text: "o/r"}

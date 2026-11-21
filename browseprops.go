@@ -254,6 +254,17 @@ func (m *browseModel) paneProps(p tml.Props) {
 	p["rowSel"] = sema.StringValue("-1")
 	p["output"] = sema.ListValue(nil)
 	p["empty"] = sema.StringValue("")
+	// A run in progress that has printed something shows its last lines, so a stream or a download is visible as it goes.
+	if m.running && m.live != nil {
+		if lines := browseLines(m.live.String()); len(lines) > 0 {
+			n := m.paneRows()
+			p["paneTitle"] = sema.StringValue("running " + m.cur.pathString())
+			p["isText"] = sema.BoolValue(true)
+			p["output"] = sema.ListValue(lines[max(0, len(lines)-n):])
+			p["footer"] = sema.StringValue(plural(len(lines), "line") + " so far · ctrl+x cancels")
+			return
+		}
+	}
 	if f == nil {
 		p["empty"] = sema.StringValue("Nothing run yet. Pick a command and press enter.")
 		return

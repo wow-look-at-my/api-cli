@@ -4,13 +4,16 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/term"
@@ -99,12 +102,62 @@ type browseModel struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	cancelled bool
+
+	// live is what the run in progress has printed so far.
+	live      *liveBuffer
+	liveEvery time.Duration
 }
 
-// begin opens the context for a new run.
+// liveRefresh is how often the result pane shows more of a run in progress.
+const liveRefresh = 250 * time.Millisecond
+
+// browseLiveMsg asks for a repaint of a run in progress.
+type browseLiveMsg struct{ id int }
+
+// liveBuffer is a buffer that the run's goroutine writes and the program's goroutine reads.
+type liveBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *liveBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *liveBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// liveTick repaints a run in progress and asks for the next repaint, until the run ends.
+func (m *browseModel) liveTick(msg browseLiveMsg) bool {
+	if msg.id != m.runID || !m.running {
+		return false
+	}
+	every := m.liveEvery
+	m.host.Go(func() tml.Msg {
+		time.Sleep(every)
+		return browseLiveMsg{id: msg.id}
+	})
+	return true
+}
+
+// begin opens the context for a new run, and a fresh buffer for what it prints on its way.
 func (m *browseModel) begin() {
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 	m.cancelled = false
+	m.live = &liveBuffer{}
+	if m.liveEvery > 0 {
+		id := m.runID + 1
+		every := m.liveEvery
+		m.host.Go(func() tml.Msg {
+			time.Sleep(every)
+			return browseLiveMsg{id: id}
+		})
+	}
 }
 
 // runContext is the context of the run in progress.
@@ -208,7 +261,10 @@ func newBrowseModel(cfg *Config) (*browseModel, error) {
 		height:  30,
 		now:     time.Now,
 	}
-	m.exec = func(argv []string, w, h int) browseOutput { return browseExecCtx(m.runContext(), cfg, argv, w, h) }
+	m.exec = func(argv []string, w, h int) browseOutput {
+		return browseExecLive(m.runContext(), m.live, cfg, argv, w, h)
+	}
+	m.liveEvery = liveRefresh
 	for _, e := range entries {
 		m.byPath[e.pathString()] = e
 	}
@@ -240,11 +296,21 @@ func browseExec(cfg *Config, argv []string, width, height int) browseOutput {
 	return browseExecCtx(context.Background(), cfg, argv, width, height)
 }
 
-// browseExecCtx runs argv in this process, exactly as the command line would, and captures everything it prints.
+// browseExecCtx is browseExecLive with no live copy.
+func browseExecCtx(ctx context.Context, cfg *Config, argv []string, width, height int) browseOutput {
+	return browseExecLive(ctx, nil, cfg, argv, width, height)
+}
+
+// browseExecLive runs argv in this process, exactly as the command line would, and captures everything it prints.
 // The browser is the confirmation, so the run gets --yes. Stdin is empty, because the terminal belongs to the browser.
 // raw is the body before any formatting, which the data view reads. A cancel of ctx stops the commands and requests.
-func browseExecCtx(ctx context.Context, cfg *Config, argv []string, width, height int) browseOutput {
-	var buf bytes.Buffer
+// A copy of the output goes to live while the run goes on, and a nil live copies nothing.
+func browseExecLive(ctx context.Context, live io.Writer, cfg *Config, argv []string, width, height int) browseOutput {
+	var captured bytes.Buffer
+	var buf io.Writer = &captured
+	if live != nil {
+		buf = io.MultiWriter(&captured, live)
+	}
 	var body *string
 	prevIn, prevTTY, prevCode, prevTap, prevCtx := execStdin, ttyOverride, exitCode, bodyTap, runCtx
 	execStdin = strings.NewReader("")
@@ -256,14 +322,14 @@ func browseExecCtx(ctx context.Context, cfg *Config, argv []string, width, heigh
 
 	root := newRoot(cfg)
 	root.SetArgs(append([]string{"--yes", "--watch=off", "--no-tui"}, argv...))
-	root.SetOut(&buf)
-	root.SetErr(&buf)
-	err := captureInto(&buf, root.Execute)
+	root.SetOut(buf)
+	root.SetErr(buf)
+	err := captureInto(buf, root.Execute)
 	code := exitCode
 	if err != nil && code == 0 {
 		code = 1
 	}
-	out := browseOutput{text: buf.String(), raw: buf.String(), code: code}
+	out := browseOutput{text: captured.String(), raw: captured.String(), code: code}
 	if body != nil {
 		out.raw = *body
 	}
@@ -287,6 +353,8 @@ func (m *browseModel) update(host browseHost, msg tml.Msg) bool {
 	case browseBatchMsg:
 		m.finishBatch(msg)
 		return true
+	case browseLiveMsg:
+		return m.liveTick(msg)
 	case browseSuggestMsg:
 		m.suggested(msg)
 		return true
