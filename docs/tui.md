@@ -21,6 +21,8 @@ The screen has panes. The command tree is on the left. The form for the selected
 - **A refreshing screen.** A command with `watch=` reruns on its interval while it is on screen, and keeps the selected row.
 - **Filters.** `/` in the tree narrows the commands. `/` in a result narrows the rows.
 - **A session that picks up where it stopped.** The browser saves the shared values, each command's form and the picked command to a file under the user cache directory, one file per config. An input whose name looks like a secret is never saved. A saved file that does not parse is reported on the status line. The session starts empty.
+- **Sort and mark.** `s` sorts the rows by a column you pick, numbers as numbers. A second pick of the same column flips the order. Space marks a row, and `*` marks every row the filter shows. With rows marked, enter or `a` runs a link once per marked row, after one confirmation, and shows a table of the runs. Enter on a row of that table opens what that run returned.
+- **A run you can watch and stop.** While a command runs, the result pane shows what it printed so far, so a stream or a download shows progress. Ctrl+X cancels the run: its requests stop, and its processes are killed.
 - **Pages.** A command with an int flag named `page` pages with `]` and `[`. The result reruns in place on the next or the previous page.
 
 ## Hints for the rest
@@ -83,8 +85,8 @@ The same hint drives shell completion. A tab on `repo get` runs the source and o
 | --- | --- |
 | Tree | Up and down pick. Enter opens the form at the first empty required input, and runs a command that takes no input. `r` runs the command as its form stands. Left shuts a group. `/` filters. `q` quits. |
 | Form | Type to edit. Tab moves on. Enter runs. Left and right cycle a choice. Ctrl+O lists suggestions. Esc returns to the tree. |
-| Result | Up and down move. Enter opens the row. `a` lists every action. `i` steps into the row. Backspace steps back. `/` filters rows. `r` reruns. `]` and `[` turn the page. |
-| Anywhere | `v` cycles the view. Ctrl+R runs. PgUp and PgDn scroll. `?` shows the keys. Ctrl+C quits. |
+| Result | Up and down move. Enter opens the row. `a` lists every action. `i` steps into the row. Backspace steps back. `/` filters rows. `r` reruns. `]` and `[` turn the page. `s` sorts. Space marks a row, `*` marks them all, and esc clears the marks. |
+| Anywhere | `v` cycles the view. Ctrl+R runs. Ctrl+X cancels a run. PgUp and PgDn scroll. `?` shows the keys. Ctrl+C quits. |
 
 A click picks a row, and a second click on the selected row opens it. The wheel scrolls whatever is under the pointer.
 
