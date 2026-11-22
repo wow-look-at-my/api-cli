@@ -40,7 +40,9 @@ A `<field>` inside a repeated prop takes more than a path:
 
 `lines` exists for a log. One field holds a blob of output. A card has room for the tail of it. TML does no wrapping of its own. A line wider than the card therefore wraps in Lip Gloss and pushes the card's border down a row. Clip it here, or give the component's `<Text>` an `overflow`.
 
-Every value crosses as text, and the component re-reads it as the type it declared. So an `int` property takes `3` and a `color` property takes `#d97706` without the config naming a type of its own. A component rejects a property it never declared. A data template rejects a field it never declared. So one name on one side and a different name on the other fails the run, rather than drawing a blank cell.
+Every value crosses as text, and the component re-reads it as the type it declared. So an `int` property takes `3`. A `color` property takes `accent`, the name of a colour the component's theme declares, without the config naming a type of its own. A colour value such as `#d97706` is refused: a theme is the only place a colour value is written. A component rejects a property it never declared. A data template rejects a field it never declared.
+
+So one name on one side and a different name on the other fails the run, rather than drawing a blank cell.
 
 `over=` reads the response body first and the whole context second, exactly as a `<fields>` projection does. That is how a step result reaches the screen: `over="result.releases"` is the list a `<step name="releases">` fetched.
 
