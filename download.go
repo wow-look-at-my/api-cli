@@ -312,12 +312,12 @@ func planDownloads(dls []Download, data map[string]any, dir string) ([]downloadS
 	for i := range dls {
 		d := &dls[i]
 		if d.When != "" {
-			verdict, err := renderString(d.When, data)
+			ok, err := evalPredicate(d.When, data)
 			if err != nil {
 				return nil, fmt.Errorf("download[%d]: render when: %w", i, err)
 			}
-			logVerbose("download[%d]: when %q => %q (truthy=%v)", i, d.When, verdict, isTruthy(verdict))
-			if !isTruthy(verdict) {
+			logVerbose("download[%d]: when %q => %v", i, d.When, ok)
+			if !ok {
 				continue
 			}
 		}

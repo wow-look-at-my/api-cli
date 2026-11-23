@@ -253,7 +253,7 @@ func runLeafOnce(c *cobra.Command, node Command, args []string, vars map[string]
 	}
 
 	logVerbose("leaf %q: starting", node.Name)
-	logDebug("leaf %q: data context: %s", node.Name, jsonCompact(data))
+	logDebug("leaf %q: data context: %s", node.Name, jsonCompact(debugContext(data)))
 
 	for i, p := range node.Preconditions {
 		msg, perr := renderString(p, data)

@@ -43,6 +43,14 @@ A map is one record unless some field reads `@key` or `@value`. That is the sign
 
 **A path that names nothing is an error**, and so is one that names a scalar. The run exits non-zero and names the path. An empty table over the first exit reads as an API that returned nothing, which is how a renamed field costs an afternoon. An empty **list** is a real answer. It stays quiet.
 
+Some APIs leave an empty list out of the body instead of sending `[]`. For those, add `on-missing="empty"`. A path that names nothing, or names `null`, then reads as an empty list. A scalar at the path is still an error, because that is a shape the block cannot read. The default is `on-missing="fail"`.
+
+```xml
+<fields over="children" on-missing="empty">   <!-- an empty directory has no "children" key -->
+	<field name="name">name</field>
+</fields>
+```
+
 A request leaf with **no** `<fields>` at all prints its JSON body, as jq shaped it. Add `--as=table` to project nothing and to table the raw keys.
 
 ## More than one shape on one leaf
@@ -66,7 +74,7 @@ A leaf can declare several `<fields>` blocks. Each block whose `when=` predicate
 
 The first case is an optional arg that changes the response shape. The second is a dashboard. One block reads the leaf body. A second block reads `.result.<step>`. Tables then share the screen, with a blank line between them.
 
-`when=` is a Go-template predicate over the format context. A leaf whose blocks all sit out prints the raw body, exactly as a leaf with no `<fields>` does. `--as=<sink>` applies to every block that renders.
+`when=` is a Go-template predicate over the format context. A leaf whose blocks all sit out prints the raw body, exactly as a leaf with no `<fields>` does. A path that leads nowhere reads as false, so `when="{{ .data.children }}"` is enough to test for a key. That covers a missing key, a missing parent, and a body that is not JSON. `--as=<sink>` applies to every block that renders.
 
 ## Forcing a representation
 

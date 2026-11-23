@@ -85,12 +85,12 @@ func (r *stepRunner) action() (string, *callFailure, error) {
 			return out, fail, err
 		}
 		last = parseResult(out)
-		verdict, err := renderString(r.step.Until, pollContext(r.data, last))
+		held, err := evalPredicate(r.step.Until, pollContext(r.data, last))
 		if err != nil {
 			return "", nil, fmt.Errorf("%s: render until: %w", r.where(), err)
 		}
-		logVerbose("%s: attempt %d/%d: until %q => %q", r.where(), attempt, attempts, r.step.Until, verdict)
-		if isTruthy(verdict) {
+		logVerbose("%s: attempt %d/%d: until %q => %v", r.where(), attempt, attempts, r.step.Until, held)
+		if held {
 			return out, nil, nil
 		}
 		if attempt < attempts {

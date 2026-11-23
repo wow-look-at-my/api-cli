@@ -177,10 +177,20 @@ func buildFields(n *xnode) (FieldsBlock, error) {
 }
 
 func buildFieldsBody(n *xnode) (*Fields, error) {
-	if err := checkAttrs(n, "over", "footer", "when"); err != nil {
+	if err := checkAttrs(n, "over", "footer", "when", "on-missing"); err != nil {
 		return nil, err
 	}
 	f := &Fields{Over: strings.TrimSpace(n.Attr("over")), Footer: n.Attr("footer")}
+	switch m := strings.TrimSpace(n.Attr("on-missing")); m {
+	case "", "fail":
+	case "empty":
+		if f.Over == "" {
+			return nil, fmt.Errorf(`<fields>: on-missing="empty" needs over=`)
+		}
+		f.MissingEmpty = true
+	default:
+		return nil, fmt.Errorf(`<fields>: on-missing=%q: want "fail" or "empty"`, m)
+	}
 	for _, child := range n.Children() {
 		if child.Name() != "field" {
 			return nil, fmt.Errorf("<fields>: unexpected child element <%s>", child.Name())
