@@ -383,11 +383,11 @@ func mockWhen(when string, data map[string]any) (bool, error) {
 	if when == "" {
 		return true, nil
 	}
-	out, err := renderString(when, data)
+	ok, err := evalPredicate(when, data)
 	if err != nil {
 		return false, fmt.Errorf("render when: %w", err)
 	}
-	return isTruthy(out), nil
+	return ok, nil
 }
 
 // mockRecordsOf expands an over= into a single context per element, the same

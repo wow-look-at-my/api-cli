@@ -109,7 +109,8 @@ func formatContext(parsed any, data map[string]any, isTTY bool, width int) map[s
 
 // renderPredicate renders tmpl against ctx and reports whether the trimmed
 // output is truthy. Empty tmpl defaults to "{{.tty}}". Falsy values: "",
-// "false", "0", "no" (case-insensitive). Caches results across calls within
+// "false", "0", "no" (case-insensitive), "<no value>", and a field read on a
+// value that is not an object (see evalPredicate). Caches results across calls within
 // the same invocation by (tmpl-source, ctx-pointer).
 func renderPredicate(tmpl string, ctx map[string]any, cache map[predicateKey]bool) (bool, error) {
 	if tmpl == "" {
@@ -121,11 +122,10 @@ func renderPredicate(tmpl string, ctx map[string]any, cache map[predicateKey]boo
 			return v, nil
 		}
 	}
-	out, err := renderString(tmpl, ctx)
+	v, err := evalPredicate(tmpl, ctx)
 	if err != nil {
 		return false, err
 	}
-	v := isTruthy(out)
 	if cache != nil {
 		cache[key] = v
 	}
