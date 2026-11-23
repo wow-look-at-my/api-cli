@@ -1,7 +1,5 @@
 module github.com/wow-look-at-my/api-cli
 
-replace github.com/wow-look-at-my/api-dsl => ../api-dsl
-
 go 1.26.0
 
 require (
