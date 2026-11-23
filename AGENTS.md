@@ -18,6 +18,7 @@ It is a *hybrid* tool. HTTP requests are first-class (`<run><request>`, no curl 
 - MCP server: `github.com/modelcontextprotocol/go-sdk`.
 - Timeline sink: the `ascii-timeline` executable on `PATH` (apt or brew package `ascii-timeline`). `fields/timeline.go` pipes one JSON document to its stdin and returns its stdout. It is not a Go module dependency, because the module is private. A missing executable is an error.
 - Screens: `github.com/wow-look-at-my/tml`, the terminal markup language. Its `tml.Program` owns the terminal, the input and the loop. It arrives with `<tml>`. See docs and rules 17 and 18. The download display is a tml component too. Every TUI here goes through tml. A missing feature goes into tml.
+- OS keyring: `github.com/zalando/go-keyring` (MIT), behind the `keyring` template function (`keyring.go`). Pure Go on Linux (D-Bus Secret Service). It runs `/usr/bin/security` on macOS.
 - Test assertions: `github.com/stretchr/testify`.
 - XML validation: `wow-look-at-my/xml-validator` checks well-formedness and **XML 1.1**. Shipped files declare `version="1.1"`. Its `validator` package checks every shipped XML, XSD and TML file, and validates each config against the grammar, in `schema_test.go`.
 - The grammar: `github.com/wow-look-at-my/api-cli-spec` owns `api-cli.xsd` and holds it to a resolved form per document. This repo keeps no copy: `spec.Schema` is the embedded original, which `api-cli docs schema` prints and the tests validate against.
@@ -64,9 +65,11 @@ Do not add a new third-party dependency without a clear cause.
 | `format.go`                     | Execution + presentation dispatch: `execLeaf` picks command-vs-request execution and fields-vs-legacy-format-vs-raw output. |
 | `render.go`                     | `addQueryValue` builds a `<query from=>` value. It also holds the `fields` package bindings: `cliRenderer` (the CLI's template evaluator, injected into `fields.Render`) and the aliases the rest of the CLI calls the aligner by. |
 | `guards.go`                     | Input guards. |
+| `predicate.go`                  | `evalPredicate`: the one render-and-read path for every `when=` and `until=`. A field path that leads nowhere reads as false (rule 38). |
+| `keyring.go`                    | The `keyring` template function. |
 | `mcpstdio.go`                    | MCP over stdio: `stdioTransport` wires stdin and stdout to one ledger of open request ids, so stdin's EOF waits for the answers in flight. See rule 31. |
 | `mcp.go` / `mcp_exec.go`        | MCP server: one tool per leaf. Threads run (`*Cmd`/`*Request`) + format inheritance; `mcpExecLeaf` runs the leaf and applies `<fields>` (like `--format=always`: `.tty` true, width 80) or a legacy format. |
-| `cors.go` / `debug.go` / `docs.go` | CORS middleware for MCP HTTP/SSE; verbose/debug logging; the `docs` subcommand (embeds `README.md` and `api.example.xml`, and prints the grammar from `spec.Schema`). |
+| `cors.go` / `debug.go` / `docs.go` | CORS middleware for MCP HTTP/SSE; verbose/debug logging, with `debugContext` hiding `.env` values and secret-named inputs; the `docs` subcommand (embeds `README.md` and `api.example.xml`, and prints the grammar from `spec.Schema`). |
 | `api.example.xml`              | Reference config (jsonplaceholder); loaded by `TestExampleConfigsLoad`. Exercises the grammar end to end, including a non-default `curl` transport, a request-step chain (`posts by-user`), and a step-to-queue download hand-off (`archive`). |
 | `samples/github/github.xml`     | Read-only GitHub REST API wrapper in XML: first-class requests, jq noise-trimming, fields views. Used by the CI demo; loaded by `TestGithubSampleLoads`. |
 | `*_test.go`                     | Unit + integration tests. `integration_test.go` has `execCmd`/`execCmdFull`; `request_test.go`/`request_integration_test.go` use httptest via `swapHTTPClient`. |
@@ -91,7 +94,7 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 6. **A download travels over net/http or a `<transport>`**, selected exactly as a request's is. The program gets the same `.request` context. Only the return path differs: its stdout streams into the file rather than into a buffered body, because a file need not fit in memory. Both paths then share `partFile` (a `.part` sibling, a byte count, a digest, and a rename).
 7. **Formatting precedence.** `<fields>` wins always, unless the user opts out. A legacy `<format>` comes next, and needs the author `when` AND the user verdict. Raw output is last. `--as=<sink>` forces a fields representation.
 8. **Fields scoping.** A `<field>` body is a record-relative path. `@key` and `@value` are the entry when `over=` walks a map. `expr=` sees the record promoted to the top level, plus the whole context through `$` (`$.var`, `$.data`). A field path and `over=` both resolve through `lookupData`, so a numeric step indexes a list. `over=` reads the body first, then the whole context.
-9. **A projection that finds nothing says so.** An `over=` that points at a missing path or at a scalar fails the run. A `<response jq=>` that points at a missing var fails it too. These paths once rendered one empty record over exit 0, which reads as an empty API rather than as a broken config.
+9. **A projection that finds nothing says so.** An `over=` that points at a missing path or at a scalar fails the run. `<fields on-missing="empty">` is the author's opt-in for an API that omits an empty list: a missing or null path reads as `[]`. A scalar still fails. A `<response jq=>` that points at a missing var fails it too. These paths once rendered one empty record over exit 0, which reads as an empty API rather than as a broken config.
 10. **Templates use `missingkey=zero`.** Do not change this default. The context maps hold `any`. A missing key renders `<no value>`, not "".
 11. **A jq program is a template.** `jq=` renders against the leaf context. A bare dotted name is a context path to a string instead (`jqProgram`, `request.go`).
 12. **Vars resolve twice per invocation** (`resolveContext`, `build.go`). The first pass is flag-blind, and it feeds a templated `<flag default=>`. The second pass runs over the finished flag map. `.var` downstream is that second pass, so it sees this run's flags. The CLI path and the MCP path both go through it.
@@ -121,6 +124,7 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 
 36. **`choices=` is validation on every reader** (`choices.go`). `checkChoices` runs after `resolveContext` on the CLI path and the MCP path. It checks only an input the caller supplied, so an omitted optional input keeps its zero value. The load rejects a default outside the set.
 37. **The browser infers first, and `<tui>` corrects it** (`browsedata.go`, `browselink.go`). Every hint has an inferred default: columns, the record list, the links. A link that `<tui>` declares always shows. An inferred link needs at least one input from the record and no required input left empty.
+38. **A predicate path that leads nowhere is false.** api-dsl's `IsTruthy` reads `<no value>` as false. `evalPredicate` (`predicate.go`) reads text/template's "can't evaluate field" and "nil pointer evaluating" errors as false too. Every other render error fails the run. Route a new predicate through `evalPredicate`.
 
 ## Adding a new field to the config
 

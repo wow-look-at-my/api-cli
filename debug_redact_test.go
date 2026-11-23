@@ -24,5 +24,5 @@ func TestDebug_DataContextHidesSecrets(t *testing.T) {
 	assert.NotContains(t, stderr, "var-value-must-not-print")
 	assert.NotContains(t, stderr, "flag-value-must-not-print")
 	assert.Contains(t, stderr, `"region":"eu"`)
-	assert.Contains(t, stderr, "<redacted>")
+	assert.Contains(t, stderr, "[redacted]")
 }

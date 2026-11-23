@@ -62,7 +62,7 @@ func truncate(s string, maxLen int) string {
 
 // debugContext is a copy of a data context that is safe to print. .env shows
 // the variable names only, because the environment holds unrelated secrets. A
-// value in .arg, .flag or .var whose name looks secret shows as <redacted>.
+// value in .arg, .flag or .var whose name looks secret shows as [redacted].
 func debugContext(data map[string]any) map[string]any {
 	out := make(map[string]any, len(data))
 	for k, v := range data {
@@ -84,7 +84,7 @@ func debugContext(data map[string]any) map[string]any {
 		cp := make(map[string]any, len(m))
 		for name, v := range m {
 			if secretInput.MatchString(name) {
-				v = "<redacted>"
+				v = "[redacted]"
 			}
 			cp[name] = v
 		}

@@ -10,9 +10,9 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/wow-look-at-my/api-cli-spec v0.0.0
 	github.com/wow-look-at-my/api-dsl v0.0.0
+	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/term v0.43.0
 	golang.org/x/text v0.37.0
-	github.com/zalando/go-keyring v0.2.8
 )
 
 require github.com/wow-look-at-my/go-containers v0.0.0
@@ -20,6 +20,11 @@ require github.com/wow-look-at-my/go-containers v0.0.0
 require (
 	github.com/spf13/pflag v1.0.9
 	github.com/wow-look-at-my/tml v0.0.0
+)
+
+require (
+	github.com/danieljoos/wincred v1.2.3 // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
 )
 
 require (
