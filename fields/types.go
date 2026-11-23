@@ -13,6 +13,8 @@ type Fields struct {
 	Over   string  `json:"over,omitempty"`   // context path to the records (default: the whole body)
 	Footer string  `json:"footer,omitempty"` // template for a trailing summary line
 	List   []Field `json:"fields,omitempty"`
+	// MissingEmpty reads an Over path that names nothing, or null, as an empty list.
+	MissingEmpty bool `json:"missingEmpty,omitempty"`
 }
 
 // Field is a column in a Fields declaration. Path reads the record ("@key" and

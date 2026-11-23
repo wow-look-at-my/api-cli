@@ -83,11 +83,16 @@ func jsonTypeName(v any) string {
 //
 // A path that names nothing, or a value that is neither a list nor a map, is an
 // error. The alternative puts an empty record on the screen, which reads as an
-// API that returned nothing rather than a config that points nowhere.
-func overSource(over string, parsed any, ctx map[string]any) (any, error) {
+// API that returned nothing rather than a config that points nowhere. An author
+// who knows the API omits an empty list sets missingEmpty (on-missing="empty"):
+// nothing and null then read as an empty list.
+func overSource(over string, missingEmpty bool, parsed any, ctx map[string]any) (any, error) {
 	v, ok := lookupData(parsed, over)
 	if !ok {
 		v, ok = lookupData(ctx, over)
+	}
+	if missingEmpty && (!ok || v == nil) {
+		return []any{}, nil
 	}
 	if !ok {
 		return nil, fmt.Errorf("fields over=%q resolved to nothing", over)
@@ -104,7 +109,7 @@ func overSource(over string, parsed any, ctx map[string]any) (any, error) {
 func resolveRecords(f *Fields, parsed any, ctx map[string]any) ([]record, string, error) {
 	src := parsed
 	if f.Over != "" {
-		v, err := overSource(f.Over, parsed, ctx)
+		v, err := overSource(f.Over, f.MissingEmpty, parsed, ctx)
 		if err != nil {
 			return nil, "", err
 		}
