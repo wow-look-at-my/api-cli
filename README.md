@@ -384,10 +384,26 @@ Every [sprig v3](https://masterminds.github.io/sprig/) helper is available. On t
 | `filterSuffix` / `filterPrefix` | Filter a `[]string` (used with `.rest`).                            |
 | `stem`        | A path without its directory and without its extension: `stem "src/foo/bar.cpp"` is `bar`. |
 | `collect`     | Gather one dotted path out of every element of a list, flattening the values that are lists: `collect "result.parts" .result.listings`. A path missing from an element is an error. |
+| `keyring`     | Read a secret from the OS keyring: `{{ keyring "service" "account" }}`. See below. |
+
+### Credentials from the OS keyring
+
+`keyring` reads a secret from the macOS Keychain, the Linux Secret Service or the Windows Credential Manager. The secret never enters the process environment. A missing item, or a keyring that is not running, fails the run. Store the item first:
+
+```bash
+security add-generic-password -s my-api -a me -w
+```
+
+```bash
+secret-tool store --label=my-api service my-api username me
+```
+
+Then put it in a request header: `<header name="Authorization">Bearer {{ keyring "my-api" "me" }}</header>`. A first-class request keeps the value inside the process. A shell or argv command puts it on the child's command line, where other users can see it with `ps`.
 
 ## Template semantics
 
 - The parser uses `missingkey=zero`, so a missing map key raises no error. Every context map holds `any`, whose zero value is nil, so a missing key **prints `<no value>`** rather than an empty string. Reach for `{{default "" .x}}`, `{{if .x}}...{{end}}` or `{{required "msg" .x}}` when that matters. A declared `<flag>` is always present, default included, so `<no value>` in practice means the path is wrong.
+- A predicate (`when=`, `until=`) reads `<no value>` as false. A field path through a missing parent, or through a value with no fields, also reads as false. So `when="{{ .data.items }}"` works on a body that lacks the key or is not JSON at all. Any other template error still fails the run.
 - `<entry>` renders first, without `.entry` in scope. Every string leaf renders on its own, and the result becomes `.entry`.
 - `<vars>` resolve to a fixpoint, so one var can reference another. `var.filter` can interpolate `var.noise`.
 - A var can read `.flag`. A `<flag default=>` can read `.var`. Vars therefore resolve twice per invocation. The first pass runs without flags, and a templated flag default renders against that context. The second pass runs over the finished flag map. Everything downstream -- a URL, an entry, a jq program -- sees that second pass, which carries this run's flags.
@@ -442,7 +458,7 @@ An attribute value is always raw, a template or a context path. A Go template ne
 | `--quiet`         | `-q`  | false   | Suppress the `N executions` line. |
 | `--yes`           | `-y`  | false   | Skip `confirm` prompts. |
 | `--verbose`       |       | false   | Show executed commands/requests, exit codes, conditions on stderr. |
-| `--debug`         |       | false   | Full execution detail (implies `--verbose`). |
+| `--debug`         |       | false   | Full execution detail (implies `--verbose`). The data context shows `.env` names only, and hides an arg, flag or var whose name looks secret. |
 | `--no-format`     |       | false   | Disable output formatting (= `--format=raw`). |
 | `--format <mode>` |       | `auto`  | `raw` / `auto` / `always`. |
 | `--as <sink>`     |       |         | Force a `<fields>` representation: `table|list|lines|raw|json|markdown|csv|timeline`. |

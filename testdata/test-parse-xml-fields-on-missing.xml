@@ -1,0 +1,4 @@
+<config name="x"><command name="c"><run>x</run>
+		<fields over="children" on-missing="empty"><field name="name">name</field></fields>
+		<fields over="items" on-missing="fail"><field name="id">id</field></fields>
+	</command></config>

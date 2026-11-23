@@ -60,12 +60,12 @@ func runSteps(steps []Step, data map[string]any, results map[string]any, cmdTmpl
 	defer stepWatch.idle()
 	for _, step := range steps {
 		if step.When != "" {
-			whenOut, err := renderString(step.When, data)
+			ok, err := evalPredicate(step.When, data)
 			if err != nil {
 				return oc, fmt.Errorf("step %q: render when: %w", step.Name, err)
 			}
-			logVerbose("step %q: when %q => %q (truthy=%v)", step.Name, step.When, whenOut, isTruthy(whenOut))
-			if !isTruthy(whenOut) {
+			logVerbose("step %q: when %q => %v", step.Name, step.When, ok)
+			if !ok {
 				logVerbose("step %q: skipped", step.Name)
 				continue
 			}
