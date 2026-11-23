@@ -12,6 +12,7 @@ require (
 	github.com/wow-look-at-my/api-dsl v0.0.0
 	golang.org/x/term v0.43.0
 	golang.org/x/text v0.37.0
+	github.com/zalando/go-keyring v0.2.8
 )
 
 require github.com/wow-look-at-my/go-containers v0.0.0
