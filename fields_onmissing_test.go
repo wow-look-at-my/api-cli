@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"testing"
 
@@ -8,10 +10,7 @@ import (
 )
 
 func TestParseXML_FieldsOnMissing(t *testing.T) {
-	cfg := mustParse(t, `<config name="x"><command name="c"><run>x</run>
-		<fields over="children" on-missing="empty"><field name="name">name</field></fields>
-		<fields over="items" on-missing="fail"><field name="id">id</field></fields>
-	</command></config>`)
+	cfg := mustParse(t, testParseXML_FieldsOnMissingXml)
 	assert.True(t, cfg.Commands[0].Fields[0].Fields.MissingEmpty)
 	assert.False(t, cfg.Commands[0].Fields[1].Fields.MissingEmpty)
 }
@@ -63,15 +62,18 @@ func TestFields_OnMissingEmptyKeepsRecords(t *testing.T) {
 
 func TestFields_OnMissingDefaultFails(t *testing.T) {
 	srv := jsonServer(t, `{"path":"/empty"}`)
-	code, out := execCmdFull(t, onMissingConfig(srv.URL, false), "ls", "--format=always")
+	code, _, errOut := execCmdFull(t, onMissingConfig(srv.URL, false), "ls", "--format=always")
 	assert.NotEqual(t, 0, code)
-	assert.Contains(t, out, "resolved to nothing")
+	assert.Contains(t, errOut, "resolved to nothing")
 }
 
 // A scalar is a shape error, not an absence, so on-missing does not cover it.
 func TestFields_OnMissingScalarStillFails(t *testing.T) {
 	srv := jsonServer(t, `{"children":"none"}`)
-	code, out := execCmdFull(t, onMissingConfig(srv.URL, true), "ls", "--format=always")
+	code, _, errOut := execCmdFull(t, onMissingConfig(srv.URL, true), "ls", "--format=always")
 	assert.NotEqual(t, 0, code)
-	assert.Contains(t, out, "not a list or a map")
+	assert.Contains(t, errOut, "not a list or a map")
 }
+
+//go:embed testdata/test-parse-xml-fields-on-missing.xml
+var testParseXML_FieldsOnMissingXml string
