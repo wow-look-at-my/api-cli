@@ -80,12 +80,6 @@ func jsonTypeName(v any) string {
 
 // overSource resolves a `<fields over=>` path against the response body, then
 // against the whole format context, so both spellings work.
-//
-// A path that names nothing, or a value that is neither a list nor a map, is an
-// error. The alternative puts an empty record on the screen, which reads as an
-// API that returned nothing rather than a config that points nowhere. An author
-// who knows the API omits an empty list sets missingEmpty (on-missing="empty"):
-// nothing and null then read as an empty list.
 func overSource(over string, missingEmpty bool, parsed any, ctx map[string]any) (any, error) {
 	v, ok := lookupData(parsed, over)
 	if !ok {
