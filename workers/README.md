@@ -13,15 +13,6 @@ Cloudflare Workers port of `api-cli`. Parses the **same JSON config** as the Go 
 
 ## URL mapping
 
-CLI invocations map to HTTP requests:
-
-| CLI                                          | HTTP                                         |
-|----------------------------------------------|----------------------------------------------|
-| `api-cli users get 1`                        | `GET /users/get/1`                           |
-| `api-cli users list --limit 3`               | `GET /users/list?limit=3`                    |
-| `api-cli posts create --title hi --body hey` | `GET /posts/create?title=hi&body=hey`        |
-| `api-cli user-posts Bret`                    | `GET /user-posts/Bret`                       |
-
 ### Route structure
 
 ```
@@ -70,12 +61,10 @@ Everything that maps to HTTP requests:
 - **Preconditions** — evaluated before execution, non-empty = error
 - **Output formatting** — `format.when` predicates, view selection, template rendering
 - **Named and inline formats** — both supported with full inheritance
-- **Format input modes** — `json`, `lines`, `raw`
 - **View selection** — by flag, by predicate, by default, by position
 - **Args and flags** — typed (string, int, bool, string-slice, variadic)
 - **Templated flag defaults** — rendered at invocation time
 - **Curl command parsing** — extracts URL, method, headers, body from rendered commands
-- **Template helpers** — `querystring`, `urlpath`, `shellquote`, `tabwriter`, `padRight`, `padLeft`, `displayWidth`, `stripANSI`, `repeatkey`, plus ~60 sprig functions
 
 ## What doesn't work (with warnings)
 
@@ -147,7 +136,6 @@ npm run dev          # local dev server via wrangler
 | `src/config.ts`       | Config types and validation (port of `config.go`)       |
 | `src/template.ts`     | Go `text/template` engine in TypeScript                 |
 | `src/template-funcs.ts`| Sprig subset + custom helpers (port of `render.go`)   |
-| `src/render.ts`       | `renderString`, `renderEntry`, `renderVars`, `mergeVars`|
 | `src/curl-parser.ts`  | Extracts HTTP requests from rendered curl commands      |
 | `src/router.ts`       | URL path → leaf resolution, arg/flag extraction         |
 | `src/format.ts`       | Format system: views, predicates, input parsing         |

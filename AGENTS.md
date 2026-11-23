@@ -151,7 +151,7 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 
 ## Cloudflare Workers port (`workers/`)
 
-A TypeScript reimplementation runs on Cloudflare Workers. It parses the same JSON config and serves each leaf command as an HTTP endpoint through `fetch()` instead of shelling out to `curl`. Commands are parsed as curl invocations and converted to `fetch()` calls, and pipe commands are stripped, so a config uses a format view there. The `cwd`, `stdin`, `confirm`, `fileExists` and `dirExists` helpers are unavailable. The Go `text/template` engine is reimplemented in TypeScript over a sprig subset. See the README's "Cloudflare Workers" section and `workers/README.md` for the architecture, the API mapping and the test commands.
+A TypeScript reimplementation runs on Cloudflare Workers. It parses the same JSON config and serves each leaf command as an HTTP endpoint through `fetch()` instead of shelling out to `curl`. Commands are parsed as curl invocations and converted to `fetch()` calls, and pipe commands are stripped, so a config uses a format view there. The Go `text/template` engine is reimplemented in TypeScript over a sprig subset. See the README's "Cloudflare Workers" section and `workers/README.md` for the architecture, the API mapping and the test commands.
 
 ## Conventions
 

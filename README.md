@@ -533,14 +533,6 @@ npm test        # 242 tests (Workers pool + comparative)
 npm run dev     # local dev server
 ```
 
-CLI invocations map to HTTP requests:
-
-| CLI                              | HTTP                          |
-|----------------------------------|-------------------------------|
-| `api-cli users get 1`            | `GET /users/get/1`            |
-| `api-cli users list --limit 3`   | `GET /users/list?limit=3`     |
-| `api-cli user-posts Bret`        | `GET /user-posts/Bret`        |
-
 See `workers/README.md` for the full API mapping, deployment, and architecture details.
 
 ## Using the formatter as a library
