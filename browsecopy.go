@@ -33,7 +33,7 @@ func (m *browseModel) copyMenu() {
 	}
 	add("the command line: "+f.line, f.line)
 	add("the whole result", strings.Join(f.lines(), "\n"))
-	if f.view == viewData && f.isJSON {
+	if f.view == viewData && f.hasData {
 		if b, err := json.MarshalIndent(f.data, "", "  "); err == nil {
 			values[len(values)-1] = string(b)
 		}

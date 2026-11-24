@@ -226,8 +226,8 @@ func (m *browseModel) finishBatch(msg browseBatchMsg) {
 			failed++
 		}
 		row := map[string]any{"row": it.title, "exit": int64(out.code), "output": firstLine(out.text)}
-		if trimmed := strings.TrimSpace(out.raw); json.Valid([]byte(trimmed)) && trimmed != "" {
-			row["result"] = parseInput(trimmed, "json")
+		if result, ok := out.decoded(); ok {
+			row["result"] = result
 		}
 		rows = append(rows, row)
 	}

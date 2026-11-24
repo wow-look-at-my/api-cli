@@ -113,35 +113,43 @@ func mcpExecAfterSteps(leaf *mcpLeaf, data map[string]any) (string, bool) {
 	}
 
 	var errBuf bytes.Buffer
-	var out string
+	var out runBody
 	var code int
 	if leaf.request.Defined() {
 		out, code = runRequest(leaf.request, data, &errBuf)
 	} else {
-		out, code = captureExecTo(leaf.cmdTmpl, leafCwd, leafStdin, data, &errBuf)
+		out.format = runFormat(leaf.cmdTmpl, nil)
+		out.text, code = captureExecTo(leaf.cmdTmpl, leafCwd, leafStdin, data, &errBuf)
 	}
 	if code != 0 {
-		return mcpCombine(out, errBuf.String()), true
+		return mcpCombine(out.text, errBuf.String()), true
 	}
 
 	// The <fields> auto-formatter takes precedence.
 	if len(leaf.node.Fields) > 0 {
-		parsed := parseInput(out, "json")
+		parsed, derr := out.decode()
+		if derr != nil {
+			return "error: " + derr.Error(), true
+		}
 		ctx := formatContext(parsed, data, true, 80)
-		rendered, matched, ferr := renderFieldsBlocks(leaf.node.Fields, parsed, ctx, "", 0)
+		rendered, matched, ferr := renderFieldsBlocks(orderDerived(leaf.node.Fields, out), parsed, ctx, "", 0)
 		if ferr != nil {
 			return "error: " + ferr.Error(), true
 		}
 		if matched {
 			return rendered, false
 		}
-		return out, false
+		return out.text, false
 	}
 
-	if formatted, ok := mcpFormat(leaf, out, data); ok {
+	formatted, ok, err := mcpFormat(leaf, out, data)
+	if err != nil {
+		return "error: " + err.Error(), true
+	}
+	if ok {
 		return formatted, false
 	}
-	return out, false
+	return out.text, false
 }
 
 func mcpCombine(stdout, stderr string) string {
@@ -320,31 +328,35 @@ func mcpGatherFlags(node Command, arguments map[string]any, preFlagData any) (ma
 
 // mcpFormat applies the format system to raw command output in MCP mode.
 // Behaves like --format=always: .tty is true so the default when predicate
-// passes, but an author's explicit when: "false" is still respected.
-func mcpFormat(leaf *mcpLeaf, raw string, data map[string]any) (string, bool) {
+// passes, but an author's explicit when: "false" is still respected. The
+// error is a body that its declared format rejects, which fails the call.
+func mcpFormat(leaf *mcpLeaf, raw runBody, data map[string]any) (string, bool, error) {
 	effFmt := resolveFormat(leaf.formatRef, leaf.formats)
 	if effFmt == nil {
-		return "", false
+		return "", false, nil
 	}
 
 	cache := map[predicateKey]bool{}
 	preCtx := formatContext(nil, data, true, 80)
 	authorOK, err := renderPredicate(effFmt.When, preCtx, cache)
 	if err != nil || !authorOK {
-		return "", false
+		return "", false, nil
 	}
 
-	parsed := parseInput(raw, effFmt.Input)
+	parsed, err := formatInput(raw, effFmt.Input)
+	if err != nil {
+		return "", false, err
+	}
 	ctx := formatContext(parsed, data, true, 80)
 
 	view, err := selectView(effFmt.Views, ctx, "", cache)
 	if err != nil {
-		return "", false
+		return "", false, nil
 	}
 
 	rendered, err := renderString(view.Template, ctx)
 	if err != nil {
-		return "", false
+		return "", false, nil
 	}
-	return rendered, true
+	return rendered, true, nil
 }

@@ -123,9 +123,35 @@ func buildVars(n *xnode) (map[string]any, error) {
 // buildRun parses a <run> element into either a Cmd (shell or argv form) or a
 // Request. Exactly a single form applies.
 func buildRun(n *xnode) (*Cmd, *Request, error) {
+	if err := checkAttrs(n, "decode"); err != nil {
+		return nil, nil, err
+	}
+	decode := strings.TrimSpace(n.Attr("decode"))
+	if err := checkDecode(decode); err != nil {
+		return nil, nil, err
+	}
+	cmd, req, err := buildRunBody(n)
+	if err != nil {
+		return nil, nil, err
+	}
+	if req != nil {
+		req.Decode = decode
+	} else {
+		cmd.Decode = decode
+	}
+	return cmd, req, nil
+}
+
+// buildProgram parses a <run> whose output nothing decodes: a transport, a
+// join or a stream step. Such a run takes no decode=.
+func buildProgram(n *xnode) (*Cmd, *Request, error) {
 	if err := checkAttrs(n); err != nil {
 		return nil, nil, err
 	}
+	return buildRunBody(n)
+}
+
+func buildRunBody(n *xnode) (*Cmd, *Request, error) {
 	elems := n.Children()
 	for _, e := range elems {
 		if e.Name() == "request" {

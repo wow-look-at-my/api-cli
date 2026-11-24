@@ -59,7 +59,7 @@ func (e *untilExhausted) Error() string { return e.msg }
 //
 // A failed run comes back as a *callFailure. The error return is for a config
 // problem and for an exhausted poll.
-func (r *stepRunner) action() (string, *callFailure, error) {
+func (r *stepRunner) action() (runBody, *callFailure, error) {
 	if r.step.Until == "" {
 		stepWatch.update(r.progress(0, 0, 0, nil))
 		return r.tryOnce(0, 0, nil)
@@ -67,7 +67,7 @@ func (r *stepRunner) action() (string, *callFailure, error) {
 
 	interval, err := pollInterval(r.step)
 	if err != nil {
-		return "", nil, fmt.Errorf("%s: %w", r.where(), err)
+		return runBody{}, nil, fmt.Errorf("%s: %w", r.where(), err)
 	}
 	attempts := r.step.Attempts
 	if attempts <= 0 {
@@ -84,10 +84,12 @@ func (r *stepRunner) action() (string, *callFailure, error) {
 		if err != nil || fail != nil {
 			return out, fail, err
 		}
-		last = parseResult(out)
+		if last, err = out.decode(); err != nil {
+			return runBody{}, nil, fmt.Errorf("%s: %w", r.where(), err)
+		}
 		held, err := evalPredicate(r.step.Until, pollContext(r.data, last))
 		if err != nil {
-			return "", nil, fmt.Errorf("%s: render until: %w", r.where(), err)
+			return runBody{}, nil, fmt.Errorf("%s: render until: %w", r.where(), err)
 		}
 		logVerbose("%s: attempt %d/%d: until %q => %v", r.where(), attempt, attempts, r.step.Until, held)
 		if held {
@@ -97,18 +99,18 @@ func (r *stepRunner) action() (string, *callFailure, error) {
 			pollSleep(interval)
 		}
 	}
-	return "", nil, &untilExhausted{fmt.Sprintf("%s: until %q did not hold in %d attempt(s); last response: %s",
+	return runBody{}, nil, &untilExhausted{fmt.Sprintf("%s: until %q did not hold in %d attempt(s); last response: %s",
 		r.where(), r.step.Until, attempts, jsonCompact(last))}
 }
 
 // tryOnce runs the step, and runs it again after a failure up to retries=
 // times, at the download queue's fixed cadence. A failed try with a retry
 // left is reported, so a slow recovery is visible.
-func (r *stepRunner) tryOnce(attempt, attempts int, last any) (string, *callFailure, error) {
+func (r *stepRunner) tryOnce(attempt, attempts int, last any) (runBody, *callFailure, error) {
 	for try := 0; ; try++ {
 		out, fail, err := r.runOnce()
 		if err != nil {
-			return "", nil, err
+			return runBody{}, nil, err
 		}
 		r.oc.executions++
 		if fail == nil || try >= r.step.Retries {
@@ -122,11 +124,11 @@ func (r *stepRunner) tryOnce(attempt, attempts int, last any) (string, *callFail
 }
 
 // runOnce renders a step's entry and runs it a single time.
-func (r *stepRunner) runOnce() (string, *callFailure, error) {
+func (r *stepRunner) runOnce() (runBody, *callFailure, error) {
 	step, data := r.step, r.data
 	stepEntry, err := renderEntry(step.Entry, data)
 	if err != nil {
-		return "", nil, fmt.Errorf("%s: render entry: %w", r.where(), err)
+		return runBody{}, nil, fmt.Errorf("%s: render entry: %w", r.where(), err)
 	}
 	if stepEntry == nil {
 		stepEntry = map[string]any{}
@@ -146,7 +148,7 @@ func (r *stepRunner) runOnce() (string, *callFailure, error) {
 	}
 	stepCwd, err := renderCwd(stepCwdTmpl, data)
 	if err != nil {
-		return "", nil, fmt.Errorf("%s: render cwd: %w", r.where(), err)
+		return runBody{}, nil, fmt.Errorf("%s: render cwd: %w", r.where(), err)
 	}
 
 	stepStdinTmpl := r.stdinTmpl
@@ -155,11 +157,12 @@ func (r *stepRunner) runOnce() (string, *callFailure, error) {
 	}
 	stepStdin, err := renderStdin(stepStdinTmpl, data)
 	if err != nil {
-		return "", nil, fmt.Errorf("%s: render stdin: %w", r.where(), err)
+		return runBody{}, nil, fmt.Errorf("%s: render stdin: %w", r.where(), err)
 	}
 
 	logVerbose("%s: executing", r.where())
-	out, code := r.capture(r.cmd, stepCwd, stepStdin, data)
+	text, code := r.capture(r.cmd, stepCwd, stepStdin, data)
+	out := runBody{text: text, format: runFormat(r.cmd, nil)}
 	if code != 0 {
 		return out, &callFailure{code: code, msg: fmt.Sprintf("command exited %d", code), quiet: true}, nil
 	}
@@ -203,16 +206,23 @@ func (r *stepRunner) runOver(results map[string]any) (bool, error) {
 		data["item"], data["index"] = element, i
 		r.pos = &stepPos{index: i, total: len(list), label: itemLabel(element)}
 		out, fail, err := r.action()
-		logDebugBlock(fmt.Sprintf("%s: stdout", r.where()), out)
+		logDebugBlock(fmt.Sprintf("%s: stdout", r.where()), out.text)
 
 		var exhausted *untilExhausted
 		if err != nil && !errors.As(err, &exhausted) {
 			return false, err
 		}
 		if err == nil && fail == nil {
-			stepWatch.finished(r.progress(0, 0, 0, nil), "done")
-			collected = append(collected, map[string]any{"item": element, "result": parseResult(out)})
-			continue
+			var decoded any
+			// A body in the wrong format is a failed element, so on-error decides it like any other.
+			if decoded, err = out.decode(); err != nil {
+				fail = failed("%v", err)
+				err = nil
+			} else {
+				stepWatch.finished(r.progress(0, 0, 0, nil), "done")
+				collected = append(collected, map[string]any{"item": element, "result": decoded})
+				continue
+			}
 		}
 
 		if step.OnError != "skip" {
@@ -220,7 +230,7 @@ func (r *stepRunner) runOver(results map[string]any) (bool, error) {
 				return false, err
 			}
 			fail.report(r.errOut, r.where())
-			r.oc.output, r.oc.code = out, fail.code
+			r.oc.output, r.oc.code = out.text, fail.code
 			return false, nil
 		}
 		if err != nil {

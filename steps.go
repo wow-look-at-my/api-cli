@@ -94,7 +94,7 @@ func runSteps(steps []Step, data map[string]any, results map[string]any, cmdTmpl
 		if err != nil {
 			return oc, err
 		}
-		logDebugBlock(fmt.Sprintf("step %q: stdout", step.Name), out)
+		logDebugBlock(fmt.Sprintf("step %q: stdout", step.Name), out.text)
 		if fail == nil {
 			logVerbose("step %q: exit code 0", step.Name)
 		} else {
@@ -102,10 +102,14 @@ func runSteps(steps []Step, data map[string]any, results map[string]any, cmdTmpl
 			if !fail.quiet {
 				fail.report(errOut, "")
 			}
-			oc.output, oc.code = out, fail.code
+			oc.output, oc.code = out.text, fail.code
 			return oc, nil
 		}
-		results[step.Name] = parseResult(out)
+		decoded, err := out.decode()
+		if err != nil {
+			return oc, fmt.Errorf("step %q: %w", step.Name, err)
+		}
+		results[step.Name] = decoded
 	}
 	return oc, nil
 }

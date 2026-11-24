@@ -54,7 +54,7 @@ Every leaf renders its templates against a data context:
 | `.flag`    | Named flags by name, typed per the `<flag>` declarations.                    |
 | `.env`     | Process environment (`{{.env.API_TOKEN}}`).                                  |
 | `.var`     | Merged `<vars>` from the root down to this node. Vars may reference one another. |
-| `.result`  | Captured outputs of `<steps>`, keyed by step name. JSON outputs are structured. |
+| `.result`  | Captured outputs of `<steps>`, keyed by step name. Each output is decoded as `decode=` on its run says. |
 | `.entry`   | The leaf's `<entry>` (path/query/...), with string leaves templated first.   |
 | `.rest`    | Passthrough leftovers (passthrough mode only).                               |
 | `.run`     | This invocation. `.run.tmpdir` is a scratch directory a `<download>` leaf gets, removed when the run ends. |
@@ -99,6 +99,10 @@ Every attribute that holds a template can be a child element of the same name in
 ## Requests
 
 [docs/requests.md](docs/requests.md) holds this section.
+
+## Body formats: `decode=`
+
+A response or a program's output can be JSON, NDJSON, CSV, TSV, YAML, XML, form-encoded pairs, lines or plain text. `decode=` on a `<run>` names the format, and a request with none follows its `Content-Type`. The decoded data is what `jq=`, `<fields>`, a screen and `.result` read. [docs/body-formats.md](docs/body-formats.md) holds this section.
 
 ## Transports
 
@@ -347,6 +351,8 @@ Name: {{.data.name}}
 	...
 </command>
 ```
+
+A format with no `input=` reads the body as [`decode=`](docs/body-formats.md) on the run says. `input=` overrides that.
 
 Formatting applies only when the author `when` predicate AND the user verdict agree. `--view=<name>` forces a view. An inline `<format>`, with `<view>` children and no `ref=`, overrides an inherited one. See [Global flags](#global-flags) for `--format` and `--no-format`.
 

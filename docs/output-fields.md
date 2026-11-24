@@ -18,7 +18,9 @@ Automatic representation, by data shape:
 |------|---------|-------------|
 | single record | `list` | `json` |
 | array of scalars | `lines` | `json` |
-| scalar / non-JSON | `raw` | -- |
+| scalar / text | `raw` | -- |
+
+The data is the body after [`decode=`](body-formats.md) reads it, so rows of CSV and items of an XML feed are records too. A block that declares no fields shows a CSV or TSV body with its columns in header order.
 
 A table column carries spaces of gutter. A column wider than 50 columns carries three, because the eye loses a long run of prose against a two-space gap. The width that decides a column drop counts the same gutter.
 

@@ -1,6 +1,6 @@
 # Requests
 
-Templates build the whole `<request>`, and the Go HTTP client performs it. There is no `curl`. An embedded `jq` engine ([gojq](https://github.com/itchyny/gojq)) shapes a JSON response, so no `jq` binary is necessary. To send requests through your own program instead, see [Transports](#transports).
+Templates build the whole `<request>`, and the Go HTTP client performs it. There is no `curl`. An embedded `jq` engine ([gojq](https://github.com/itchyny/gojq)) shapes the response, so no `jq` binary is necessary. The response can be JSON, CSV, YAML, XML or text: see [Body formats](body-formats.md). To send requests through your own program instead, see [Transports](#transports).
 
 ```xml
 <run>
@@ -22,7 +22,7 @@ Templates build the whole `<request>`, and the Go HTTP client performs it. There
 | `<query><param name="k">v</param></query>` | Explicit params. Empty values are dropped. An enclosing `<if test=>` gates the params it wraps. |
 | `<header name="H">v</header>` | A header (value is a template). An enclosing `<if test=>` gates the headers it wraps. |
 | `<body>` | Request body (template); omit for no body. |
-| `<response jq="program"/>` | Shape the JSON body with a jq program. See below. A `<response/>` with no `jq=` pretty-prints the JSON instead. Leave `<response>` out to return the raw body verbatim (diffs, READMEs, ...). |
+| `<response jq="program"/>` | Shape the decoded body with a jq program. See below. A `<response/>` with no `jq=` pretty-prints a JSON body instead. Leave `<response>` out to return the raw body verbatim (diffs, READMEs, ...). |
 
 `jq=` is a template, like `<url>` and `<body>`. What you write selects one of three forms.
 
@@ -47,7 +47,11 @@ One property keeps the forms apart. A jq program almost always opens, a digit or
 
 The shaped body is what the leaf prints, `--format=raw` included. jq runs before every presentation layer, and never as part of one.
 
-**A `jq=` program needs a JSON body.** A body that is not JSON fails the request, and the error shows the start of that body. The excerpt usually reveals an SSO login page or a proxy error. Without `jq=`, a body that is not JSON passes through unchanged.
+**A `jq=` program reads the decoded body, in any format.** `decode=` on the `<run>` names the format, and a response with none follows its `Content-Type`. See [Body formats](body-formats.md). The result of the program is JSON. So `<run decode="csv">` plus `jq="map(select(.state == &quot;open&quot;))"` filters the rows of a CSV response.
+
+**A body that no format reads fails under `jq=`.** The request names no `decode=`. The `Content-Type` names no format. The body is not JSON. The error shows the start of that body. The excerpt usually reveals an SSO login page or a proxy error.
+
+Without `jq=`, such a body passes through unchanged.
 
 A status of 400 or more prints the body to stderr and exits non-zero, like `curl -f`. The root `<run>` usually holds the shared request. A leaf's own `<run>` overrides it, for example with a `POST` or a raw-body download.
 

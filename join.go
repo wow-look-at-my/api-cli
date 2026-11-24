@@ -52,7 +52,7 @@ func buildJoin(n *xnode) (*Join, error) {
 		if j.Run != nil {
 			return nil, fmt.Errorf("<join>: declares <run> twice")
 		}
-		cmd, req, err := buildRun(child)
+		cmd, req, err := buildProgram(child)
 		if err != nil {
 			return nil, fmt.Errorf("<join>: %w", err)
 		}
