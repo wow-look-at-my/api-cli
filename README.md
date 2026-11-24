@@ -544,6 +544,19 @@ ghr search repos 'language:go stars:>10000' --sort stars
 ghr repo languages golang/go --as=json
 ```
 
+## Cloudflare Workers
+
+A TypeScript port lives in `workers/` and serves the same configs as HTTP endpoints on Cloudflare Workers. Instead of shelling out to `curl`, it parses rendered command templates and executes them via `fetch()`.
+
+```sh
+cd workers
+npm install
+npm test        # 242 tests (Workers pool + comparative)
+npm run dev     # local dev server
+```
+
+See `workers/README.md` for the full API mapping, deployment, and architecture details.
+
 ## Using the formatter as a library
 
 The `<fields>` formatter is importable on its own, at `github.com/wow-look-at-my/api-cli/fields`. A program with decoded JSON gets the same table, list, JSON, Markdown, CSV, or timeline output, without the XML config language.
