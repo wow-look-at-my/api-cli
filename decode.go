@@ -190,7 +190,7 @@ func decodeForm(s string) (any, error) {
 // decodeLines reads one string per line.
 func decodeLines(s string) (any, error) {
 	out := []any{}
-	for _, line := range splitLines(s) {
+	for _, line := range bodyLines(s) {
 		out = append(out, line)
 	}
 	return out, nil
@@ -201,8 +201,8 @@ func decodeText(s string) (any, error) {
 	return strings.TrimRight(s, "\r\n"), nil
 }
 
-// splitLines cuts s into lines. It drops the trailing line breaks and each line's carriage return.
-func splitLines(s string) []string {
+// bodyLines cuts s into lines. It drops the trailing line breaks and each line's carriage return.
+func bodyLines(s string) []string {
 	s = strings.TrimRight(s, "\r\n")
 	if s == "" {
 		return nil

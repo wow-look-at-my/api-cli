@@ -11,7 +11,7 @@ import (
 )
 
 // byteOrderMark opens a UTF-8 file that a spreadsheet exported.
-const byteOrderMark = "﻿"
+const byteOrderMark = "\ufeff"
 
 // decodeCSV reads RFC 4180 text. The first row names the columns.
 func decodeCSV(s string) (any, error) {
@@ -29,7 +29,7 @@ func csvReader(s string) *csv.Reader {
 // decodeTSV reads tab-separated text. The format has no quoting, so a quote is data.
 func decodeTSV(s string) (any, error) {
 	var rows [][]string
-	for i, line := range splitLines(strings.TrimPrefix(s, byteOrderMark)) {
+	for i, line := range bodyLines(strings.TrimPrefix(s, byteOrderMark)) {
 		if line == "" {
 			continue
 		}
@@ -91,7 +91,7 @@ func tableColumns(b runBody) []string {
 		}
 		header = row
 	case "tsv":
-		for _, line := range splitLines(strings.TrimPrefix(b.text, byteOrderMark)) {
+		for _, line := range bodyLines(strings.TrimPrefix(b.text, byteOrderMark)) {
 			if line != "" {
 				header = strings.Split(line, "\t")
 				break
