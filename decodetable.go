@@ -11,7 +11,7 @@ import (
 )
 
 // byteOrderMark opens a UTF-8 file that a spreadsheet exported.
-const byteOrderMark = "\xef\xbb\xbf"
+const byteOrderMark = "\ufeff"
 
 // decodeCSV reads RFC 4180 text. The first row names the columns.
 func decodeCSV(s string) (any, error) {
