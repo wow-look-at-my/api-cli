@@ -11,7 +11,7 @@ One example is the rule that a leaf needs a run, its own or an ancestor's. api-c
 | `<config name="..." [schema="..."]>` | Root. `name` is required. |
 | `<description>` | Shown as the CLI header in `--help`. |
 | `<vars><var name="...">...</var></vars>` | Shared variables (inherited, fixpoint-resolved). |
-| `<run>` | Default executable (request / argv / shell). Inherited. |
+| `<run [decode=]>` | Default executable (request / argv / shell). Inherited. `decode=` names the format of its output. See [Body formats](#body-formats-decode). |
 | `<cwd>` / `<stdin>` | Default working directory / stdin templates. Inherited. |
 | `<preconditions><precondition>` | Guards every run in the tree. They accumulate rather than override. See [One guard for a whole subtree](#one-guard-for-a-whole-subtree). |
 | `<formats>` | Named, reusable legacy formats. |
