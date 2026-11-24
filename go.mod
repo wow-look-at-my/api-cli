@@ -47,7 +47,7 @@ require (
 	github.com/wow-look-at-my/xml-validator/reader v0.0.0 // indirect
 	github.com/wow-look-at-my/xml-validator/validator v0.0.0
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
