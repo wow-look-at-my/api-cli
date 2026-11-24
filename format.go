@@ -142,6 +142,15 @@ func ctxIdentity(m map[string]any) uintptr {
 	return reflect.ValueOf(m).Pointer()
 }
 
+// formatInput reads the body for a legacy <format>. With no input= the body
+// reads as the run's own format says.
+func formatInput(b runBody, mode string) (any, error) {
+	if mode == "" {
+		return b.decode()
+	}
+	return parseInput(b.text, mode), nil
+}
+
 // parseInput interprets the captured child stdout per the format's Input
 // setting.
 func parseInput(s, mode string) any {
@@ -284,13 +293,14 @@ func execLeaf(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, stdin strin
 
 // captureRun captures a leaf's output. For a request it performs the HTTP call
 // (the body is always buffered); for a command it uses the capped capture path.
-func captureRun(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any) (out string, overflowed bool, code int) {
+func captureRun(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[string]any) (out runBody, overflowed bool, code int) {
 	if request.Defined() {
 		o, c := runRequest(request, data, execStderr)
 		tapBody(o)
 		return o, false, c
 	}
-	out, overflowed, code = captureExecCapped(cmdTmpl, cwd, stdin, data, defaultFormatCap)
+	out.format = runFormat(cmdTmpl, nil)
+	out.text, overflowed, code = captureExecCapped(cmdTmpl, cwd, stdin, data, defaultFormatCap)
 	if !overflowed {
 		tapBody(out)
 	}
@@ -298,21 +308,22 @@ func captureRun(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map[stri
 }
 
 // bodyTap receives a leaf's body before any formatting. The tui subcommand sets it, to show the data and the formatted text side by side.
-var bodyTap func(string)
+var bodyTap func(runBody)
 
-func tapBody(s string) {
+func tapBody(b runBody) {
 	if bodyTap != nil {
-		bodyTap(s)
+		bodyTap(b)
 	}
 }
 
 // streamRequest performs a request and writes its output straight to stdout.
 func streamRequest(request *Request, data map[string]any) int {
-	out, code := runRequest(request, data, execStderr)
-	tapBody(out)
+	body, code := runRequest(request, data, execStderr)
+	tapBody(body)
 	if code != 0 {
 		return code
 	}
+	out := body.text
 	fmt.Fprint(execStdout, out)
 	if isTTY, _ := stdoutTTY(); isTTY && out != "" && !strings.HasSuffix(out, "\n") {
 		fmt.Fprintln(execStdout)
@@ -332,8 +343,8 @@ func runFieldsFormatted(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, s
 		return code
 	}
 	if code != 0 {
-		if out != "" {
-			fmt.Fprint(execStderr, out)
+		if out.text != "" {
+			fmt.Fprint(execStderr, out.text)
 		}
 		return code
 	}
@@ -345,21 +356,25 @@ func runFieldsFormatted(c *cobra.Command, cmdTmpl *Cmd, request *Request, cwd, s
 			width = 80
 		}
 	}
-	parsed := parseInput(out, "json")
+	parsed, err := out.decode()
+	if err != nil {
+		fmt.Fprintln(execStderr, "error:", err)
+		return 1
+	}
 	ctx := formatContext(parsed, data, isTTY, width)
 	sink, _ := c.Root().PersistentFlags().GetString("as")
 	dropWidth := 0
 	if isTTY {
 		dropWidth = width
 	}
-	rendered, matched, err := renderFieldsBlocks(blocks, parsed, ctx, strings.TrimSpace(sink), dropWidth)
+	rendered, matched, err := renderFieldsBlocks(orderDerived(blocks, out), parsed, ctx, strings.TrimSpace(sink), dropWidth)
 	if err != nil {
 		fmt.Fprintln(execStderr, "error:", err)
 		return 1
 	}
 	if !matched {
 		logVerbose("format: no <fields> block matched, printing the raw body")
-		fmt.Fprint(execStdout, out)
+		fmt.Fprint(execStdout, out.text)
 		return 0
 	}
 	fmt.Fprint(execStdout, rendered)
@@ -377,13 +392,17 @@ func runTMLFormatted(cmdTmpl *Cmd, request *Request, cwd, stdin string, data map
 		return code
 	}
 	if code != 0 {
-		if out != "" {
-			fmt.Fprint(execStderr, out)
+		if out.text != "" {
+			fmt.Fprint(execStderr, out.text)
 		}
 		return code
 	}
 
-	parsed := parseInput(out, "json")
+	parsed, err := out.decode()
+	if err != nil {
+		fmt.Fprintln(execStderr, "error:", err)
+		return 1
+	}
 	ctx := formatContext(parsed, data, true, width)
 	if tmlTap != nil {
 		tmlTap(parsed, ctx)
@@ -451,17 +470,21 @@ func runFormatted(
 	verdict userVerdict,
 ) int {
 	out, overflowed, code := captureRun(cmdTmpl, request, cwd, stdin, data)
-	logDebug("format: captured %d bytes, overflowed=%v, code=%d", len(out), overflowed, code)
+	logDebug("format: captured %d bytes, overflowed=%v, code=%d", len(out.text), overflowed, code)
 	if overflowed {
 		logVerbose("format: output overflowed cap, streamed raw")
 		return code
 	}
 	if code != 0 {
-		fmt.Fprint(execStderr, out)
+		fmt.Fprint(execStderr, out.text)
 		return code
 	}
 
-	parsed := parseInput(out, f.Input)
+	parsed, err := formatInput(out, f.Input)
+	if err != nil {
+		fmt.Fprintln(execStderr, "error:", err)
+		return 1
+	}
 	logDebug("format: input mode=%q parsed type=%T", f.Input, parsed)
 	isTTY, width := stdoutTTY()
 	if verdict == userAlways {

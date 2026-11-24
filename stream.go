@@ -107,7 +107,7 @@ func buildStream(n *xnode) (*Stream, error) {
 	for _, child := range n.Children() {
 		switch child.Name() {
 		case "run":
-			cmd, req, err := buildRun(child)
+			cmd, req, err := buildProgram(child)
 			if err != nil {
 				return nil, err
 			}

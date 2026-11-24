@@ -71,7 +71,7 @@ func TestBrowseDataViewOpensAtTheRecords(t *testing.T) {
 
 	f := h.m.top()
 	require.NotNil(t, f)
-	assert.True(t, f.isJSON)
+	assert.True(t, f.hasData)
 	assert.Equal(t, viewData, f.view)
 	require.Len(t, f.levels, 2, "the envelope is one step back, and the records show")
 	l := f.level()

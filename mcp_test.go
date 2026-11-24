@@ -545,7 +545,7 @@ func TestCollectMCPLeaves_ChildOverridesFormat(t *testing.T) {
 
 func TestMcpFormat_NoFormat(t *testing.T) {
 	leaf := &mcpLeaf{}
-	_, ok := mcpFormat(leaf, "raw output", nil)
+	_, ok, _ := mcpFormat(leaf, runBody{text: "raw output"}, nil)
 	assert.False(t, ok)
 }
 
@@ -557,7 +557,7 @@ func TestMcpFormat_InlineFormat(t *testing.T) {
 		}},
 	}
 	data := map[string]any{"arg": map[string]any{}}
-	out, ok := mcpFormat(leaf, `{"id":42}`, data)
+	out, ok, _ := mcpFormat(leaf, runBody{text: `{"id":42}`}, data)
 	assert.True(t, ok)
 	assert.Equal(t, "ID=42", out)
 }
@@ -573,7 +573,7 @@ func TestMcpFormat_NamedFormat(t *testing.T) {
 		formatRef: &FormatRef{Name: "item"},
 		formats:   formats,
 	}
-	out, ok := mcpFormat(leaf, `{"name":"alice"}`, map[string]any{})
+	out, ok, _ := mcpFormat(leaf, runBody{text: `{"name":"alice"}`}, map[string]any{})
 	assert.True(t, ok)
 	assert.Equal(t, "name=alice", out)
 }
@@ -585,7 +585,7 @@ func TestMcpFormat_LinesInput(t *testing.T) {
 			Views: []View{{Name: "v", Template: "{{len .data}} lines"}},
 		}},
 	}
-	out, ok := mcpFormat(leaf, "a\nb\nc\n", map[string]any{})
+	out, ok, _ := mcpFormat(leaf, runBody{text: "a\nb\nc\n"}, map[string]any{})
 	assert.True(t, ok)
 	assert.Equal(t, "3 lines", out)
 }
@@ -600,11 +600,11 @@ func TestMcpFormat_ViewSelection(t *testing.T) {
 			},
 		}},
 	}
-	out, ok := mcpFormat(leaf, `[1,2]`, map[string]any{})
+	out, ok, _ := mcpFormat(leaf, runBody{text: `[1,2]`}, map[string]any{})
 	assert.True(t, ok)
 	assert.Equal(t, "LIST", out)
 
-	out, ok = mcpFormat(leaf, `{"a":1}`, map[string]any{})
+	out, ok, _ = mcpFormat(leaf, runBody{text: `{"a":1}`}, map[string]any{})
 	assert.True(t, ok)
 	assert.Equal(t, "DETAIL", out)
 }
@@ -616,7 +616,7 @@ func TestMcpFormat_TTYIsTrue(t *testing.T) {
 			Views: []View{{Name: "v", Template: "tty={{.tty}}"}},
 		}},
 	}
-	out, ok := mcpFormat(leaf, "x", map[string]any{})
+	out, ok, _ := mcpFormat(leaf, runBody{text: "x"}, map[string]any{})
 	assert.True(t, ok)
 	assert.Equal(t, "tty=true", out)
 }
@@ -629,7 +629,7 @@ func TestMcpFormat_RespectsAuthorWhenFalse(t *testing.T) {
 			Views: []View{{Name: "v", Template: "formatted"}},
 		}},
 	}
-	_, ok := mcpFormat(leaf, "raw", map[string]any{})
+	_, ok, _ := mcpFormat(leaf, runBody{text: "raw"}, map[string]any{})
 	assert.False(t, ok)
 }
 

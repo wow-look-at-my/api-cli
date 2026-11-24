@@ -105,7 +105,7 @@ func completeSuggest(cfg *Config, name string, s *Suggest, typed map[string]stri
 		cobra.CompDebugln("suggest: "+s.From+" failed", false)
 		return nil
 	}
-	values, labels := suggestions(out.raw, src, &browseField{arg: &Arg{Name: name, Suggest: s}})
+	values, labels := suggestions(out, src, &browseField{arg: &Arg{Name: name, Suggest: s}})
 	var comps []cobra.Completion
 	for i, v := range values {
 		if !strings.HasPrefix(v, toComplete) {

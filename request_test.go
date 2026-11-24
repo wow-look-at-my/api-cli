@@ -62,9 +62,9 @@ func TestRunRequest_GETQueryHeadersAndJQ(t *testing.T) {
 	assert.NotContains(t, gotQuery, "empty") // empty value dropped
 	assert.Equal(t, "Bearer tok", gotAuth)
 	assert.Equal(t, "test-agent", gotUA)
-	assert.Contains(t, out, `"login": "octo"`)
-	assert.NotContains(t, out, "followers_url")
-	assert.Contains(t, out, `"followers": 10`)
+	assert.Contains(t, out.text, `"login": "octo"`)
+	assert.NotContains(t, out.text, "followers_url")
+	assert.Contains(t, out.text, `"followers": 10`)
 }
 
 func TestRunRequest_HeaderWhenFalsySkips(t *testing.T) {
@@ -95,7 +95,7 @@ func TestRunRequest_RawBodyNoResponse(t *testing.T) {
 
 	out, code := runRequest(&Request{Method: "GET", URL: srv.URL + "/raw"}, map[string]any{}, io.Discard)
 	require.Equal(t, 0, code)
-	assert.Equal(t, "plain text body", out)
+	assert.Equal(t, "plain text body", out.text)
 }
 
 func TestRunRequest_QueryFromMap(t *testing.T) {
@@ -140,7 +140,7 @@ func TestRunRequest_POSTBody(t *testing.T) {
 	assert.Equal(t, "POST", gotMethod)
 	assert.Equal(t, "application/json", gotCT)
 	assert.JSONEq(t, `{"name":"ada"}`, gotBody)
-	assert.Contains(t, out, `{"ok":true}`) // no <response>, so the raw body is returned
+	assert.Contains(t, out.text, `{"ok":true}`) // no <response>, so the raw body is returned
 }
 
 func TestRunRequest_HTTPErrorStatus(t *testing.T) {
@@ -154,7 +154,7 @@ func TestRunRequest_HTTPErrorStatus(t *testing.T) {
 	var errBuf bytes.Buffer
 	out, code := runRequest(&Request{Method: "GET", URL: srv.URL + "/missing"}, map[string]any{}, &errBuf)
 	assert.NotEqual(t, 0, code)
-	assert.Empty(t, out)
+	assert.Empty(t, out.text)
 	assert.Contains(t, errBuf.String(), "HTTP 404")
 	assert.Contains(t, errBuf.String(), "not found")
 }
@@ -163,7 +163,7 @@ func TestRunRequest_BadURLTemplate(t *testing.T) {
 	var errBuf bytes.Buffer
 	out, code := runRequest(&Request{Method: "GET", URL: "{{ .broken"}, map[string]any{}, &errBuf)
 	assert.Equal(t, 1, code)
-	assert.Empty(t, out)
+	assert.Empty(t, out.text)
 	assert.Contains(t, errBuf.String(), "url")
 }
 
@@ -179,23 +179,23 @@ func TestRunRequest_TransportError(t *testing.T) {
 }
 
 func TestApplyJQ_Identity(t *testing.T) {
-	out, err := applyJQ("", []byte(`{"b":2,"a":1}`), map[string]any{})
+	out, err := applyJQ("", runBody{text: `{"b":2,"a":1}`}, map[string]any{})
 	require.NoError(t, err)
-	assert.Contains(t, out, `"a": 1`)
-	assert.Contains(t, out, `"b": 2`)
+	assert.Contains(t, out.text, `"a": 1`)
+	assert.Contains(t, out.text, `"b": 2`)
 }
 
 func TestApplyJQ_NonJSONPassesThroughWithoutAProgram(t *testing.T) {
-	out, err := applyJQ("", []byte("not json at all"), map[string]any{})
+	out, err := applyJQ("", runBody{text: "not json at all"}, map[string]any{})
 	require.NoError(t, err)
-	assert.Equal(t, "not json at all", out)
+	assert.Equal(t, "not json at all", out.text)
 }
 
 // A config that names a jq program expects JSON. A login page must not reach
 // until= and the templates as if it were an answer.
 func TestApplyJQ_NonJSONFailsUnderAProgram(t *testing.T) {
 	page := "<!DOCTYPE html><html><head><title>Sign in</title></head>" + strings.Repeat("x", 400)
-	_, err := applyJQ("var.f", []byte(page), map[string]any{"var": map[string]any{"f": "."}})
+	_, err := applyJQ("var.f", runBody{text: page}, map[string]any{"var": map[string]any{"f": "."}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "response is not JSON")
 	assert.Contains(t, err.Error(), "<title>Sign in</title>")
@@ -204,28 +204,28 @@ func TestApplyJQ_NonJSONFailsUnderAProgram(t *testing.T) {
 
 func TestApplyJQ_MultipleOutputs(t *testing.T) {
 	data := map[string]any{"var": map[string]any{"f": ".[]"}}
-	out, err := applyJQ("var.f", []byte(`[1,2,3]`), data)
+	out, err := applyJQ("var.f", runBody{text: `[1,2,3]`}, data)
 	require.NoError(t, err)
-	assert.Equal(t, "1\n2\n3", out)
+	assert.Equal(t, "1\n2\n3", out.text)
 }
 
 func TestApplyJQ_EmptyResult(t *testing.T) {
 	data := map[string]any{"var": map[string]any{"f": ".[] | select(. > 10)"}}
-	out, err := applyJQ("var.f", []byte(`[1,2,3]`), data)
+	out, err := applyJQ("var.f", runBody{text: `[1,2,3]`}, data)
 	require.NoError(t, err)
-	assert.Empty(t, out)
+	assert.Empty(t, out.text)
 }
 
 func TestApplyJQ_ParseError(t *testing.T) {
 	data := map[string]any{"var": map[string]any{"f": "this is ( not jq"}}
-	_, err := applyJQ("var.f", []byte(`{}`), data)
+	_, err := applyJQ("var.f", runBody{text: `{}`}, data)
 	require.Error(t, err)
 }
 
 func TestApplyJQ_RuntimeError(t *testing.T) {
 	// .a on an array is a runtime error in jq.
 	data := map[string]any{"var": map[string]any{"f": ".a"}}
-	_, err := applyJQ("var.f", []byte(`[1,2]`), data)
+	_, err := applyJQ("var.f", runBody{text: `[1,2]`}, data)
 	require.Error(t, err)
 }
 
@@ -241,6 +241,6 @@ func TestRunRequest_JQErrorGoesToErrOut(t *testing.T) {
 	var errBuf bytes.Buffer
 	out, code := runRequest(req, data, &errBuf)
 	assert.NotEqual(t, 0, code)
-	assert.Empty(t, out)
+	assert.Empty(t, out.text)
 	assert.NotEmpty(t, errBuf.String()) // captured in errOut, not the global stderr
 }

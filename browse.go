@@ -37,7 +37,9 @@ func loadBrowseView() (*tml.View, error) {
 type browseOutput struct {
 	text string
 	raw  string
-	code int
+	// format is the format of raw, as the run declared or detected it.
+	format string
+	code   int
 }
 
 // browseRunMsg carries the result of one run back to the model.
@@ -312,12 +314,12 @@ func browseExecLive(ctx context.Context, live io.Writer, cfg *Config, argv []str
 	if live != nil {
 		buf = io.MultiWriter(&captured, live)
 	}
-	var body *string
+	var body *runBody
 	prevIn, prevTTY, prevCode, prevTap, prevCtx := execStdin, ttyOverride, exitCode, bodyTap, runCtx
 	execStdin = strings.NewReader("")
 	ttyOverride = &termSize{width: width, height: height}
 	exitCode = 0
-	bodyTap = func(s string) { body = &s }
+	bodyTap = func(b runBody) { body = &b }
 	runCtx = ctx
 	defer func() {
 		execStdin, ttyOverride, exitCode, bodyTap, runCtx = prevIn, prevTTY, prevCode, prevTap, prevCtx
@@ -334,7 +336,7 @@ func browseExecLive(ctx context.Context, live io.Writer, cfg *Config, argv []str
 	}
 	out := browseOutput{text: captured.String(), raw: captured.String(), code: code}
 	if body != nil {
-		out.raw = *body
+		out.raw, out.format = body.text, body.format
 	}
 	return out
 }
