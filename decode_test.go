@@ -33,6 +33,8 @@ func TestDecodeBody_EachFormat(t *testing.T) {
 		{"yaml key that is not a string", "yaml", "1: one\n", map[string]any{"1": "one"}},
 		{"yaml stream is a list", "yaml", "a: 1\n---\na: 2\n", []any{map[string]any{"a": int64(1)}, map[string]any{"a": int64(2)}}},
 		{"yaml empty body is null", "yaml", "", nil},
+		{"xml empty body is null", "xml", "\n", nil},
+		{"form empty body is an empty object", "form", "", map[string]any{}},
 		{"form", "form", "access_token=abc&scope=a%20b&id=1&id=2\n", map[string]any{"access_token": "abc", "scope": "a b", "id": []any{"1", "2"}}},
 		{"lines", "lines", "a\r\nb\n\n", []any{"a", "b"}},
 		{"lines empty body is an empty list", "lines", "\n", []any{}},

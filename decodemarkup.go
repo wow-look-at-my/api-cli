@@ -84,6 +84,9 @@ func decodeXML(s string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(s) == "" {
+		return nil, nil
+	}
 	dec := xml.NewDecoder(strings.NewReader(s))
 	for {
 		tok, err := dec.Token()

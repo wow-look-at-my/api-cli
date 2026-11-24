@@ -17,7 +17,7 @@ A run produces bytes. `decode=` on the `<run>` names the format of those bytes, 
 </command>
 ```
 
-The run can be a request, an argv list or shell text. The data that `decode=` produces is what `<response jq=>` reads.
+The run can be a request, an argv list or shell text. The data that `decode=` produces is what `<response jq=>` reads. `<fields>` and `<tml>` draw that data. A step stores it at `.result.NAME`.
 
 | `decode=` | The data |
 |-----------|----------|

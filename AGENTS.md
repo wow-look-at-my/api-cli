@@ -14,6 +14,7 @@ It is a *hybrid* tool. HTTP requests are first-class (`<run><request>`, no curl 
 - Config parsing: **XML** through api-dsl's `ParseDOM`, on top of the stdlib `encoding/xml` tokenizer. No third-party config parser. (The Go decoder reads XML 1.0 only, so api-dsl removes the leading `<?xml ... ?>` declaration before it decodes.)
 - Templating: Go stdlib `text/template` plus `github.com/Masterminds/sprig/v3`. Both arrive through api-dsl's `Renderer`.
 - jq (response shaping): `github.com/itchyny/gojq`, pure Go and embedded. No jq binary is necessary.
+- YAML bodies: `go.yaml.in/yaml/v3`, behind `decode="yaml"`. CSV, XML and form bodies decode through the stdlib.
 - TTY and terminal width: `golang.org/x/term`. East Asian Wide width: `golang.org/x/text/width`.
 - MCP server: `github.com/modelcontextprotocol/go-sdk`.
 - Timeline sink: the `ascii-timeline` executable on `PATH` (apt or brew package `ascii-timeline`). `fields/timeline.go` pipes one JSON document to its stdin and returns its stdout. It is not a Go module dependency, because the module is private. A missing executable is an error.
@@ -37,6 +38,7 @@ Do not add a new third-party dependency without a clear cause.
 | `runnable.go`                   | A parent that also runs: `Command.executes`, `validateRunnable` (a pattern may not match a subcommand name), and the cobra arg validators (`matchArgPatterns`, `chainArgs`). |
 | `build.go`                      | Builds the `cobra.Command` tree. Threads inheritance for run (`*Cmd`/`*Request`), `cwd`/`stdin`/`confirm`/`format`. `runLeaf`, `resolveContext` (the leaf's data context: two var passes around the flag gather), `renderVars` (fixpoint — vars may reference other vars). |
 | `flags.go`                      | Declared `<arg>`/`<flag>` on both sides of a run: `validateArgsAndFlags` at load, `registerFlag`/`registerConflicts` on the cobra command, `gatherArgs`/`gatherFlags`/`passthroughParse` back out into `.arg`/`.flag`. |
+| `decode.go`                     | The `<run decode=>` runtime. `runBody` is the text of a run plus the format that reads it, and `decodeBody` turns it into data. `responseFormat` maps a Content-Type under auto. `decodetable.go` reads csv and tsv, and `decodemarkup.go` reads yaml and xml. See docs/body-formats.md and rule 39. |
 | `exec.go`                       | Shell/argv execution. `resolveArgv` renders a `*Cmd` to its final argv, for the caller that cannot execute where it renders (a download's transport). |
 | `request.go`                    | First-class HTTP: `prepareRequest` renders URL/query/headers/body into a `preparedRequest`; `runRequest` sends it via `doHTTP` (net/http) or a transport, then `applyJQ` (embedded gojq) for `<response jq=>`, whose program `jqProgram` resolves (template / context path / literal). `httpClient` is a package var (tests swap it for httptest). |
 | `transport.go`                  | `<transports>`: parsing (`buildTransports`), the package-level registry (`installTransports`, published by `newRoot`/`buildMCPServer`), selection (`resolveTransportNamed`: `transport=` > registry default > built-in; no runtime override by design), `runViaTransport` (requests), and `prepareDownloadTransport` (downloads: renders the program's argv at plan time). `preparedRequest.context` exposes `.request` to the program's argv. |
@@ -125,6 +127,7 @@ The root is `<config name="..."><command>...</command></config>`. Element conten
 36. **`choices=` is validation on every reader** (`choices.go`). `checkChoices` runs after `resolveContext` on the CLI path and the MCP path. It checks only an input the caller supplied, so an omitted optional input keeps its zero value. The load rejects a default outside the set.
 37. **The browser infers first, and `<tui>` corrects it** (`browsedata.go`, `browselink.go`). Every hint has an inferred default: columns, the record list, the links. A link that `<tui>` declares always shows. An inferred link needs at least one input from the record and no required input left empty.
 38. **A predicate path that leads nowhere is false.** api-dsl's `IsTruthy` reads `<no value>` as false. `evalPredicate` (`predicate.go`) reads text/template's "can't evaluate field" and "nil pointer evaluating" errors as false too. Every other render error fails the run. Route a new predicate through `evalPredicate`.
+39. **A body travels with its format.** Every producer hands back a `runBody`, and every reader calls its `decode()`. A named format fails on a body that is not in it. The sniff never fails. `decode=` rides on `*Cmd` and `*Request`, so it inherits with the run and needs no threading of its own. A new reader of a body goes through `runBody.decode`, and never `parseResult`.
 
 ## Adding a new field to the config
 
