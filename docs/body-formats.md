@@ -36,6 +36,17 @@ The run can be a request, an argv list or shell text. The data that `decode=` pr
 
 With no `decode=`, a request follows the `Content-Type` of its response.
 
+| `Content-Type` | Read as |
+|----------------|---------|
+| `text/csv` | `csv` |
+| `text/tab-separated-values` | `tsv` |
+| `application/x-ndjson`, `application/jsonl` | `ndjson` |
+| `application/yaml`, `text/yaml` | `yaml` |
+| a type that ends in `+yaml` | `yaml` |
+| `application/xml`, `text/xml` | `xml` |
+| a type that ends in `+xml` | `xml` |
+| `application/x-www-form-urlencoded` | `form` |
+
 Every other body is JSON when it parses, and the trimmed text when it does not. That covers `application/json`, `text/plain`, a response with no type, and the output of a command. A `<transport>` program hands back bytes with no type, so its body takes the same path.
 
 The default is a guess. A guess never fails a run. A body that does not read as its `Content-Type` says is text, and `--verbose` reports it.
