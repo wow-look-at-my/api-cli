@@ -158,7 +158,7 @@ func TestPoll_RetriesAFailedAttempt(t *testing.T) {
 	out, fail, err := r.action()
 	require.NoError(t, err)
 	require.Nil(t, fail)
-	assert.JSONEq(t, `{"status":"done"}`, out)
+	assert.JSONEq(t, `{"status":"done"}`, out.text)
 	assert.Equal(t, 3, oc.executions)
 	assert.Equal(t, []time.Duration{retryDelay, retryDelay}, waits(), "retries wait the download queue's fixed delay")
 	assert.Contains(t, errOut.String(), `step "job": retry 1/2`)
