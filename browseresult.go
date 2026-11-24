@@ -43,9 +43,9 @@ type resultFrame struct {
 	format  string
 	data    any
 	hasData bool
-	levels []*dataLevel
-	view   int
-	offset int
+	levels  []*dataLevel
+	view    int
+	offset  int
 	// batch marks the summary of a batch. Its top level opens a row's own result rather than follow a link.
 	batch bool
 }

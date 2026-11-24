@@ -384,7 +384,7 @@ func jqInput(body runBody, hasProgram bool) (input any, isJSON bool, err error) 
 	case "":
 		if err := json.Unmarshal(raw, &input); err != nil {
 			if hasProgram {
-				return nil, false, fmt.Errorf("response is not JSON, and jq= needs data to read. Name the format on the <run> with decode= (%s); the body starts with %s", decodeNames, bodyExcerpt(raw))
+				return nil, false, fmt.Errorf("response is not JSON, and jq= reads data. Name the format with decode= on the <run>; the body starts with %s", bodyExcerpt(raw))
 			}
 			return nil, false, nil
 		}

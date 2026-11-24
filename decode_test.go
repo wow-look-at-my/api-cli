@@ -81,7 +81,7 @@ func TestDecodeBody_NamedFormatRejectsAnotherBody(t *testing.T) {
 	cases := []struct{ name, format, body, want string }{
 		{"json", "json", "<!DOCTYPE html><title>Sign in</title>", "the output is not json"},
 		{"json with a second value", "json", "{}\n{}", `decode="ndjson"`},
-		{"ndjson", "ndjson", "{\"a\":1}\n{oops", "value 2, near line 2"},
+		{"ndjson", "ndjson", "{\"a\":1}\n{oops", "the output is not ndjson: value 2:"},
 		{"csv with a short row", "csv", "a,b\n1\n", "wrong number of fields"},
 		{"tsv with a long row", "tsv", "a\tb\n1\t2\t3\n", "line 2 has 3 fields, and the first row has 2"},
 		{"yaml", "yaml", "a: [1, 2", "the output is not yaml"},

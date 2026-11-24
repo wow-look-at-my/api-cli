@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -169,11 +170,19 @@ func TestDecodeIntegration_ContentTypeNamesTheFormat(t *testing.T) {
 
 	code, out, errOut = execCmdFull(t, cfg, "--as=json", "typed", "untyped-csv")
 	require.Equal(t, 0, code, "stderr: %s", errOut)
-	assert.Equal(t, strings.TrimSpace(decodeRowsCSV), strings.TrimSpace(out), "text/plain names no format, so the body stays text")
+	assert.Equal(t, jsonString(t, strings.TrimSpace(decodeRowsCSV)), strings.TrimSpace(out), "text/plain names no format, so the body stays one string")
 
 	code, out, errOut = execCmdFull(t, cfg, "--as=json", "typed", "mislabeled")
 	require.Equal(t, 0, code, "stderr: %s", errOut)
-	assert.Equal(t, "name,id\nada", strings.TrimSpace(out), "a guess that does not hold falls back to text, and does not fail")
+	assert.Equal(t, jsonString(t, "name,id\nada"), strings.TrimSpace(out), "a guess that does not hold falls back to text, and does not fail")
+}
+
+// jsonString is s as the json sink prints a string.
+func jsonString(t *testing.T, s string) string {
+	t.Helper()
+	b, err := json.Marshal(s)
+	require.NoError(t, err)
+	return string(b)
 }
 
 func TestDecodeIntegration_YAMLRecords(t *testing.T) {

@@ -128,7 +128,7 @@ func TestPoll_NonZeroExitEndsThePoll(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, fail)
 	assert.Equal(t, 3, fail.code)
-	assert.Equal(t, "boom", out)
+	assert.Equal(t, "boom", out.text)
 	assert.Equal(t, 1, calls)
 }
 

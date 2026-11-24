@@ -159,8 +159,7 @@ func decodeNDJSON(s string) (any, error) {
 			return out, nil
 		}
 		if err != nil {
-			line := 1 + strings.Count(s[:dec.InputOffset()], "\n")
-			return nil, fmt.Errorf("value %d, near line %d: %v", len(out)+1, line, err)
+			return nil, fmt.Errorf("value %d: %v", len(out)+1, err)
 		}
 		out = append(out, normalizeNumbers(v))
 	}
