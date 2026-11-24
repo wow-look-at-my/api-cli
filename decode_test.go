@@ -1,5 +1,7 @@
 package main
 
+import _ "embed"
+
 import (
 	"testing"
 
@@ -27,7 +29,7 @@ func TestDecodeBody_EachFormat(t *testing.T) {
 		{"csv header alone is an empty list", "csv", "id,name\n", []any{}},
 		{"csv empty body is an empty list", "csv", "", []any{}},
 		{"tsv treats a quote as data", "tsv", "id\tsaid\r\n1\t\"hi\" there\r\n", []any{map[string]any{"id": "1", "said": `"hi" there`}}},
-		{"yaml mapping", "yaml", "a: 1\nb:\n  - x\n  - 2.5\nc: true\n", map[string]any{"a": int64(1), "b": []any{"x", 2.5}, "c": true}},
+		{"yaml mapping", "yaml", testDecodeBody_EachFormatYml, map[string]any{"a": int64(1), "b": []any{"x", 2.5}, "c": true}},
 		{"yaml key that is not a string", "yaml", "1: one\n", map[string]any{"1": "one"}},
 		{"yaml stream is a list", "yaml", "a: 1\n---\na: 2\n", []any{map[string]any{"a": int64(1)}, map[string]any{"a": int64(2)}}},
 		{"yaml empty body is null", "yaml", "", nil},
@@ -49,16 +51,7 @@ func TestDecodeBody_EachFormat(t *testing.T) {
 }
 
 func TestDecodeBody_XML(t *testing.T) {
-	body := `<?xml version="1.1" encoding="UTF-8"?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
-	<channel>
-		<title>Feed</title>
-		<atom:link href="https://example.invalid/feed" rel="self"/>
-		<item><title>one</title><guid isPermaLink="false">a1</guid></item>
-		<item><title>two</title><guid isPermaLink="true">a2</guid></item>
-		<empty/>
-	</channel>
-</rss>`
+	body := testDecodeBody_XMLXml
 	got, err := decodeBody(body, "xml")
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{
@@ -187,3 +180,9 @@ func TestOrderDerived(t *testing.T) {
 	same := []FieldsBlock{{Fields: &Fields{}}}
 	assert.Empty(t, orderDerived(same, runBody{text: `[{"b":1,"a":2}]`})[0].Fields.List, "a JSON body has no header to follow")
 }
+
+//go:embed testdata/test-decode-body-each-format.yml
+var testDecodeBody_EachFormatYml string
+
+//go:embed testdata/test-decode-body-xml.xml
+var testDecodeBody_XMLXml string

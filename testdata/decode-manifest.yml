@@ -1,0 +1,10 @@
+kind: Pod
+metadata:
+  name: demo
+spec:
+  replicas: 2
+  containers:
+    - name: web
+      image: nginx:1.27
+    - name: sidecar
+      image: envoy:1.31

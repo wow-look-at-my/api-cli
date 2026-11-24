@@ -1,0 +1,143 @@
+<?xml version="1.1" encoding="UTF-8"?>
+<!-- Every decode= value, against the server decode_integration_test.go starts. -->
+<config name="decode">
+	<vars>
+		<var name="api"><value name="env.API_CLI_DECODE_TEST_URL"/></var>
+	</vars>
+	<run decode="csv">
+		<request>
+			<url><value name="var.api"/>/<value name="entry.path"/></url>
+		</request>
+	</run>
+	<command name="rows" description="Inherits the root run, and its csv with it.">
+		<entry><path>untyped-csv</path></entry>
+	</command>
+	<command name="named" description="Declared fields over CSV records.">
+		<entry><path>untyped-csv</path></entry>
+		<fields>
+			<field name="NAME">name</field>
+			<field name="ID">id</field>
+		</fields>
+	</command>
+	<command name="open" description="jq over CSV rows.">
+		<run decode="csv">
+			<request>
+				<url><value name="var.api"/>/untyped-csv</url>
+				<response jq="map(select(.state == &quot;open&quot;) | .id)"/>
+			</request>
+		</run>
+	</command>
+	<command name="typed" description="No decode=: the Content-Type names the format.">
+		<arg name="path" required="true" description="The path to request."/>
+		<run>
+			<request>
+				<url><value name="var.api"/>/<value name="arg.path"/></url>
+			</request>
+		</run>
+	</command>
+	<command name="manifest" description="YAML by Content-Type, one list of it.">
+		<run>
+			<request>
+				<url><value name="var.api"/>/yaml</url>
+			</request>
+		</run>
+		<fields over="spec.containers">
+			<field name="NAME">name</field>
+			<field name="IMAGE">image</field>
+		</fields>
+	</command>
+	<command name="feed" description="XML by Content-Type.">
+		<run>
+			<request>
+				<url><value name="var.api"/>/feed</url>
+			</request>
+		</run>
+		<fields over="rss.channel.item">
+			<field name="TITLE">title</field>
+			<field name="ID">guid.#text</field>
+		</fields>
+	</command>
+	<command name="count" description="jq over text.">
+		<run decode="text">
+			<request>
+				<url><value name="var.api"/>/lines</url>
+				<response jq="split(&quot;\n&quot;) | length"/>
+			</request>
+		</run>
+	</command>
+	<command name="shaped" description="An empty response element passes a body that is not JSON through.">
+		<run decode="csv">
+			<request>
+				<url><value name="var.api"/>/untyped-csv</url>
+				<response/>
+			</request>
+		</run>
+	</command>
+	<command name="strict" description="JSON or nothing.">
+		<run decode="json">
+			<request>
+				<url><value name="var.api"/>/html</url>
+			</request>
+		</run>
+		<fields>
+			<field name="ID">id</field>
+		</fields>
+	</command>
+	<command name="mounts" description="A shell program, one record per line.">
+		<run decode="lines">printf 'a\nb\n'</run>
+	</command>
+	<command name="users" description="An argv program that prints tab-separated columns.">
+		<run decode="tsv">
+			<argv>printf</argv>
+			<argv>name\tuid\nroot\t0\nada\t1000\n</argv>
+		</run>
+		<fields>
+			<field name="UID">uid</field>
+			<field name="NAME">name</field>
+		</fields>
+	</command>
+	<command name="token" description="A form-encoded step result.">
+		<steps>
+			<step name="grant">
+				<run decode="form">printf 'access_token=abc&amp;expires_in=60'</run>
+			</step>
+		</steps>
+		<run>echo <value name="result.grant.access_token"/> <value name="result.grant.expires_in"/></run>
+	</command>
+	<command name="kept" description="text keeps a body that looks like JSON as one string.">
+		<steps>
+			<step name="s">
+				<run decode="text">echo '{"a":1}'</run>
+			</step>
+		</steps>
+		<run>echo <value expr="{{ kindOf .result.s }}"/></run>
+	</command>
+	<command name="badstep" description="A step whose output breaks its format.">
+		<steps>
+			<step name="s">
+				<run decode="json">echo not-json</run>
+			</step>
+		</steps>
+		<run>echo unreachable</run>
+	</command>
+	<command name="each" description="A repeated step whose every element reads as YAML.">
+		<steps>
+			<step name="docs" over="{{ list &quot;one&quot; &quot;two&quot; | toJson }}">
+				<run decode="yaml">printf 'name: %s\n' <value name="item"/></run>
+			</step>
+		</steps>
+		<run>echo <value expr="{{ (index .result.docs 1).result.name }}"/></run>
+	</command>
+	<command name="legacy" description="A format view with no input= reads the run's own format.">
+		<run decode="lines">printf 'a\nb\nc\n'</run>
+		<format when="true">
+			<view name="n"><value expr="{{ len .data }}"/> lines</view>
+		</format>
+	</command>
+	<command name="pinned" description="input= on a format still overrides the run.">
+		<run decode="lines">printf 'a\nb\nc\n'</run>
+		<format input="raw" when="true">
+			<view name="n"><value expr="{{ kindOf .data }}"/></view>
+		</format>
+	</command>
+</config>
