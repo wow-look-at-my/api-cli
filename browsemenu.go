@@ -199,7 +199,7 @@ func (m *browseModel) suggested(msg browseSuggestMsg) {
 		m.setStatus(fmt.Sprintf("%s failed with exit %d", msg.source.pathString(), msg.out.code), "bad")
 		return
 	}
-	values, labels := suggestions(msg.out.raw, msg.source, f)
+	values, labels := suggestions(msg.out, msg.source, f)
 	if len(values) == 0 {
 		m.setStatus(msg.source.pathString()+" listed nothing to pick", "dim")
 		return
@@ -216,11 +216,11 @@ func (m *browseModel) suggested(msg browseSuggestMsg) {
 
 // suggestions reads a source's records as values for f. suggest-field= names the value. Without it, the field that
 // answers to the input's name wins, then a name or an id.
-func suggestions(raw string, src *browseEntry, f *browseField) (values, labels []string) {
-	frame := newFrame(src, browseRunMsg{out: browseOutput{raw: raw}})
+func suggestions(out browseOutput, src *browseEntry, f *browseField) (values, labels []string) {
+	frame := newFrame(src, browseRunMsg{out: browseOutput{raw: out.raw, format: out.format}})
 	l := frame.level()
-	if !frame.isJSON || l == nil {
-		for _, line := range browseLines(raw) {
+	if !frame.hasData || l == nil {
+		for _, line := range browseLines(out.raw) {
 			if line = strings.TrimSpace(line); line != "" {
 				values, labels = append(values, line), append(labels, line)
 			}

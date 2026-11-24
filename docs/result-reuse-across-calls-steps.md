@@ -25,7 +25,7 @@ A step runs a command or a request, the same fork as `<run>`. A step that declar
 Mix the two freely. A `<step><run>` can be a shell command while the leaf makes a request, or the reverse.
 
 - Steps run in declaration order. Each `entry` renders against the current context, and that context includes `.result.*` from the prior steps.
-- Step output parses as JSON, with `UseNumber`. Output that is not JSON stays a string. A request step stores what the leaf prints, and that includes the `<response jq=>` shaping.
+- Step output is decoded as [`decode=`](body-formats.md) on its run says. With none, output that is JSON is data, and any other output stays a string. A `<run decode="csv">` step stores a list of records. A request step stores what the leaf prints, and that includes the `<response jq=>` shaping.
 - A non-zero step aborts the run with that exit code, after its `retries=`. See [Retrying a step](#retrying-a-step-retries-and-on-error).
 - A `when` attribute is a Go-template predicate. It skips the step on a falsy render, and `.result.<name>` then stays unset.
 - More than one command in a run prints `N executions` to stderr. Suppress that line with `--quiet` or `-q`.
@@ -105,7 +105,7 @@ A flaky endpoint needs a second try, not a shell loop. `retries="N"` runs a fail
 </step>
 ```
 
-- **A failure is any failed run.** A command fails on a non-zero exit. A request fails on an HTTP error status or a network fault. It also fails on a `<transport>` that exits non-zero, or a body that is not JSON under `jq=`.
+- **A failure is any failed run.** A command fails on a non-zero exit. A request fails on an HTTP error status or a network fault. It also fails on a `<transport>` that exits non-zero, or a body that its `decode=` format rejects.
 - **The retries run one second apart, at a fixed cadence.** The delay never grows. The download queue uses the same delay.
 - **The default is `0`**, which fails at once. A negative value is a load error.
 - **A poll retries each try.** A retried try does not use up an `attempts=` slot. A poll that runs out of attempts is last, and nothing retries it.

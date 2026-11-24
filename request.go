@@ -83,11 +83,11 @@ func doHTTPStream(p *preparedRequest, errOut io.Writer) (io.ReadCloser, int) {
 
 // The request travels over the built-in net/http client, or over the
 // <transport> program the config selects for it (see transport.go).
-func runRequest(req *Request, data map[string]any, errOut io.Writer) (string, int) {
+func runRequest(req *Request, data map[string]any, errOut io.Writer) (runBody, int) {
 	out, fail := performRequest(req, data, errOut)
 	if fail != nil {
 		fail.report(errOut, "")
-		return "", fail.code
+		return runBody{}, fail.code
 	}
 	return out, 0
 }
@@ -122,42 +122,47 @@ func failed(format string, args ...any) *callFailure {
 
 // performRequest is runRequest without the report. Only a transport program's
 // own stderr reaches errOut here.
-func performRequest(req *Request, data map[string]any, errOut io.Writer) (string, *callFailure) {
+func performRequest(req *Request, data map[string]any, errOut io.Writer) (runBody, *callFailure) {
 	prepared, err := prepareRequest(req, data)
 	if err != nil {
-		return "", failed("%v", err)
+		return runBody{}, failed("%v", err)
 	}
 
 	transport, err := resolveTransport(req)
 	if err != nil {
-		return "", failed("%v", err)
+		return runBody{}, failed("%v", err)
 	}
 
-	var raw []byte
+	body := runBody{format: declaredFormat(req.Decode)}
 	var fail *callFailure
 	if transport != nil {
 		// A transport program reports an exit code, and the status it saw is not
 		// ours to read. Saying so beats an attribute that quietly does nothing.
 		if len(prepared.AllowStatus) > 0 {
-			return "", failed("allow-status needs the built-in client, and transport %q reports an exit code rather than a status. Write transport=%q on this request to opt it out of the default transport, or let the program fail and branch in a <step when=>.",
+			return runBody{}, failed("allow-status needs the built-in client, and transport %q reports an exit code rather than a status. Write transport=%q on this request to opt it out of the default transport, or let the program fail and branch in a <step when=>.",
 				transport.Name, builtinTransportName)
 		}
-		var out string
-		out, fail = runViaTransport(transport, prepared, data, errOut)
-		raw = []byte(out)
+		body.text, fail = runViaTransport(transport, prepared, data, errOut)
 	} else {
-		raw, fail = doHTTP(prepared)
+		var raw []byte
+		var contentType string
+		raw, contentType, fail = doHTTP(prepared)
+		body.text = string(raw)
+		// A program hands back bytes alone, so only this path has a type to follow.
+		if fail == nil && body.format == "" {
+			body.format = responseFormat(contentType, body.text)
+		}
 	}
 	if fail != nil {
-		return "", fail
+		return runBody{}, fail
 	}
 
 	if req.Response == nil {
-		return string(raw), nil
+		return body, nil
 	}
-	out, err := applyJQ(req.Response.JQ, raw, data)
+	out, err := applyJQ(req.Response.JQ, body, data)
 	if err != nil {
-		return "", failed("%v", err)
+		return runBody{}, failed("%v", err)
 	}
 	return out, nil
 }
@@ -214,14 +219,14 @@ func prepareRequest(req *Request, data map[string]any) (*preparedRequest, error)
 // doHTTP performs a prepared request with the built-in client and returns the
 // response body. A 4xx/5xx status is a failure, like `curl -f`, unless the
 // request named that status in allow-status.
-func doHTTP(p *preparedRequest) ([]byte, *callFailure) {
+func doHTTP(p *preparedRequest) (raw []byte, contentType string, fail *callFailure) {
 	var body io.Reader
 	if p.Body != "" {
 		body = strings.NewReader(p.Body)
 	}
 	httpReq, err := http.NewRequestWithContext(runCtx, p.Method, p.URL, body)
 	if err != nil {
-		return nil, failed("build request: %v", err)
+		return nil, "", failed("build request: %v", err)
 	}
 	for _, h := range p.Headers {
 		httpReq.Header.Set(h.Name, h.Value)
@@ -230,26 +235,27 @@ func doHTTP(p *preparedRequest) ([]byte, *callFailure) {
 	logVerbose("request: %s %s", p.Method, p.URL)
 	resp, err := httpClient.Do(httpReq)
 	if err != nil {
-		return nil, failed("request failed: %v", err)
+		return nil, "", failed("request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
-	raw, err := io.ReadAll(resp.Body)
+	raw, err = io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, failed("read response: %v", err)
+		return nil, "", failed("read response: %v", err)
 	}
-	logVerbose("request: status %d (%d bytes)", resp.StatusCode, len(raw))
+	contentType = resp.Header.Get("Content-Type")
+	logVerbose("request: status %d (%d bytes, Content-Type %q)", resp.StatusCode, len(raw), contentType)
 
 	if resp.StatusCode >= 400 {
 		if p.allows(resp.StatusCode) {
 			logVerbose("request: status %d allowed by allow-status", resp.StatusCode)
-			return raw, nil
+			return raw, contentType, nil
 		}
 		fail := failed("HTTP %d %s", resp.StatusCode, strings.TrimSpace(resp.Status))
 		fail.detail = strings.TrimSpace(string(raw))
-		return nil, fail
+		return nil, "", fail
 	}
-	return raw, nil
+	return raw, contentType, nil
 }
 
 // buildRequestQuery assembles the URL-encoded query string (no leading "?")
@@ -346,26 +352,67 @@ func jqProgram(spec string, data map[string]any) (string, error) {
 	return strings.TrimSpace(s), nil
 }
 
-// applyJQ runs the request's jq program over the JSON body and returns the
-// result(s) as indented JSON. An empty program pretty-prints the body
-// unchanged.
+// applyJQ runs the request's jq program over the decoded body and returns the result(s) as indented JSON. An empty program pretty-prints a JSON body, and passes a body in any other format through as it arrived.
 //
-// A body that is not JSON passes through only when no jq= is set. A config
-// that names a program expects JSON, so an SSO page or a proxy error fails
-// here instead of reaching until= and the templates.
-func applyJQ(jqSpec string, raw []byte, data map[string]any) (string, error) {
-	var input any
-	if err := json.Unmarshal(raw, &input); err != nil {
-		if strings.TrimSpace(jqSpec) != "" {
-			return "", fmt.Errorf("response is not JSON, and jq= needs JSON; the body starts with %s", bodyExcerpt(raw))
-		}
-		return string(raw), nil
+// A body in no declared format is read as JSON. One that is not JSON passes through only when no jq= is set. A config that names a program expects data, so an SSO page or a proxy error fails here instead of reaching until= and the templates.
+func applyJQ(jqSpec string, body runBody, data map[string]any) (runBody, error) {
+	hasProgram := strings.TrimSpace(jqSpec) != ""
+	input, isJSON, err := jqInput(body, hasProgram)
+	if err != nil {
+		return runBody{}, err
+	}
+	if !isJSON && !hasProgram {
+		return body, nil
 	}
 
 	program, err := jqProgram(jqSpec, data)
 	if err != nil {
-		return "", err
+		return runBody{}, err
 	}
+	out, err := runJQ(program, input)
+	if err != nil {
+		return runBody{}, err
+	}
+	return runBody{text: out}, nil
+}
+
+// jqInput decodes a body into the plain JSON types gojq reads. isJSON reports
+// that the body itself was JSON, which is what an empty program pretty-prints.
+func jqInput(body runBody, hasProgram bool) (input any, isJSON bool, err error) {
+	raw := []byte(body.text)
+	switch body.format {
+	case "":
+		if err := json.Unmarshal(raw, &input); err != nil {
+			if hasProgram {
+				return nil, false, fmt.Errorf("response is not JSON, and jq= reads data. Name the format with decode= on the <run>; the body starts with %s", bodyExcerpt(raw))
+			}
+			return nil, false, nil
+		}
+		return input, true, nil
+	case "json":
+		isJSON = strings.TrimSpace(body.text) != ""
+	}
+	if !isJSON && !hasProgram {
+		return nil, false, nil
+	}
+	decoded, err := body.decode()
+	if err != nil {
+		return nil, false, err
+	}
+	// gojq takes the types encoding/json produces, and a decoder's int64 is not among them.
+	plain, err := json.Marshal(decoded)
+	if err != nil {
+		return nil, false, fmt.Errorf("the decoded body does not convert to JSON: %w", err)
+	}
+	if err := json.Unmarshal(plain, &input); err != nil {
+		return nil, false, err
+	}
+	return input, isJSON, nil
+}
+
+// runJQ runs a jq program over input and prints what it produces. An empty
+// program prints the input.
+func runJQ(program string, input any) (string, error) {
 	if program == "" {
 		return marshalJSON(input)
 	}

@@ -37,13 +37,15 @@ type resultFrame struct {
 	code    int
 	took    time.Duration
 
-	text   []string
-	raw    string
-	data   any
-	isJSON bool
-	levels []*dataLevel
-	view   int
-	offset int
+	text []string
+	raw  string
+	// format is the body's own format. Empty means the sniff read it, as JSON when hasData holds.
+	format  string
+	data    any
+	hasData bool
+	levels  []*dataLevel
+	view    int
+	offset  int
 	// batch marks the summary of a batch. Its top level opens a row's own result rather than follow a link.
 	batch bool
 }
@@ -78,7 +80,7 @@ func (m *browseModel) finish(msg browseRunMsg) {
 	}
 	m.rowFilter, m.rowFiltering = "", false
 	summary := fmt.Sprintf("exit %d · %s · %s", msg.out.code, roundTook(msg.took), msg.line)
-	if l := f.level(); f.isJSON && l != nil && l.kind == levelTable {
+	if l := f.level(); f.hasData && l != nil && l.kind == levelTable {
 		summary = fmt.Sprintf("exit %d · %s · %d rows · %s", msg.out.code, roundTook(msg.took), len(l.cells), msg.line)
 	}
 	switch {
@@ -105,7 +107,24 @@ func roundTook(d time.Duration) string {
 	return d.Round(100 * time.Millisecond).String()
 }
 
-// newFrame reads a run's output. A body that parses as JSON gets the data view.
+// decoded reads the body as data. A body in no declared format counts only
+// when it is JSON, and a body its declared format rejects does not count.
+func (o browseOutput) decoded() (any, bool) {
+	trimmed := strings.TrimSpace(o.raw)
+	if trimmed == "" {
+		return nil, false
+	}
+	if o.format == "" {
+		if !json.Valid([]byte(trimmed)) {
+			return nil, false
+		}
+		return parseResult(trimmed), true
+	}
+	v, err := decodeBody(o.raw, o.format)
+	return v, err == nil
+}
+
+// newFrame reads a run's output. A body that decodes to a list or an object gets the data view.
 func newFrame(e *browseEntry, msg browseRunMsg) *resultFrame {
 	f := &resultFrame{
 		entry:   e,
@@ -116,12 +135,16 @@ func newFrame(e *browseEntry, msg browseRunMsg) *resultFrame {
 		took:    msg.took,
 		text:    browseLines(msg.out.text),
 		raw:     msg.out.raw,
+		format:  msg.out.format,
 		view:    viewText,
 	}
-	trimmed := strings.TrimSpace(f.raw)
-	if (strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")) && json.Valid([]byte(trimmed)) {
-		f.isJSON = true
-		f.data = parseInput(trimmed, "json")
+	data, ok := msg.out.decoded()
+	if _, isList := data.([]any); ok && !isList {
+		_, ok = data.(map[string]any)
+	}
+	if ok {
+		f.hasData = true
+		f.data = data
 		f.levels = rootLevels(f.data, e)
 		// A <tml> screen is what its author wants seen first.
 		if !e.node.TML.Defined() {
@@ -162,7 +185,7 @@ func (f *resultFrame) level() *dataLevel {
 
 // views is the views this result offers. Text that matches the body adds nothing, so it is left out.
 func (f *resultFrame) views() []int {
-	if !f.isJSON {
+	if !f.hasData {
 		return []int{viewText}
 	}
 	if strings.TrimSpace(strings.Join(f.text, "\n")) == strings.TrimSpace(f.raw) {
@@ -173,7 +196,7 @@ func (f *resultFrame) views() []int {
 
 // lines is what the text and raw views draw.
 func (f *resultFrame) lines() []string {
-	if f.view == viewRaw && f.isJSON {
+	if f.view == viewRaw && f.hasData && f.format == "" {
 		pretty, err := json.MarshalIndent(f.data, "", "  ")
 		if err == nil {
 			return browseLines(string(pretty))

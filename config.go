@@ -204,6 +204,7 @@ type Cmd struct {
 	Shell    bool     // true if the source was a scalar string
 	Template string   // source for the scalar (string) form
 	Argv     []string // source for the argv (array) form
+	Decode   string   // the format of stdout (<run decode=>); empty means auto
 }
 
 // UnmarshalJSON accepts either a string or an array of strings.
@@ -263,6 +264,7 @@ type Request struct {
 	Body      string    `json:"body,omitempty"`      // template; empty means no body
 	Response  *Response `json:"response,omitempty"`  // nil means stream the raw body
 	Transport string    `json:"transport,omitempty"` // registry name; empty means the config default
+	Decode    string    `json:"decode,omitempty"`    // the format of the response body (<run decode=>); empty means auto
 
 	// AllowStatus lists the 4xx/5xx statuses that are an answer rather than a failure ("404" on a lookup that may miss).
 	AllowStatus []int `json:"allowStatus,omitempty"`
